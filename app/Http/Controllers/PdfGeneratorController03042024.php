@@ -1,0 +1,14395 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Carnknown;
+use App\Models\City;
+use App\Models\Country;
+use App\Models\Cvsetting;
+use App\Models\Profession;
+use App\Models\Partnercvsetting;
+use App\Models\Basepathstatus;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use App\Models\Candidate;
+use App\Models\Companycvexecute;
+use PDF;
+use File;
+use TCPDF_FONTS;
+class PdfGeneratorController extends Controller
+{
+    public function singleresume($id){
+        
+        $post = DB::table('candidates as cand')
+        ->leftJoin('placeofissues as poi','cand.poi','=','poi.id')
+        ->leftJoin('countries as nation','cand.nation_id','=','nation.id')
+        ->leftJoin('regions as region','cand.region_id','region.id')
+        ->leftJoin('cities as candcity','cand.candcity_id','=','candcity.id')
+        ->leftJoin('cities as plb','cand.plb_id','plb.id')
+        ->leftJoin('professions as occupation','cand.jobtype_id','=','occupation.id')
+        ->leftJoin('religions as religion','religion.id','=','cand.religion_id')
+        ->leftJoin('education as educ','cand.education_id','=','educ.id')
+        ->leftJoin('embassies as embassy','cand.embassy_for','=','embassy.id')
+        ->select('cand.*','embassy.embassy as embname','poi.name as poiname','educ.name as educname','nation.name as nationname','nation.arname as nationarname','region.name as regionname','candcity.name as cancityname','plb.name as plbname','occupation.ar_name as prarname','occupation.eng_name as pengname','religion.name as relname','religion.arbname as relarbname')
+        // ->select('cand.*','educ.name as educname','poi.name as poiname','nation.name as nationname','nation.arname as nationarname','region.name as regionname','candcity.name as cancityname','plb.name as plbname','occupation.ar_name as prarname','occupation.eng_name as pengname')
+        // ->select('cand.*','poi.name as poiname','nation.name as nationname','region.name as regionname','candcity.name as cancityname','plb.name as plbname','occupation.ar_name as prarname','occupation.eng_name as pengname')
+        
+        ->where('cand.id','=',$id)
+        ->first();
+
+        // Car Know List
+        $carkns = Carnknown::wherein('id',explode(",",$post->carknown_id))->get();
+        $carlist = [];
+        if(isset($carkns)){
+            foreach($carkns as $carkn){
+                $carlist [] = $carkn->name;
+            }
+        }else{
+            $carlist [] = "";
+        }
+        // Expected Work place
+        // $expwps = City::wherein('id',explode(",",$post->expwp_id))->get();
+        $expwps = DB::table('expecworkcities')->wherein('id',explode(",",$post->expwp_id))->get();
+        $exp_wp = [];
+        if(isset($expwps)){
+            foreach($expwps as $expwp){
+                $exp_wp [] = $expwp->name;
+            }
+        }else{
+            $exp_wp [] = "";
+        }
+
+        // Fetch details as per cv setting
+        $cand_name_cvsetting = Cvsetting::where('db_field_name','=','cand_name')->first();
+        $cand_name_ar_cvsetting = Cvsetting::where('db_field_name','=','cand_name_ar')->first();
+        $exp_sal_cvsetting = Cvsetting::where('db_field_name','=','exp_sal')->first();
+        $expwp_id_cvsetting = Cvsetting::where('db_field_name','=','expwp_id')->first();
+        $age_cvsetting = Cvsetting::where('db_field_name','=','age')->first();
+        $marital_status_cvsetting = Cvsetting::where('db_field_name','=','marital_status')->first();
+        $religion_cvsetting = Cvsetting::where('db_field_name','=','religion')->first();
+        $dob_cvsetting = Cvsetting::where('db_field_name','=','dob')->first();
+        $plb_id_cvsetting = Cvsetting::where('db_field_name','=','plb_id')->first();
+        $nation_id_cvsetting = Cvsetting::where('db_field_name','=','nation_id')->first();
+        $region_id_cvsetting = Cvsetting::where('db_field_name','=','region_id')->first();
+        $lang_known_cvsetting = Cvsetting::where('db_field_name','=','lang_known')->first();
+        $google_map_cvsetting = Cvsetting::where('db_field_name','=','google_map')->first();
+        $carknown_id_cvsetting = Cvsetting::where('db_field_name','=','carknown_id')->first();
+        $proff_id_cvsetting = Cvsetting::where('db_field_name','=','proff_id')->first();
+        $experience_cvsetting = Cvsetting::where('db_field_name','=','experience')->first();
+        $expcountry_id_cvsetting = Cvsetting::where('db_field_name','=','expcountry_id')->first();
+        $expcity_id_cvsetting = Cvsetting::where('db_field_name','=','expcity_id')->first();
+        $pass_no_cvsetting = Cvsetting::where('db_field_name','=','pass_no')->first();
+        $pass_type_cvsetting = Cvsetting::where('db_field_name','=','pass_type')->first();
+        $doi_cvsetting = Cvsetting::where('db_field_name','=','doi')->first();
+        $doe_cvsetting = Cvsetting::where('db_field_name','=','doe')->first();
+        $poi_cvsetting = Cvsetting::where('db_field_name','=','poi')->first();
+        $photo_cvsetting = Cvsetting::where('db_field_name','=','photo')->first();
+        $fullsize_cvsetting = Cvsetting::where('db_field_name','=','fullsize')->first();
+        $reference_no_cvsetting = Cvsetting::where('db_field_name','=','reference_no')->first();
+        $gulf_experience_cvsetting = Cvsetting::where('db_field_name','=','gulf_experience')->first();
+        $gulf_experience_arabic_cvsetting = Cvsetting::where('db_field_name','=','gulf_experience_arabic')->first();
+        $remark_cvsetting = Cvsetting::where('db_field_name','=','remark')->first();
+        $created_date_cvsetting = Cvsetting::where('db_field_name','=','created_date')->first();
+        $education_cvsetting = Cvsetting::where('db_field_name','=','education')->first();
+        $image1_cvsetting = Cvsetting::where('db_field_name','=','image1')->first();
+        $image2_cvsetting = Cvsetting::where('db_field_name','=','image2')->first();
+        $image3_cvsetting = Cvsetting::where('db_field_name','=','image3')->first();
+        $image4_cvsetting = Cvsetting::where('db_field_name','=','image4')->first();
+        $image5_cvsetting = Cvsetting::where('db_field_name','=','image5')->first();
+        $text1_cvsetting = Cvsetting::where('db_field_name','=','text1')->first();
+        $text2_cvsetting = Cvsetting::where('db_field_name','=','text2')->first();
+        $text3_cvsetting = Cvsetting::where('db_field_name','=','text3')->first();
+        $text4_cvsetting = Cvsetting::where('db_field_name','=','text4')->first();
+
+        $embassyreq_cvsetting =  Cvsetting::where('db_field_name','=','embassy_required')->first();
+        $embassyreq_ar_cvsetting =  Cvsetting::where('db_field_name','=','embassy_required_ar')->first();
+        // Base Path Status
+        $basepathSt = Basepathstatus::first();
+
+        try {
+            // $backfile = base_path().'/public/admin/assets/images/resume/SVG_ONE_FINE_L.svg';
+            // $backfile = base_path().'/public/admin/assets/images/resume/final_cv.pdf';
+            // $backfile = base_path().'/public/admin/assets/images/resume/resumes_format_svg.svg';
+            // $backfile = base_path().'/public/admin/assets/images/resume/SVG3.svg';
+        
+            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                // $backfile = base_path('public/admin/assets/images/resume/SVG3.svg');
+                $backfile = base_path('public/admin/assets/images/resume/cv_back_15072023.svg');
+            }else{
+                // $backfile = base_path('public_html/admin/assets/images/resume/SVG3.svg');
+                $backfile = base_path('public_html/admin/assets/images/resume/cv_back_15072023.svg');
+            }
+
+
+            PDF::SetCreator('Qamr International');
+            PDF::SetAuthor('Qamr International');
+            PDF::SetTitle($post->cand_name.' CV');
+            PDF::SetSubject($post->cand_name.' CV');
+            PDF::SetKeywords('Qamr, PDF, visa, form, guide');
+
+
+            PDF::AddPage();
+            PDF::ImageSVG($backfile,'','',210,297,'','','',0,false);
+
+            // Candidate Name
+            if (isset($cand_name_cvsetting)) {
+                if($cand_name_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $candpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+                }elseif($cand_name_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $candpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $candpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+
+
+                }
+                $candpopinsfont = TCPDF_FONTS::addTTFfont($candpopins,'','',32);
+
+                if($cand_name_cvsetting->font_family == 'none'){
+                    $candfonttype = "";
+                }else{
+                    $candfonttype = $cand_name_cvsetting->font_family;
+                }
+
+                if($cand_name_cvsetting->font_size != ''){
+                    $candfontsize = $cand_name_cvsetting->font_size;
+                }else{
+                    $candfontsize = '11';
+                }
+
+                PDF::SetFont($candpopinsfont,$candfonttype, $candfontsize,'',false);
+                if($cand_name_cvsetting->font_color != ''){
+                    $candfontcolor = explode(",",$cand_name_cvsetting->font_color);
+                    PDF::SetTextColor($candfontcolor[0],$candfontcolor[1],$candfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($cand_name_cvsetting->x_axis,$cand_name_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->cand_name);
+
+            }
+
+            // Candidate Arabic Name
+            if (isset($cand_name_ar_cvsetting)) {
+                if($cand_name_ar_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+                }elseif($cand_name_ar_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+
+
+                }
+                $candarpopinsfont = TCPDF_FONTS::addTTFfont($candarpopins,'','',32);
+
+                if($cand_name_ar_cvsetting->font_family == 'none'){
+                    $candarfonttype = "";
+                }else{
+                    $candarfonttype = $cand_name_ar_cvsetting->font_family;
+                }
+
+                if($cand_name_ar_cvsetting->font_size != ''){
+                    $candarfontsize = $cand_name_ar_cvsetting->font_size;
+                }else{
+                    $candarfontsize = '11';
+                }
+
+                PDF::SetFont($candarpopinsfont,$candarfonttype, $candarfontsize,'',false);
+                if($cand_name_ar_cvsetting->font_color != ''){
+                    $candarfontcolor = explode(",",$cand_name_ar_cvsetting->font_color);
+                    PDF::SetTextColor($candarfontcolor[0],$candarfontcolor[1],$candarfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($cand_name_ar_cvsetting->x_axis,$cand_name_ar_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->arcand_name);
+
+            }
+
+            // Embassy Required
+
+            if (isset($embassyreq_cvsetting)) {
+                if($embassyreq_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($embassyreq_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+
+
+                }
+                $embassypopinsfont = TCPDF_FONTS::addTTFfont($embassypopins,'','',32);
+
+                if($embassyreq_cvsetting->font_family == 'none'){
+                    $embassyfonttype = "";
+                }else{
+                    $embassyfonttype = $embassyreq_cvsetting->font_family;
+                }
+
+                if($embassyreq_cvsetting->font_size != ''){
+                    $embassyfontsize = $embassyreq_cvsetting->font_size;
+                }else{
+                    $embassyfontsize = '11';
+                }
+
+                PDF::SetFont($embassypopinsfont,$embassyfonttype, $embassyfontsize,'',false);
+                if($embassyreq_cvsetting->font_color != ''){
+                    $embassyfontcolor = explode(",",$embassyreq_cvsetting->font_color);
+                    PDF::SetTextColor($embassyfontcolor[0],$embassyfontcolor[1],$embassyfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($embassyreq_cvsetting->x_axis,$embassyreq_cvsetting->y_axis);
+
+                if($post->embname == 'MUMBAI VISA REQUIRED'){
+                    $visaEmbE = "Required visa under Saudi Embassy Mumbai";
+                }elseif($post->embname == 'DELHI VISA REQUIRED'){
+                    $visaEmbE = "Required visa under Saudi Embassy New Delhi";
+                }else{
+                    $visaEmbE = "";
+                }
+
+                PDF::Cell(0,0,$visaEmbE);
+
+
+            }
+
+            // Embassy Required Arabic
+
+            if (isset($embassyreq_ar_cvsetting)) {
+                if($embassyreq_ar_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                         $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');
+                    }
+                }elseif($embassyreq_ar_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');
+                    }
+
+
+                }
+                $embassyarpopinsfont = TCPDF_FONTS::addTTFfont($embassyarpopins,'','',32);
+
+                if($embassyreq_ar_cvsetting->font_family == 'none'){
+                    $embassyarfonttype = "";
+                }else{
+                    $embassyarfonttype = $embassyreq_ar_cvsetting->font_family;
+                }
+
+                if($embassyreq_ar_cvsetting->font_size != ''){
+                    $embassyarfontsize = $embassyreq_ar_cvsetting->font_size;
+                }else{
+                    $embassyarfontsize = '11';
+                }
+
+                PDF::SetFont($embassyarpopinsfont,$embassyarfonttype, $embassyarfontsize,'',false);
+                if($embassyreq_ar_cvsetting->font_color != ''){
+                    $embassyarfontcolor = explode(",",$embassyreq_ar_cvsetting->font_color);
+                    PDF::SetTextColor($embassyarfontcolor[0],$embassyarfontcolor[1],$embassyarfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($embassyreq_ar_cvsetting->x_axis,$embassyreq_ar_cvsetting->y_axis);
+
+                
+                if($post->embname == 'MUMBAI VISA REQUIRED'){
+                    $visaEmb = "مطلوب تأشيرة تحت السفارة السعودية في مومباي";
+                }elseif($post->embname == 'DELHI VISA REQUIRED'){
+                    $visaEmb = "مطلوب تأشيرة تحت السفارة السعودية في نيودلهي";
+                }else{
+                    $visaEmb = "";
+                }
+
+                PDF::Cell(0,0,$visaEmb);
+
+            }
+
+
+
+            // Remark
+            if(isset($remark_cvsetting)){
+                // Remark Text 
+                $remark_text_desc = Cvsetting::where('db_field_name','=','remark_text')->where('status','=',1)->first();
+                if(isset($remark_text_desc)){
+                    $remarkDisp = 'Remark: '.$remark_text_desc->text_desc;
+                }else{
+                    $remarkDisp = 'Remark: ';
+                }
+
+                if($remark_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $remarkpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($remark_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $remarkpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $remarkpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $remarkpopinsfont = TCPDF_FONTS::addTTFfont($remarkpopins,'','',32);
+
+                if($remark_cvsetting->font_family == 'none'){
+                    $remarkfonttype = "";
+                }else{
+                    $remarkfonttype = $remark_cvsetting->font_family;
+                }
+
+                if($remark_cvsetting->font_size != ''){
+                    $remarkfontsize = $remark_cvsetting->font_size;
+                }else{
+                    $remarkfontsize = "11";
+                }
+
+                PDF::SetFont($remarkpopinsfont, $remarkfonttype, $remarkfontsize,'',false);
+                if($remark_cvsetting->font_color != ''){
+                    $remarkfontcolor = explode(",",$remark_cvsetting->font_color);
+                    PDF::SetTextColor($remarkfontcolor[0],$remarkfontcolor[1],$remarkfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($remark_cvsetting->x_axis,$remark_cvsetting->y_axis);
+                PDF::Cell(0,0,$remarkDisp);
+            }
+
+            // CV Create Date
+
+            if(isset($created_date_cvsetting)){
+                if($created_date_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($created_date_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $cvdatecreatepopinsfont = TCPDF_FONTS::addTTFfont($cvdatecreatepopins,'','',32);
+
+                if($created_date_cvsetting->font_family == 'none'){
+                    $cvdatecreatefonttype = "";
+                }else{
+                    $cvdatecreatefonttype = $created_date_cvsetting->font_family;
+                }
+
+                if($created_date_cvsetting->font_size != ''){
+                    $cvdatecreatefontsize = $created_date_cvsetting->font_size;
+                }else{
+                    $cvdatecreatefontsize = "11";
+                }
+
+                PDF::SetFont($cvdatecreatepopinsfont, $cvdatecreatefonttype, $cvdatecreatefontsize,'',false);
+                if($created_date_cvsetting->font_color != ''){
+                    $cvdatecreatefontcolor = explode(",",$created_date_cvsetting->font_color);
+                    PDF::SetTextColor($cvdatecreatefontcolor[0],$cvdatecreatefontcolor[1],$cvdatecreatefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($created_date_cvsetting->x_axis,$created_date_cvsetting->y_axis);
+                if($post->cv_executae_date != ''){
+                    $cvDate = date('d-m-Y',strtotime($post->cv_executae_date));
+                }else{
+
+                    $cvDate = date('d-m-Y');
+                }
+                PDF::Cell(0,0,'Date: '.$cvDate);
+            }
+
+            // Image1 and Image2
+            if(isset($image1_cvsetting)){
+                if($image1_cvsetting->status == 1 && $image1_cvsetting->filename != ''){
+
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image1_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image1_cvsetting->filename;
+                    }else{
+                        $image1_cvsettingpath = base_path().'/public_html/admin/assets/images/cv_setting/'.$image1_cvsetting->filename;
+                    }
+                    $image1_cvsettingext = pathinfo($image1_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image1_cvsettingpath,$image1_cvsetting->x_axis, $image1_cvsetting->y_axis, $image1_cvsetting->width, '',$image1_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image2_cvsetting)){
+                if($image2_cvsetting->status == 1 && $image2_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image2_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image2_cvsetting->filename;
+                    }else{
+                        $image2_cvsettingpath = base_path().'/public_html/admin/assets/images/cv_setting/'.$image2_cvsetting->filename;                    
+                    }
+
+                    $image2_cvsettingext = pathinfo($image2_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image2_cvsettingpath,$image2_cvsetting->x_axis, $image2_cvsetting->y_axis, $image2_cvsetting->width, '',$image2_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image3_cvsetting)){
+                if($image3_cvsetting->status == 1 && $image3_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image3_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image3_cvsetting->filename;
+                    }else{
+                        $image3_cvsettingpath = base_path().'/public_html/admin/assets/images/cv_setting/'.$image3_cvsetting->filename;                    
+                    }
+
+                    $image3_cvsettingext = pathinfo($image3_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image3_cvsettingpath,$image3_cvsetting->x_axis, $image3_cvsetting->y_axis, $image3_cvsetting->width, '',$image3_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image4_cvsetting)){
+                if($image4_cvsetting->status == 1 && $image4_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image4_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image4_cvsetting->filename;
+                    }else{
+                        $image4_cvsettingpath = base_path().'/public_html/admin/assets/images/cv_setting/'.$image4_cvsetting->filename;                    
+                    }
+
+                    $image4_cvsettingext = pathinfo($image4_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image4_cvsettingpath,$image4_cvsetting->x_axis, $image4_cvsetting->y_axis, $image4_cvsetting->width, '',$image4_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image5_cvsetting)){
+                if($image5_cvsetting->status == 1 && $image5_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image5_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image5_cvsetting->filename;
+                    }else{
+                        $image5_cvsettingpath = base_path().'/public_html/admin/assets/images/cv_setting/'.$image5_cvsetting->filename;                    
+                    }
+
+                    $image5_cvsettingext = pathinfo($image5_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image5_cvsettingpath,$image5_cvsetting->x_axis, $image5_cvsetting->y_axis, $image5_cvsetting->width, '',$image5_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            // Text1, Text2, Text3, Text4,
+            if (isset($text1_cvsetting)) {
+                if($text1_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text1popins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+                }elseif($text1_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text1popins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text1popins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+                }
+                $text1popinsfont = TCPDF_FONTS::addTTFfont($text1popins,'','',32);
+
+                if($text1_cvsetting->font_family == 'none'){
+                    $text1fonttype = "";
+                }else{
+                    $text1fonttype = $text1_cvsetting->font_family;
+                }
+
+                if($text1_cvsetting->font_size != ''){
+                    $text1fontsize = $text1_cvsetting->font_size;
+                }else{
+                    $text1fontsize = '11';
+                }
+
+                PDF::SetFont($text1popinsfont,$text1fonttype, $text1fontsize,'',false);
+                if($text1_cvsetting->font_color != ''){
+                    $text1fontcolor = explode(",",$text1_cvsetting->font_color);
+                    PDF::SetTextColor($text1fontcolor[0],$text1fontcolor[1],$text1fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text1_cvsetting->x_axis,$text1_cvsetting->y_axis);
+                PDF::Cell(0,0,$text1_cvsetting->text_desc);
+
+            }
+
+            if (isset($text2_cvsetting)) {
+                if($text2_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text2popins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+                }elseif($text2_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text2popins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text2popins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+                }
+                $text2popinsfont = TCPDF_FONTS::addTTFfont($text2popins,'','',32);
+
+                if($text2_cvsetting->font_family == 'none'){
+                    $text2fonttype = "";
+                }else{
+                    $text2fonttype = $text2_cvsetting->font_family;
+                }
+
+                if($text2_cvsetting->font_size != ''){
+                    $text2fontsize = $text2_cvsetting->font_size;
+                }else{
+                    $text2fontsize = '11';
+                }
+
+                PDF::SetFont($text2popinsfont,$text2fonttype, $text2fontsize,'',false);
+                if($text2_cvsetting->font_color != ''){
+                    $text2fontcolor = explode(",",$text2_cvsetting->font_color);
+                    PDF::SetTextColor($text2fontcolor[0],$text2fontcolor[1],$text2fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text2_cvsetting->x_axis,$text2_cvsetting->y_axis);
+                PDF::Cell(0,0,$text2_cvsetting->text_desc);
+
+            }
+
+            if (isset($text3_cvsetting)) {
+                if($text3_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text3popins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+                }elseif($text3_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text3popins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text3popins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+                }
+                $text3popinsfont = TCPDF_FONTS::addTTFfont($text3popins,'','',32);
+
+                if($text3_cvsetting->font_family == 'none'){
+                    $text3fonttype = "";
+                }else{
+                    $text3fonttype = $text3_cvsetting->font_family;
+                }
+
+                if($text3_cvsetting->font_size != ''){
+                    $text3fontsize = $text3_cvsetting->font_size;
+                }else{
+                    $text3fontsize = '11';
+                }
+
+                PDF::SetFont($text3popinsfont,$text3fonttype, $text3fontsize,'',false);
+                if($text3_cvsetting->font_color != ''){
+                    $text3fontcolor = explode(",",$text3_cvsetting->font_color);
+                    PDF::SetTextColor($text3fontcolor[0],$text3fontcolor[1],$text3fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text3_cvsetting->x_axis,$text3_cvsetting->y_axis);
+                PDF::Cell(0,0,$text3_cvsetting->text_desc);
+
+            }
+
+            if (isset($text4_cvsetting)) {
+                if($text4_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text4popins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+                }elseif($text4_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text4popins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text4popins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+                }
+                $text4popinsfont = TCPDF_FONTS::addTTFfont($text4popins,'','',32);
+
+                if($text4_cvsetting->font_family == 'none'){
+                    $text4fonttype = "";
+                }else{
+                    $text4fonttype = $text4_cvsetting->font_family;
+                }
+
+                if($text4_cvsetting->font_size != ''){
+                    $text4fontsize = $text4_cvsetting->font_size;
+                }else{
+                    $text4fontsize = '11';
+                }
+
+                PDF::SetFont($text4popinsfont,$text4fonttype, $text4fontsize,'',false);
+                if($text4_cvsetting->font_color != ''){
+                    $text4fontcolor = explode(",",$text4_cvsetting->font_color);
+                    PDF::SetTextColor($text4fontcolor[0],$text4fontcolor[1],$text4fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text4_cvsetting->x_axis,$text4_cvsetting->y_axis);
+                PDF::Cell(0,0,$text4_cvsetting->text_desc);
+
+            }
+
+            // Profile and fullsize Photo
+            if ($post->photo_file != '') {
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $photfilepath = base_path().'/public/admin/assets/images/candidate/'.$post->photo_file;
+                }else{
+                    $photfilepath = base_path().'/public_html/admin/assets/images/candidate/'.$post->photo_file;                
+                }
+
+                $photext = pathinfo($post->photo_file, PATHINFO_EXTENSION);
+
+                if(isset($photo_cvsetting)){
+                    PDF::Image($photfilepath,$photo_cvsetting->x_axis,$photo_cvsetting->y_axis,'50','54',$photext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if ($post->cv_file != '') {
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $fullsizepath = base_path().'/public/admin/assets/images/candidate/'.$post->cv_file;
+                }else{
+                    $fullsizepath = base_path().'/public_html/admin/assets/images/candidate/'.$post->cv_file;               
+                }
+                $fullsizeext = pathinfo($post->cv_file, PATHINFO_EXTENSION);
+
+                if(isset($fullsize_cvsetting)){
+                    PDF::Image($fullsizepath,$fullsize_cvsetting->x_axis, $fullsize_cvsetting->y_axis, '', '',$fullsizeext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            // Reference No
+            if (isset($reference_no_cvsetting)) {
+                // if($reference_no_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                //     }
+                // }elseif($reference_no_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                //     }
+
+                // }
+
+                if($reference_no_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $refrenceNopopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $refrenceNopopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';                    
+                    }
+                }
+
+                $refrenceNopopinsfont = TCPDF_FONTS::addTTFfont($refrenceNopopins,'','',32);
+
+                if($reference_no_cvsetting->font_family == 'none'){
+                    $refereneceFont = "";
+                }else{
+                    $refereneceFont = $reference_no_cvsetting->font_family;
+                }
+
+                if($reference_no_cvsetting->font_size != ''){
+                    $refrenceNoFontsize = $reference_no_cvsetting->font_size;
+                }else{
+                    $refrenceNoFontsize = '11';
+                }
+
+                PDF::SetFont($refrenceNopopinsfont,$refereneceFont, $refrenceNoFontsize,'',false);
+                if($reference_no_cvsetting->font_color != ''){
+                    $refnofontcolor = explode(",",$reference_no_cvsetting->font_color);
+                    PDF::SetTextColor($refnofontcolor[0],$refnofontcolor[1],$refnofontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($reference_no_cvsetting->x_axis,$reference_no_cvsetting->y_axis);
+                PDF::Cell(0,0,'Reference No: '.$post->id.'  :رقم المرجع ');
+
+            }
+
+            if(isset($gulf_experience_cvsetting)){
+                if($gulf_experience_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($gulf_experience_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+                $gulf_experiencepopinsfont = TCPDF_FONTS::addTTFfont($gulf_experiencepopins,'','',32);
+
+                if($gulf_experience_cvsetting->font_family == 'none'){
+                    $gulf_experiencefonttype = "";
+                }else{
+                    $gulf_experiencefonttype = $gulf_experience_cvsetting->font_family;
+                }
+
+                if($gulf_experience_cvsetting->font_size != ''){
+                    $gulf_experiencefontsize = $gulf_experience_cvsetting->font_size;
+                }else{
+                    $gulf_experiencefontsize = "11";
+                }
+
+                PDF::SetFont($gulf_experiencepopinsfont, $gulf_experiencefonttype, $gulf_experiencefontsize,'',false);
+
+                if($gulf_experience_cvsetting->font_color != ''){
+                    $gulf_experiencefontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+                    PDF::SetTextColor($gulf_experiencefontcolor[0],$gulf_experiencefontcolor[1],$gulf_experiencefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($gulf_experience_cvsetting->x_axis,$gulf_experience_cvsetting->y_axis);
+                if($post->gulfexperience == 1){
+                    $expEng = 'Indian Experience '.$post->pengname;
+                }elseif($post->gulfexperience == 2){
+                    $expEng = 'Ex-Abroad '.$post->pengname;
+                }else{
+                    $expEng = '---';
+                }
+                PDF::Cell(0,0,$expEng);
+
+            }
+
+            if(isset($gulf_experience_arabic_cvsetting)){
+                if($gulf_experience_arabic_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $gulf_experience_arabic = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $gulf_experience_arabic = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';                    
+                    }
+                }
+
+                $gulf_experience_arabic_font = TCPDF_FONTS::addTTFfont($gulf_experience_arabic,'','',32);
+
+                if($gulf_experience_arabic_cvsetting->font_family == 'none'){
+                    $gulfexpFont = "";
+                }else{
+                    $gulfexpFont = $gulf_experience_arabic_cvsetting->font_family;
+                }
+
+                if($gulf_experience_arabic_cvsetting->font_size != ''){
+                
+                    $gulfexpFontsize = $gulf_experience_arabic_cvsetting->font_size;
+                }else{
+                    $gulfexpFontsize = "11";
+                }
+
+                PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+
+                if($gulf_experience_arabic_cvsetting->font_color != ''){
+                    $gulfexpfontcolor = explode(",",$gulf_experience_arabic_cvsetting->font_color);
+                    PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($gulf_experience_arabic_cvsetting->x_axis,$gulf_experience_arabic_cvsetting->y_axis);
+                if($post->gulfexperience == 1){
+                    $arexp = $post->prarname.' قد اشتغل في الهند فقط';
+                }elseif($post->gulfexperience == 2){
+                    $arexp = $post->prarname.' سبق له العمل';
+                }else{
+                    $arexp = "---";
+                }
+                PDF::Cell(0,0,$arexp);
+            }
+
+            // Expected salary and location
+            if(isset($exp_sal_cvsetting)){
+                if($exp_sal_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $expsalpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($exp_sal_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $expsalpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $expsalpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $expsalpopinsfont = TCPDF_FONTS::addTTFfont($expsalpopins,'','',32);
+
+                if($exp_sal_cvsetting->font_family == 'none'){
+                    $expsalfonttype = "";
+                }else{
+                    $expsalfonttype = $exp_sal_cvsetting->font_family;
+                }
+
+                if($exp_sal_cvsetting->font_size != ''){
+                    $expsalfontsize = $exp_sal_cvsetting->font_size;
+                }else{
+                    $expsalfontsize = "11";
+                }
+
+                PDF::SetFont($expsalpopinsfont, $expsalfonttype, $expsalfontsize,'',false);
+                if($exp_sal_cvsetting->font_color != ''){
+                    $expsalfontcolor = explode(",",$exp_sal_cvsetting->font_color);
+                    PDF::SetTextColor($expsalfontcolor[0],$expsalfontcolor[1],$expsalfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($exp_sal_cvsetting->x_axis,$exp_sal_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->exp_sal);
+            }
+
+            if(isset($expwp_id_cvsetting)){
+                if($expwp_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+
+                }elseif($expwp_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+                }
+
+                $expwppopinsfont = TCPDF_FONTS::addTTFfont($expwppopins,'','',32);
+
+                if($expwp_id_cvsetting->font_family == 'none'){
+                    $expwpfonttype = "";
+                }else{
+                    $expwpfonttype = $expwp_id_cvsetting->font_family;
+                }
+
+                if($expwp_id_cvsetting->font_size != ''){
+                    $expwpfontsize = $expwp_id_cvsetting->font_size;
+                }else{
+                    $expwpfontsize = "11";
+                }
+
+                PDF::SetFont($expwppopinsfont, $expwpfonttype, $expwpfontsize,'',false);
+                if($expwp_id_cvsetting->font_color != ''){
+                    $expwpfontcolor = explode(",",$expwp_id_cvsetting->font_color);
+                    PDF::SetTextColor($expwpfontcolor[0],$expwpfontcolor[1],$expwpfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($expwp_id_cvsetting->x_axis,$expwp_id_cvsetting->y_axis);
+                PDF::Cell(0,0,implode(",",$exp_wp));
+            }
+
+            // Age
+            if(isset($age_cvsetting)){
+                if($age_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $agepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($age_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $agepopins = base_path().'public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $agepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+                }
+
+                $agepopinsfont = TCPDF_FONTS::addTTFfont($agepopins,'','',32);
+
+                if($age_cvsetting->font_family == 'none'){
+                    $agefonttype = "";
+                }else{
+                    $agefonttype = $age_cvsetting->font_family;
+                }
+
+                if($age_cvsetting->font_size != ''){
+                    $agefontsize = $age_cvsetting->font_size;
+                }else{
+                    $agefontsize = "11";
+                }
+
+                PDF::SetFont($agepopinsfont, $agefonttype, $agefontsize,'',false);
+                if($age_cvsetting->font_color != ''){
+                    $agefontcolor = explode(",",$age_cvsetting->font_color);
+                    PDF::SetTextColor($agefontcolor[0],$agefontcolor[1],$agefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($age_cvsetting->x_axis,$age_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->age);
+
+            }
+            // Marital
+            if(isset($marital_status_cvsetting)){
+                if($marital_status_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $maritalpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($marital_status_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $maritalpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $maritalpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $maritalpopinsfont = TCPDF_FONTS::addTTFfont($maritalpopins,'','',32);
+
+
+                if($marital_status_cvsetting->font_family == 'none'){
+                    $mariedfonttype = "";
+                }else{
+                    $mariedfonttype = $marital_status_cvsetting->font_family;
+                }
+
+                if($marital_status_cvsetting->font_size != ''){
+                    $mariedfontsize = $marital_status_cvsetting->font_size;
+                }else{
+                    $mariedfontsize = "11";                
+                }
+
+                PDF::SetFont($maritalpopinsfont, $mariedfonttype, $mariedfontsize,'',false);
+                if($marital_status_cvsetting->font_color != ''){
+                    $marital_statusfontcolor = explode(",",$marital_status_cvsetting->font_color);
+                    PDF::SetTextColor($marital_statusfontcolor[0],$marital_statusfontcolor[1],$marital_statusfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($marital_status_cvsetting->x_axis,$marital_status_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->marital_status);
+                
+            }
+            // Religion
+            if(isset($religion_cvsetting)){
+                // if($religion_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                //     }
+                // }elseif($religion_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                //     }
+                // }
+    
+
+                if($religion_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $religionpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $religionpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $religionpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $religionpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';                    
+                    }
+                }
+
+
+                $religionpopinsfont = TCPDF_FONTS::addTTFfont($religionpopins,'','',32);
+
+                if($religion_cvsetting->font_family == 'none'){
+                    $relfonttype = "";
+                }else{
+                    $relfonttype = $religion_cvsetting->font_family;
+                }
+
+                if($religion_cvsetting->font_size != ''){
+                    $relfontsize = $religion_cvsetting->font_size;
+                }else{
+                    $relfontsize = "11";
+                }
+
+                PDF::SetFont($religionpopinsfont, $relfonttype, $relfontsize,'',false);
+                if($religion_cvsetting->font_color != ''){
+                    $religionfontcolor = explode(",",$religion_cvsetting->font_color);
+                    PDF::SetTextColor($religionfontcolor[0],$religionfontcolor[1],$religionfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($religion_cvsetting->x_axis,$religion_cvsetting->y_axis);
+                $relname = $post->relarbname.'  '.$post->relname;
+                // dd($relname);
+                PDF::Cell(0,0,$relname);
+                // PDF::Cell(0,0,$post->relname.'  '.$post->relarbname);
+                // if($post->religion != '' && $post->religion == 'Muslim'){
+                //     PDF::Cell(0,0,$post->religion.' مسلم');
+                // }
+                // if($post->religion != '' && $post->religion != 'Muslim'){
+                //     PDF::Cell(0,0,$post->religion.' غير مسلم');
+                // }
+            }
+            // Date of Birth
+            if(isset($dob_cvsetting)){
+
+                if($dob_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $dobpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($dob_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $dobpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $dobpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+
+                }
+    
+                $dobpopinsfont = TCPDF_FONTS::addTTFfont($dobpopins,'','',32);
+
+                if($dob_cvsetting->font_family == 'none'){
+                    $dobfonttype = "";
+                }else{
+                    $dobfonttype = $dob_cvsetting->font_family;
+                }
+
+                if($dob_cvsetting->font_size != ''){
+                    $dobfontsize = $dob_cvsetting->font_size;
+                }else{
+                    $dobfontsize = "11";
+                }
+
+                PDF::SetFont($dobpopinsfont, $dobfonttype, $dobfontsize,'',false);
+                if($dob_cvsetting->font_color != ''){
+                    $dobfontcolor = explode(",",$dob_cvsetting->font_color);
+                    PDF::SetTextColor($dobfontcolor[0],$dobfontcolor[1],$dobfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($dob_cvsetting->x_axis,$dob_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->dob)));
+
+            }
+            // Place of Birth
+            if(isset($plb_id_cvsetting)){
+                if($plb_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $plb_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+                }elseif($plb_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $plb_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $plb_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+                }
+                $plb_idpopinsfont = TCPDF_FONTS::addTTFfont($plb_idpopins,'','',32);
+
+                if($plb_id_cvsetting->font_family == 'none'){
+                    $plb_idfonttype = "";
+                }else{
+                    $plb_idfonttype = $plb_id_cvsetting->font_family;
+                }
+
+                if($plb_id_cvsetting->font_size != ''){
+                    $plb_idfontsize = $plb_id_cvsetting->font_size;
+                }else{
+                    $plb_idfontsize = "11";
+                }
+
+                PDF::SetFont($plb_idpopinsfont, $plb_idfonttype, $plb_idfontsize,'',false);
+                if($plb_id_cvsetting->font_color != ''){
+                    $plb_idfontcolor = explode(",",$plb_id_cvsetting->font_color);
+                    PDF::SetTextColor($plb_idfontcolor[0],$plb_idfontcolor[1],$plb_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($plb_id_cvsetting->x_axis,$plb_id_cvsetting->y_axis);
+                // PDF::Cell(0,0,$post->plbname);
+                PDF::Cell(0,0,$post->plb_text);
+            }
+            // Nationality
+            if(isset($nation_id_cvsetting)){
+
+                // if($nation_id_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                //     }
+                // }elseif($nation_id_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                //     }
+                
+                // }
+                
+                if($nation_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $nation_idpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $nation_idpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';                    
+                    }
+                }
+
+                $nation_idpopinsfont = TCPDF_FONTS::addTTFfont($nation_idpopins,'','',32);
+
+                if($nation_id_cvsetting->font_family == 'none'){
+                    $nation_idfonttype = "";
+                }else{
+                    $nation_idfonttype = $nation_id_cvsetting->font_family;
+                }
+
+                if($nation_id_cvsetting->font_size != ''){
+
+                    $nation_idfontsize = $nation_id_cvsetting->font_size;
+                }else{
+                    $nation_idfontsize = "11";
+                }
+
+                PDF::SetFont($nation_idpopinsfont, $nation_idfonttype, $nation_idfontsize,'',false);
+                if($nation_id_cvsetting->font_color != ''){
+                    $nation_idfontcolor = explode(",",$nation_id_cvsetting->font_color);
+                    PDF::SetTextColor($nation_idfontcolor[0],$nation_idfontcolor[1],$nation_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($nation_id_cvsetting->x_axis,$nation_id_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->nationname.'  '.$post->nationarname);
+
+                
+            }
+            // Region
+            if(isset($region_id_cvsetting)){
+
+                if($region_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $regionpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($region_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $regionpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $regionpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }   
+                }
+
+                $regionpopinsfont = TCPDF_FONTS::addTTFfont($regionpopins,'','',32);
+
+                if($region_id_cvsetting->font_family == 'none'){
+                    $region_idfonttype = "";
+                }else{
+                    $region_idfonttype = $region_id_cvsetting->font_family;
+                }
+
+                if($region_id_cvsetting->font_size != ''){
+                    $region_idfonttype = $region_id_cvsetting->font_size;
+                }else{
+                    $region_idfonttype = "11";
+                }
+
+                PDF::SetFont($regionpopinsfont, $region_idfonttype, $region_idfonttype,'',false);
+                if($region_id_cvsetting->font_color != ''){
+                    $region_idfontcolor = explode(",",$region_id_cvsetting->font_color);
+                    PDF::SetTextColor($region_idfontcolor[0],$region_idfontcolor[1],$region_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($region_id_cvsetting->x_axis,$region_id_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->regionname);
+            }
+
+            // Education
+            if(isset($education_cvsetting)){
+
+                if($education_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $educationpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($education_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $educationpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $educationpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $educationpopinsfont = TCPDF_FONTS::addTTFfont($educationpopins,'','',32);
+
+                if($education_cvsetting->font_family == 'none'){
+                    $educationfonttype = "";
+                }else{
+                    $educationfonttype = $education_cvsetting->font_family;
+                }
+
+                if($education_cvsetting->font_size != ''){
+                    $educationfontsize = $education_cvsetting->font_size;
+                }else{
+                    $educationfontsize = "11";
+                }
+
+                PDF::SetFont($educationpopinsfont, $educationfonttype, $educationfontsize,'',false);
+                if($education_cvsetting->font_color != ''){
+                    $educationfontcolor = explode(",",$education_cvsetting->font_color);
+                    PDF::SetTextColor($educationfontcolor[0],$educationfontcolor[1],$educationfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($education_cvsetting->x_axis,$education_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->educname);
+
+            }
+
+            // Language
+            if(isset($lang_known_cvsetting)){
+
+                if($lang_known_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $langknownpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($lang_known_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $langknownpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $langknownpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $langknownpopinsfont = TCPDF_FONTS::addTTFfont($langknownpopins,'','',32);
+
+                if($lang_known_cvsetting->font_family == 'none'){
+                    $lang_knownfonttype = "";
+                }else{
+                    $lang_knownfonttype = $lang_known_cvsetting->font_family;
+                }
+
+                if($lang_known_cvsetting->font_size != ''){
+                    $lang_knownfontsize = $lang_known_cvsetting->font_size;
+                }else{
+                    $lang_knownfontsize = "11";
+                }
+
+                PDF::SetFont($langknownpopinsfont, $lang_knownfonttype, $lang_knownfontsize,'',false);
+                if($lang_known_cvsetting->font_color != ''){
+                    $lang_knownfontcolor = explode(",",$lang_known_cvsetting->font_color);
+                    PDF::SetTextColor($lang_knownfontcolor[0],$lang_knownfontcolor[1],$lang_knownfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($lang_known_cvsetting->x_axis,$lang_known_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->lang_known);
+
+            }
+            // Google Map
+            if(isset($google_map_cvsetting)){
+
+                if($google_map_cvsetting->font_family == 'none'){
+                    $google_mapfonttype = "";
+                }else{
+                    $google_mapfonttype = $google_map_cvsetting->font_family;
+                }
+
+                if($google_map_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $google_map_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $google_map_arabic = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $google_map_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $google_map_arabic = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }    
+                }
+
+                $google_map_arabic_font = TCPDF_FONTS::addTTFfont($google_map_arabic,'','',32);
+
+                if($google_map_cvsetting->font_size != ''){
+                    $google_mapfontsize = $google_map_cvsetting->font_size;
+                }else{
+                    $google_mapfontsize = "11";
+                }
+
+                if($post->google_map == 1){
+                    $gmap = "Yes  نعم";
+                }else{
+                    $gmap = "No  لا";
+                }
+
+                PDF::SetFont($google_map_arabic_font, $google_mapfonttype, $google_mapfontsize,'',false);
+                if($google_map_cvsetting->font_color != ''){
+                    $google_mapfontcolor = explode(",",$google_map_cvsetting->font_color);
+                    PDF::SetTextColor($google_mapfontcolor[0],$google_mapfontcolor[1],$google_mapfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($google_map_cvsetting->x_axis,$google_map_cvsetting->y_axis);
+                PDF::Cell(0,0,$gmap);
+
+            }
+            // Vehical
+            if(isset($carknown_id_cvsetting)){
+
+                if($carknown_id_cvsetting->font_family == 'B'){
+
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $carknown_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+
+
+                }elseif($carknown_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $carknown_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $carknown_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+
+                $carknown_idpopinsfont = TCPDF_FONTS::addTTFfont($carknown_idpopins,'','',32);
+
+                if($carknown_id_cvsetting->font_family == 'none'){
+                    $carknown_idfonttype = "";
+                }else{
+                    $carknown_idfonttype = $carknown_id_cvsetting->font_family;
+                }
+
+                if($carknown_id_cvsetting->font_size != ''){
+                    $carknown_idfontsize = $carknown_id_cvsetting->font_size;
+                }else{
+                    $carknown_idfontsize = "11";
+                }
+
+                PDF::SetFont($carknown_idpopinsfont, $carknown_idfonttype, $carknown_idfontsize,'',false);
+                if($carknown_id_cvsetting->font_color != ''){
+                    $carknown_idfontcolor = explode(",",$carknown_id_cvsetting->font_color);
+                    PDF::SetTextColor($carknown_idfontcolor[0],$carknown_idfontcolor[1],$carknown_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($carknown_id_cvsetting->x_axis,$carknown_id_cvsetting->y_axis);
+                PDF::Cell(0,0,implode(",",$carlist));
+            }
+            
+            // Work Experience
+            $cexperience = explode(",",$post->experience);
+            $cprofessions = explode(",",$post->proff_id);
+            $cexpcountry = explode(",",$post->expcountry_id);
+            // $cexpcity = explode(",",$post->expcity_id);
+            $cexpcitytext = explode(",",$post->expcity_id_text);
+
+            $iec = 0;
+            $iprof = 0;
+            $icont = 0;
+            // $icity = 0;
+            $icitytext = 0;
+            $icco = 0;
+            foreach($cexperience as $index => $value){
+
+                // Job
+                
+                if(isset($proff_id_cvsetting)){
+                    $py_axis = $proff_id_cvsetting->y_axis + $iprof;
+
+                    if($proff_id_cvsetting->font_family == 'none'){
+                        $proff_idfonttype = "";
+                    }else{
+                        $proff_idfonttype = $proff_id_cvsetting->font_family;
+                    }
+                    
+                    if($proff_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $proff_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                        
+                        }
+
+                    }elseif($proff_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $proff_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                        
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $proff_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }
+                    }
+
+                    $proff_idpopinsfont = TCPDF_FONTS::addTTFfont($proff_idpopins,'','',32);
+
+                    if($proff_id_cvsetting->font_size != ''){
+                        $proff_idfontsize = $proff_id_cvsetting->font_size;
+                    }else{
+                        $proff_idfontsize = "11";
+                    }
+                    $professionF = Profession::find($cprofessions[$index]);
+                    PDF::SetFont($proff_idpopinsfont, $proff_idfonttype, $proff_idfontsize,'',false);
+
+                    if($proff_id_cvsetting->font_color != ''){
+                        $proff_idfontcolor = explode(",",$proff_id_cvsetting->font_color);
+                        PDF::SetTextColor($proff_idfontcolor[0],$proff_idfontcolor[1],$proff_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+                    PDF::SetXY($proff_id_cvsetting->x_axis,$py_axis);
+                    if(isset($professionF)){
+                        PDF::Cell(0,0,$professionF->eng_name);
+                    }
+
+                    $iprof = $iprof + $proff_id_cvsetting->add_y_axis;
+                }
+                // Country
+                if(isset($expcountry_id_cvsetting)){
+                    $cony_axis = $expcountry_id_cvsetting->y_axis + $icont;
+
+                    if($expcountry_id_cvsetting->font_family == 'none'){
+                        $expcountry_idfonttype = "";
+                    }else{
+                        $expcountry_idfonttype = $expcountry_id_cvsetting->font_family;
+                    }
+
+                    if($expcountry_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                        
+                        }
+
+                    }elseif($expcountry_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                        
+                        }
+                    }
+
+                    $expcountry_idpopinsfont = TCPDF_FONTS::addTTFfont($expcountry_idpopins,'','',32);
+
+                    if($expcountry_id_cvsetting->font_size != ''){
+                        $expcountry_idfontsize = $expcountry_id_cvsetting->font_size;
+                    }else{
+                        $expcountry_idfontsize = "11";
+                    }
+
+                    $countryF = Country::find($cexpcountry[$index]);
+                    PDF::SetFont($expcountry_idpopinsfont, $expcountry_idfonttype, $expcountry_idfontsize,'',false);
+                    if($expcountry_id_cvsetting->font_color != ''){
+                        $expcountry_idfontcolor = explode(",",$expcountry_id_cvsetting->font_color);
+                        PDF::SetTextColor($expcountry_idfontcolor[0],$expcountry_idfontcolor[1],$expcountry_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($expcountry_id_cvsetting->x_axis,$cony_axis);
+                    if(isset($countryF)){
+                        PDF::Cell(0,0,$countryF->name);
+                    }
+
+
+                    $icont = $icont + $expcountry_id_cvsetting->add_y_axis;
+                }
+                // City
+                // if(isset($expcity_id_cvsetting)){
+                //     $cit_axis = $expcity_id_cvsetting->y_axis + $icity;
+
+                //     if($expcity_id_cvsetting->font_family == 'none'){
+                //         $expcity_idfonttype = "";
+                //     }else{
+                //         $expcity_idfonttype = $expcity_id_cvsetting->font_family;
+                //     }
+
+                //     if($expcity_id_cvsetting->font_family == 'B'){
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                //         }
+                //     }elseif($expcity_id_cvsetting->font_family == 'I'){
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //         }
+                //     }else{
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                //         }
+                //     }
+
+                //     $expcity_idpopinsfont = TCPDF_FONTS::addTTFfont($expcity_idpopins,'','',32);
+
+                //     if($expcity_id_cvsetting->font_size != ''){
+                //         $expcity_idfontsize = $expcity_id_cvsetting->font_size;
+                //     }else{
+                //         $expcity_idfontsize = "11";
+                //     }
+
+                //     $cityF = City::find($cexpcity[$index]);
+                //     PDF::SetFont($expcity_idpopinsfont, $expcity_idfonttype, $expcity_idfontsize,'',false);
+                //     if($expcity_id_cvsetting->font_color != ''){
+                //         $expcity_idfontcolor = explode(",",$expcity_id_cvsetting->font_color);
+                //         PDF::SetTextColor($expcity_idfontcolor[0],$expcity_idfontcolor[1],$expcity_idfontcolor[2]);
+                //     }else{
+                //         PDF::SetTextColor(0,0,0);
+                //     }
+                //     PDF::SetXY($expcity_id_cvsetting->x_axis,$cit_axis);
+                //     if(isset($cityF)){
+                //         PDF::Cell(0,0,$cityF->name);
+                //     }
+
+
+                //     $icity = $icity + $expcity_id_cvsetting->add_y_axis;
+
+                // }
+
+                // City Text
+                if(isset($expcity_id_cvsetting)){
+                    $cit_axis = $expcity_id_cvsetting->y_axis + $icitytext;
+
+                    if($expcity_id_cvsetting->font_family == 'none'){
+                        $expcity_idfonttype = "";
+                    }else{
+                        $expcity_idfonttype = $expcity_id_cvsetting->font_family;
+                    }
+
+                    if($expcity_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $expcity_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                        
+                        }
+                    }elseif($expcity_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $expcity_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $expcity_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }
+                    }
+
+                    $expcity_idpopinsfont = TCPDF_FONTS::addTTFfont($expcity_idpopins,'','',32);
+
+                    if($expcity_id_cvsetting->font_size != ''){
+                        $expcity_idfontsize = $expcity_id_cvsetting->font_size;
+                    }else{
+                        $expcity_idfontsize = "11";
+                    }
+
+                    
+                    PDF::SetFont($expcity_idpopinsfont, $expcity_idfonttype, $expcity_idfontsize,'',false);
+                    if($expcity_id_cvsetting->font_color != ''){
+                        $expcity_idfontcolor = explode(",",$expcity_id_cvsetting->font_color);
+                        PDF::SetTextColor($expcity_idfontcolor[0],$expcity_idfontcolor[1],$expcity_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($expcity_id_cvsetting->x_axis,$cit_axis);
+                    if(count($cexpcitytext) > $icco){
+                        PDF::Cell(0,0,$cexpcitytext[$index]);
+                    }
+
+
+                    $icitytext = $icitytext + $expcity_id_cvsetting->add_y_axis;
+
+                }
+
+                // Experience
+                if(isset($experience_cvsetting)){
+                    $ey_axis = $experience_cvsetting->y_axis + $iec;
+
+                    if($experience_cvsetting->font_family == 'none'){
+                        $experiencefonttype = "";
+                    }else{
+                        $experiencefonttype = $experience_cvsetting->font_family;
+                    }
+
+                    if($experience_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $experiencepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }
+                    }elseif($experience_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $experiencepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $experiencepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                        
+                        }
+                    }
+
+                    $experiencepopinsfont = TCPDF_FONTS::addTTFfont($experiencepopins,'','',32);
+
+                    if($experience_cvsetting->font_size != ''){
+                        $experiencefontsize = $experience_cvsetting->font_size;
+                    }else{
+                        $experiencefontsize = "11";
+                    }
+
+                    PDF::SetFont($experiencepopinsfont, $experiencefonttype, $experiencefontsize,'',false);
+                    if($experience_cvsetting->font_color != ''){
+                        $experiencefontcolor = explode(",",$experience_cvsetting->font_color);
+                        PDF::SetTextColor($experiencefontcolor[0],$experiencefontcolor[1],$experiencefontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($experience_cvsetting->x_axis,$ey_axis);
+                    PDF::Cell(0,0,$value.' Years');
+
+                    $iec = $iec + $experience_cvsetting->add_y_axis;
+                }
+
+                $icco++;
+            }
+
+            // Passport No
+            if(isset($pass_no_cvsetting)){
+
+                if($pass_no_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $pass_nopopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($pass_no_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $pass_nopopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $pass_nopopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $pass_nopopinsfont = TCPDF_FONTS::addTTFfont($pass_nopopins,'','',32);
+
+                if($pass_no_cvsetting->font_family == 'none'){
+                    $pass_nofonttype = "";
+                }else{
+                    $pass_nofonttype = $pass_no_cvsetting->font_family;
+                }
+
+                if($pass_no_cvsetting->font_size != ''){
+                    $pass_nofontsize = $pass_no_cvsetting->font_size;
+    
+                }else{
+                    $pass_nofontsize = "11";               
+                }
+
+                PDF::SetFont($pass_nopopinsfont, $pass_nofonttype, $pass_nofontsize,'',false);
+                if($pass_no_cvsetting->font_color != ''){
+                    $pass_nofontcolor = explode(",",$pass_no_cvsetting->font_color);
+                    PDF::SetTextColor($pass_nofontcolor[0],$pass_nofontcolor[1],$pass_nofontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($pass_no_cvsetting->x_axis,$pass_no_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->pass_no);
+            }
+            // Passport Type
+            if(isset($pass_type_cvsetting)){
+                if($pass_type_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $pass_typepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($pass_type_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $pass_typepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $pass_typepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $pass_typepopinsfont = TCPDF_FONTS::addTTFfont($pass_typepopins,'','',32);
+
+                if($pass_type_cvsetting->font_family == 'none'){
+                    $pass_typefonttype = "";
+                }else{
+                    $pass_typefonttype = $pass_type_cvsetting->font_family;
+                }
+
+                if($pass_type_cvsetting->font_size != ''){
+                    $pass_typefontsize = $pass_type_cvsetting->font_size;
+    
+                }else{
+                    $pass_typefontsize = "11";                
+                }
+
+                PDF::SetFont($pass_typepopinsfont, $pass_typefonttype, $pass_typefontsize,'',false);
+                if($pass_type_cvsetting->font_color != ''){
+                    $pass_typefontcolor = explode(",",$pass_type_cvsetting->font_color);
+                    PDF::SetTextColor($pass_typefontcolor[0],$pass_typefontcolor[1],$pass_typefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($pass_type_cvsetting->x_axis,$pass_type_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->pass_type);
+            }
+            // Date of issue
+            if(isset($doi_cvsetting)){
+
+                if($doi_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $doipopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($doi_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $doipopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $doipopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+
+                }
+    
+                $doipopinsfont = TCPDF_FONTS::addTTFfont($doipopins,'','',32);
+
+                if($doi_cvsetting->font_family == 'none'){
+                    $doifonttype = "";
+                }else{
+                    $doifonttype = $doi_cvsetting->font_family;
+                }
+
+                if($doi_cvsetting->font_size != ''){
+                    $doifontsize = $doi_cvsetting->font_size;
+    
+                }else{
+                    $doifontsize = "11";
+                }
+
+                PDF::SetFont($doipopinsfont, $doifonttype, $doifontsize,'',false);
+                if($doi_cvsetting->font_color != ''){
+                    $doifontcolor = explode(",",$doi_cvsetting->font_color);
+                    PDF::SetTextColor($doifontcolor[0],$doifontcolor[1],$doifontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($doi_cvsetting->x_axis,$doi_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->doi)));
+            }
+            // Date of expiry
+            if(isset($doe_cvsetting)){
+                if($doe_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $doepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+
+                }elseif($doe_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $doepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $doepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $doepopinsfont = TCPDF_FONTS::addTTFfont($doepopins,'','',32);
+
+                if($doe_cvsetting->font_family == 'none'){
+                    $doefonttype = "";
+                }else{
+                    $doefonttype = $doe_cvsetting->font_family;
+                }
+
+                if($doe_cvsetting->font_size != ''){
+                    $doefontsize = $doe_cvsetting->font_size;
+                }else{
+                    $doefontsize = "11";
+                }
+
+                PDF::SetFont($doepopinsfont, $doefonttype, $doefontsize,'',false);
+                if($doe_cvsetting->font_color != ''){
+                    $doefontcolor = explode(",",$doe_cvsetting->font_color);
+                    PDF::SetTextColor($doefontcolor[0],$doefontcolor[1],$doefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($doe_cvsetting->x_axis,$doe_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->doe)));
+            }
+            // Place of Issue
+            if(isset($poi_cvsetting)){
+                if($poi_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $poipopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($poi_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $poipopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $poipopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $poipopinsfont = TCPDF_FONTS::addTTFfont($poipopins,'','',32);
+
+                if($poi_cvsetting->font_family == 'none'){
+                    $poifonttype = "";
+                }else{
+                    $poifonttype = $poi_cvsetting->font_family;
+                }
+
+                if($poi_cvsetting->font_size != ''){
+                    $poifontsize = $poi_cvsetting->font_size;
+    
+                }else{
+                    $poifontsize = "11";
+                }
+
+                PDF::SetFont($poipopinsfont, $poifonttype, $poifontsize,'',false);
+                if($poi_cvsetting->font_color != ''){
+                    $poifontcolor = explode(",",$poi_cvsetting->font_color);
+                    PDF::SetTextColor($poifontcolor[0],$poifontcolor[1],$poifontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($poi_cvsetting->x_axis,$poi_cvsetting->y_axis);
+                // PDF::Cell(0,0,$post->poiname);
+                PDF::Cell(0,0,$post->poi_text);
+            }
+
+            PDF::AddPage();
+            // Default fonts set
+
+            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                $sansarabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                $filecand_pepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+            }else{
+                $filecand_pepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                $sansarabic = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+            }
+            // $tajawalfont = TCPDF_FONTS::addTTFfont($tajawal,'','',32); 
+            $sansarabicfont = TCPDF_FONTS::addTTFfont($sansarabic,'','',32);
+            $filecand_pepopinsfont = TCPDF_FONTS::addTTFfont($filecand_pepopins,'','',32);
+
+            if($post->pass_file != ''){
+                // Passport
+                PDF::SetFont($filecand_pepopinsfont, '', 16);
+                PDF::SetXY(10,10);
+                PDF::Cell(0,0,"Passport Copy:");
+
+                PDF::SetFont($sansarabicfont, '', 16);
+                PDF::SetXY(160,10);
+                PDF::Cell(0,0,"صورة جواز السفر:",0,0,'R');
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $passpath = base_path().'/public/admin/assets/images/candidate/'.$post->pass_file;
+                }else{
+                    $passpath = base_path().'/public_html/admin/assets/images/candidate/'.$post->pass_file;                
+                }
+
+                $passext = pathinfo($post->pass_file, PATHINFO_EXTENSION);
+
+                PDF::Image($passpath,30,30, '150', '',$passext,'','',false,'300','',false,false,0,false,false,false);
+            }
+
+            if($post->lic_file != ''){
+                
+                PDF::SetFont($filecand_pepopinsfont, '', 16);
+                PDF::SetXY(10,140);
+                PDF::Cell(0,0,"Driving Licence:");
+
+                PDF::SetFont($sansarabicfont, '', 16);
+                PDF::SetXY(160,140);
+                PDF::Cell(0,0,"رخصة قيادة:",0,0,"R");
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $licpath = base_path().'/public/admin/assets/images/candidate/'.$post->lic_file;
+                }else{
+                    $licpath = base_path().'/public_html/admin/assets/images/candidate/'.$post->lic_file;
+                }                
+                $licext = pathinfo($post->lic_file, PATHINFO_EXTENSION);
+    
+    
+                PDF::Image($licpath,30,160, '150', '',$licext,'','',false,'300','',false,false,0,false,false,false);
+            }
+            ob_end_clean();
+            PDF::Output($post->cand_name.'_cv.pdf');
+         } catch (\Exception $e) {
+            return redirect()->back()->with('pdfError','Something is wrong please check the CV Text format ');
+        }
+
+
+    }
+
+    public function cvsetting() {
+        $image1 = Cvsetting::where('db_field_name','=','image1')->first();
+        $image2 = Cvsetting::where('db_field_name','=','image2')->first();
+        $image3 = Cvsetting::where('db_field_name','=','image3')->first();
+        $image4 = Cvsetting::where('db_field_name','=','image4')->first();
+        $image5 = Cvsetting::where('db_field_name','=','image5')->first();
+        $text1 = Cvsetting::where('db_field_name','=','text1')->first();
+        $text2 = Cvsetting::where('db_field_name','=','text2')->first();
+        $text3 = Cvsetting::where('db_field_name','=','text3')->first();
+        $text4 = Cvsetting::where('db_field_name','=','text4')->first();
+        $remark_text = Cvsetting::where('db_field_name','=','remark_text')->first();
+        $text_overview = Cvsetting::where('db_field_name','=','text_overview')->first();
+
+        return view('admin.cv.setting',['remark_text' => $remark_text, 'text1' => $text1,'text2' => $text2,'text3' => $text3,'text4' => $text4,'text_overview' => $text_overview,'image1' => $image1,'image2' => $image2,'image3' => $image3,'image4' => $image4,'image5' => $image5]);
+    }
+
+    public function cvsettingjson(Request $request){
+        $post = Cvsetting::all();
+        $data['data'] = $post;
+        return response()->json($data);
+    }
+
+    public function checklabelname(Request $request){
+        if ($request->id != '') {
+            $post = Cvsetting::where('id','!=',$request->id)->where('label_name','=',$request->label_name)->count();
+
+            if($post == 0){
+                $isAvailable = 'true';
+            }else{
+                $isAvailable = 'false';
+            }
+    
+            echo json_encode(array(
+                'valid' => $isAvailable,
+            ));
+        } else {
+            $post = Cvsetting::where('label_name','=',$request->label_name)->count();
+
+            if($post == 0){
+                $isAvailable = 'true';
+            }else{
+                $isAvailable = 'false';
+            }
+    
+            echo json_encode(array(
+                'valid' => $isAvailable,
+            ));
+        }
+    }
+
+    public function cvsettinggetdet(Request $request) {
+        $post = Cvsetting::where('db_field_name','=',$request->field_name)->first();
+        return response()->json($post);
+    }
+
+    public function cvsettingupdate(Request $request) {
+
+        try {
+            // if ($request->cvsetting_id != '') {
+            //     $update = Cvsetting::find($request->cvsetting_id);
+            //     $update->label_name = $request->label_name;
+            //     $update->db_field_name = $request->db_field_name;
+            //     $update->x_axis = $request->x_axis;
+            //     $update->y_axis = $request->y_axis;
+            //     $update->add_y_axis = $request->add_y_axis;
+            //     $update->font_name = $request->font_name;
+            //     $update->font_family = $request->font_family;
+            //     $update->font_size = $request->font_size;
+            //     $update->font_color = $request->font_color;
+            //     $update->save();
+            // } else {
+            //     $post = new Cvsetting();
+            //     $post->label_name = $request->label_name;
+            //     $post->db_field_name = $request->db_field_name;
+            //     $post->x_axis = $request->x_axis;
+            //     $post->y_axis = $request->y_axis;
+            //     $post->add_y_axis = $request->add_y_axis;
+            //     $post->font_name = $request->font_name;
+            //     $post->font_family = $request->font_family;
+            //     $post->font_size = $request->font_size;
+            //     $post->font_color = $request->font_color;
+            //     $post->admin_id = Auth::guard('admin')->user()->id;
+            //     $post->save();
+            // }
+
+            $chkpost = Cvsetting::where('db_field_name','=',$request->db_field_name)->count();
+            if($chkpost == 0){
+                $post = new Cvsetting();
+                $post->label_name = $request->label_name;
+                $post->db_field_name = $request->db_field_name;
+                $post->x_axis = $request->x_axis;
+                $post->y_axis = $request->y_axis;
+                $post->add_y_axis = $request->add_y_axis;
+                $post->font_name = $request->font_name;
+                $post->font_family = $request->font_family;
+                $post->font_size = $request->font_size;
+                $post->font_color = $request->font_color;
+                $post->admin_id = Auth::guard('admin')->user()->id;
+                $post->save();
+            }else{
+                $post = Cvsetting::where('db_field_name','=',$request->db_field_name)->first();
+                $post->label_name = $request->label_name;
+                $post->db_field_name = $request->db_field_name;
+                $post->x_axis = $request->x_axis;
+                $post->y_axis = $request->y_axis;
+                $post->add_y_axis = $request->add_y_axis;
+                $post->font_name = $request->font_name;
+                $post->font_family = $request->font_family;
+                $post->font_size = $request->font_size;
+                $post->font_color = $request->font_color;
+                $post->save();
+            }
+
+
+
+            $data = [
+                'success' => 'Pdf text format setting updated',
+                'error' => ''
+            ];
+
+           
+
+        } catch (\Exception $e) {
+            $data = [
+                'success' => '',
+                'error' => 'Something went wrong! please check details before submit!'
+            ];
+           
+        }
+
+        return response()->json($data);
+        // return redirect()->back()->with('success','CV Setting updated!');
+        
+        
+    }
+    
+    public function updateImagecv(Request $request){
+        $basepathstatus = Basepathstatus::first();
+        try {
+
+        
+
+            if ($request->cvimagesetting1 != '') {
+                $updateimg1 = Cvsetting::find($request->cvimagesetting1);
+                
+
+                if($request->hasFile('image1')){
+                    $file = $request->file('image1');
+                    $name1 = $file->getClientOriginalName();
+                    // remove space from image
+                    $filename_ren1 = pathinfo($name1,PATHINFO_FILENAME);
+                    $fileext_ren1 = pathinfo($name1,PATHINFO_EXTENSION);
+                    $repspfilename1 = str_replace(" ","_",$filename_ren1);
+                    $new_file1 = $repspfilename1.'.'.$fileext_ren1;
+                    if($basepathstatus->base_path_status == 1){
+	                    $file->move(base_path().'/public/admin/assets/images/cv_setting/',$new_file1);
+                    }else{
+                        $file->move(base_path().'/public_html/admin/assets/images/cv_setting/',$new_file1);
+                    }
+                    $imag1photo = $new_file1;
+                }else{
+                    $imag1photo = $updateimg1->filename;
+                }
+
+                $updateimg1->x_axis = $request->x_axis1;
+                $updateimg1->y_axis = $request->y_axis1;
+                $updateimg1->filename = $imag1photo;
+                $updateimg1->width = $request->width1;
+                if($request->status1 != ''){
+                    $updateimg1->status = $request->status1;
+                }
+
+                $updateimg1->save();
+
+            }else{
+                $postimg1 = new Cvsetting();
+
+                if($request->hasFile('image1')){
+                    $file = $request->file('image1');
+                    $name1 = $file->getClientOriginalName();
+                    // remove space from image
+                    $filename_ren1 = pathinfo($name1,PATHINFO_FILENAME);
+                    $fileext_ren1 = pathinfo($name1,PATHINFO_EXTENSION);
+                    $repspfilename1 = str_replace(" ","_",$filename_ren1);
+                    $new_file1 = $repspfilename1.'.'.$fileext_ren1;
+                    if($basepathstatus->base_path_status == 1){
+	                    $file->move(base_path().'/public/admin/assets/images/cv_setting/',$new_file1);
+                    }else{
+                        $file->move(base_path().'/public_html/admin/assets/images/cv_setting/',$new_file1);
+                    }
+                    $imag1photo = $new_file1;
+                }else{
+                    $imag1photo = "";
+                }
+
+                $postimg1->label_name = 'Image1';
+                $postimg1->db_field_name = 'image1';
+                $postimg1->x_axis = $request->x_axis1;
+                $postimg1->y_axis = $request->y_axis1;
+                $postimg1->filename = $imag1photo;
+                $postimg1->width = $request->width1;
+                if($request->status1 != ''){
+                    $postimg1->status = $request->status1;
+                }
+               
+                $postimg1->admin_id = Auth::guard('admin')->user()->id;
+                $postimg1->save();
+            }
+
+            if($request->cvimagesetting2 != ''){
+                $updateimg2 = Cvsetting::find($request->cvimagesetting2);
+
+                if($request->hasFile('image2')){
+                    $file = $request->file('image2');
+                    $name2 = $file->getClientOriginalName();
+                    // remove space from image
+                    $filename_ren2 = pathinfo($name2,PATHINFO_FILENAME);
+                    $fileext_ren2 = pathinfo($name2,PATHINFO_EXTENSION);
+                    $repspfilename2 = str_replace(" ","_",$filename_ren2);
+                    $new_file2 = $repspfilename2.'.'.$fileext_ren2;
+                    if($basepathstatus->base_path_status == 1){
+	                    $file->move(base_path().'/public/admin/assets/images/cv_setting/',$new_file2);
+                    }else{
+                        $file->move(base_path().'/public_html/admin/assets/images/cv_setting/',$new_file2);                
+                    }
+
+                    $imag2photo = $new_file2;
+                }else{
+                    $imag2photo = $updateimg2->filename;
+                }
+
+                $updateimg2->x_axis = $request->x_axis2;
+                $updateimg2->y_axis = $request->y_axis2;
+                $updateimg2->filename = $imag2photo;
+                $updateimg2->width = $request->width2;
+                if($request->status2 != ''){
+                    $updateimg2->status = $request->status2;
+                }
+                
+                $updateimg2->save();
+
+            }else{
+                $postimg2 = new Cvsetting();
+
+                if($request->hasFile('image2')){
+                    $file = $request->file('image2');
+                    $name2 = $file->getClientOriginalName();
+                    // remove space from image
+                    $filename_ren2 = pathinfo($name2,PATHINFO_FILENAME);
+                    $fileext_ren2 = pathinfo($name2,PATHINFO_EXTENSION);
+                    $repspfilename2 = str_replace(" ","_",$filename_ren2);
+                    $new_file2 = $repspfilename2.'.'.$fileext_ren2;
+                    if($basepathstatus->base_path_status == 1){
+	                    $file->move(base_path().'/public/admin/assets/images/cv_setting/',$new_file2);
+                    }else{
+                        $file->move(base_path().'/public_html/admin/assets/images/cv_setting/',$new_file2);                
+                    }
+
+                    $imag2photo = $new_file2;
+                }else{
+                    $imag2photo = "";
+                }
+
+                $postimg2->label_name = 'Image2';
+                $postimg2->db_field_name = 'image2';
+                $postimg2->x_axis = $request->x_axis2;
+                $postimg2->y_axis = $request->y_axis2;
+                $postimg2->filename = $imag2photo;
+                $postimg2->width = $request->width2;
+
+                if($request->status2 != ''){
+                    $postimg2->status = $request->status2;
+                }
+
+                $postimg2->admin_id = Auth::guard('admin')->user()->id;
+                $postimg2->save();
+
+            }
+
+            if($request->cvimagesetting3 != ''){
+                $updateimg3 = Cvsetting::find($request->cvimagesetting3);
+
+                if($request->hasFile('image3')){
+                    $file = $request->file('image3');
+                    $name3 = $file->getClientOriginalName();
+                    // remove space from image
+                    $filename_ren3 = pathinfo($name3,PATHINFO_FILENAME);
+                    $fileext_ren3 = pathinfo($name3,PATHINFO_EXTENSION);
+                    $repspfilename3 = str_replace(" ","_",$filename_ren3);
+                    $new_file3 = $repspfilename3.'.'.$fileext_ren3;
+                    if($basepathstatus->base_path_status == 1){
+	                    $file->move(base_path().'/public/admin/assets/images/cv_setting/',$new_file3);
+                    }else{
+                        $file->move(base_path().'/public_html/admin/assets/images/cv_setting/',$new_file3);                
+                    }
+
+                    $imag3photo = $new_file3;
+                }else{
+                    $imag3photo = $updateimg3->filename;
+                }
+
+                $updateimg3->x_axis = $request->x_axis3;
+                $updateimg3->y_axis = $request->y_axis3;
+                $updateimg3->filename = $imag3photo;
+                $updateimg3->width = $request->width3;
+                if($request->status3 != ''){
+                    $updateimg3->status = $request->status3;
+                }
+                $updateimg3->save();
+
+            }else{
+                $postimg3 = new Cvsetting();
+
+                if($request->hasFile('image3')){
+                    $file = $request->file('image3');
+                    $name3 = $file->getClientOriginalName();
+                    // remove space from image
+                    $filename_ren3 = pathinfo($name3,PATHINFO_FILENAME);
+                    $fileext_ren3 = pathinfo($name3,PATHINFO_EXTENSION);
+                    $repspfilename3 = str_replace(" ","_",$filename_ren3);
+                    $new_file3 = $repspfilename3.'.'.$fileext_ren3;
+                    if($basepathstatus->base_path_status == 1){
+	                    $file->move(base_path().'/public/admin/assets/images/cv_setting/',$new_file3);
+                    }else{
+                        $file->move(base_path().'/public_html/admin/assets/images/cv_setting/',$new_file3);                
+                    }
+
+                    $imag3photo = $new_file3;
+                }else{
+                    $imag3photo = "";
+                }
+
+                $postimg3->label_name = 'Image3';
+                $postimg3->db_field_name = 'image3';
+                $postimg3->x_axis = $request->x_axis3;
+                $postimg3->y_axis = $request->y_axis3;
+                $postimg3->filename = $imag3photo;
+                $postimg3->width = $request->width3;
+                if($request->status3 !=''){
+                    $postimg3->status = $request->status3;
+                }
+                $postimg3->admin_id = Auth::guard('admin')->user()->id;
+                $postimg3->save();
+
+            }
+
+            if($request->cvimagesetting4 != ''){
+                $updateimg4 = Cvsetting::find($request->cvimagesetting4);
+
+                if($request->hasFile('image4')){
+                    $file = $request->file('image4');
+                    $name4 = $file->getClientOriginalName();
+                    // remove space from image
+                    $filename_ren4 = pathinfo($name4,PATHINFO_FILENAME);
+                    $fileext_ren4 = pathinfo($name4,PATHINFO_EXTENSION);
+                    $repspfilename4 = str_replace(" ","_",$filename_ren4);
+                    $new_file4 = $repspfilename4.'.'.$fileext_ren4;
+                    if($basepathstatus->base_path_status == 1){
+	                    $file->move(base_path().'/public/admin/assets/images/cv_setting/',$new_file4);
+                    }else{
+                        $file->move(base_path().'/public_html/admin/assets/images/cv_setting/',$new_file4);                
+                    }
+
+                    $imag4photo = $new_file4;
+                }else{
+                    $imag4photo = $updateimg4->filename;
+                }
+
+                $updateimg4->x_axis = $request->x_axis4;
+                $updateimg4->y_axis = $request->y_axis4;
+                $updateimg4->filename = $imag4photo;
+                $updateimg4->width = $request->width4;
+                if($request->status4 != ''){
+                    $updateimg4->status = $request->status4;
+                }
+                $updateimg4->save();
+
+
+            }else{
+                $postimg4 = new Cvsetting();
+
+                if($request->hasFile('image4')){
+                    $file = $request->file('image4');
+                    $name4 = $file->getClientOriginalName();
+                    // remove space from image
+                    $filename_ren4 = pathinfo($name4,PATHINFO_FILENAME);
+                    $fileext_ren4 = pathinfo($name4,PATHINFO_EXTENSION);
+                    $repspfilename4 = str_replace(" ","_",$filename_ren4);
+                    $new_file4 = $repspfilename4.'.'.$fileext_ren4;
+                    if($basepathstatus->base_path_status == 1){
+	                    $file->move(base_path().'/public/admin/assets/images/cv_setting/',$new_file4);
+                    }else{
+                        $file->move(base_path().'/public_html/admin/assets/images/cv_setting/',$new_file4);                
+                    }
+
+                    $imag4photo = $new_file4;
+                }else{
+                    $imag4photo = "";
+                }
+
+                $postimg4->label_name = 'Image4';
+                $postimg4->db_field_name = 'image4';
+                $postimg4->x_axis = $request->x_axis4;
+                $postimg4->y_axis = $request->y_axis4;
+                $postimg4->filename = $imag4photo;
+                $postimg4->width = $request->width4;
+                if($request->status4 != ''){
+                    $postimg4->status = $request->status4;
+                }
+                $postimg4->admin_id = Auth::guard('admin')->user()->id;
+                $postimg4->save();
+
+            }
+
+            if($request->cvimagesetting5 != ''){
+                $updateimg5 = Cvsetting::find($request->cvimagesetting5);
+
+                if($request->hasFile('image5')){
+                    $file = $request->file('image5');
+                    $name5 = $file->getClientOriginalName();
+                    // remove space from image
+                    $filename_ren5 = pathinfo($name5,PATHINFO_FILENAME);
+                    $fileext_ren5 = pathinfo($name5,PATHINFO_EXTENSION);
+                    $repspfilename5 = str_replace(" ","_",$filename_ren5);
+                    $new_file5 = $repspfilename5.'.'.$fileext_ren5;
+                    if($basepathstatus->base_path_status == 1){
+	                    $file->move(base_path().'/public/admin/assets/images/cv_setting/',$new_file5);
+                    }else{
+                        $file->move(base_path().'/public_html/admin/assets/images/cv_setting/',$new_file5);                
+                    }
+
+                    $imag5photo = $new_file5;
+                }else{
+                    $imag5photo = $updateimg5->filename;
+                }
+
+                $updateimg5->x_axis = $request->x_axis5;
+                $updateimg5->y_axis = $request->y_axis5;
+                $updateimg5->filename = $imag5photo;
+                $updateimg5->width = $request->width5;
+                if($request->status5 != ''){
+                    $updateimg5->status = $request->status5;
+                }
+                $updateimg5->save();
+
+            }else{
+                $postimg5 = new Cvsetting();
+
+                if($request->hasFile('image5')){
+                    $file = $request->file('image5');
+                    $name5 = $file->getClientOriginalName();
+                    // remove space from image
+                    $filename_ren5 = pathinfo($name5,PATHINFO_FILENAME);
+                    $fileext_ren5 = pathinfo($name5,PATHINFO_EXTENSION);
+                    $repspfilename5 = str_replace(" ","_",$filename_ren5);
+                    $new_file5 = $repspfilename5.'.'.$fileext_ren5;
+                    if($basepathstatus->base_path_status == 1){
+	                    $file->move(base_path().'/public/admin/assets/images/cv_setting/',$new_file5);
+                    }else{
+                        $file->move(base_path().'/public_html/admin/assets/images/cv_setting/',$new_file5);                
+                    }
+
+                    $imag5photo = $new_file5;
+                }else{
+                    $imag5photo = "";
+                }
+
+                $postimg5->label_name = 'Image5';
+                $postimg5->db_field_name = 'image5';
+                $postimg5->x_axis = $request->x_axis5;
+                $postimg5->y_axis = $request->y_axis5;
+                $postimg5->filename = $imag5photo;
+                $postimg5->width = $request->width5;
+                if($request->status5 != ''){
+                    $postimg5->status = $request->status5;
+                }
+                $postimg5->admin_id = Auth::guard('admin')->user()->id;
+                $postimg5->save();
+            }
+
+            if($request->cvtextsetting1 != ''){
+                $updatetext1 = Cvsetting::find($request->cvtextsetting1);
+                $updatetext1->text_desc = $request->text1;
+                if($request->textstatus1 != ''){
+                    $updatetext1->status = $request->textstatus1;
+                }
+                $updatetext1->save();
+            }else{
+                $posttext1 = new Cvsetting();
+                $posttext1->label_name = "Text1";
+                $posttext1->db_field_name = "text1";
+                $posttext1->text_desc = $request->text1;
+                if($request->textstatus1 != ''){
+                    $posttext1->status = $request->textstatus1;
+                }
+                $posttext1->admin_id = Auth::guard('admin')->user()->id;
+                $posttext1->save();
+            }
+
+            if($request->cvtextsetting2 != ''){
+                $updatetext2 = Cvsetting::find($request->cvtextsetting2);
+                $updatetext2->text_desc = $request->text2;
+                if($request->textstatus2 != ''){
+                    $updatetext2->status = $request->textstatus2;
+                }
+                $updatetext2->save();
+            }else{
+                $posttext2 = new Cvsetting();
+                $posttext2->label_name = "Text2";
+                $posttext2->db_field_name = "text2";
+                $posttext2->text_desc = $request->text2;
+                if($request->textstatus2 != ''){
+                    $posttext2->status = $request->textstatus2;
+                }
+                $posttext2->admin_id = Auth::guard('admin')->user()->id;
+                $posttext2->save();
+            }
+
+            if($request->cvtextsetting3 != ''){
+                $updatetext3 = Cvsetting::find($request->cvtextsetting3);
+                $updatetext3->text_desc = $request->text3;
+                if($request->textstatus3 != ''){
+                    $updatetext3->status = $request->textstatus3;
+                }
+                $updatetext3->save();
+            }else{
+                $posttext3 = new Cvsetting();
+                $posttext3->label_name = "Text3";
+                $posttext3->db_field_name = "text3";
+                $posttext3->text_desc = $request->text3;
+                if($request->textstatus3 != ''){
+                    $posttext3->status = $request->textstatus3;
+                }
+                $posttext3->admin_id = Auth::guard('admin')->user()->id;
+                $posttext3->save();
+            }
+
+            if($request->cvtextsetting4 != ''){
+                $updatetext4 = Cvsetting::find($request->cvtextsetting4);
+                $updatetext4->text_desc = $request->text4;
+                if($request->textstatus4 != ''){
+                    $updatetext4->status = $request->textstatus4;
+                }
+                $updatetext4->save();
+            }else{
+                $posttext4 = new Cvsetting();
+                $posttext4->label_name = "Text4";
+                $posttext4->db_field_name = "text4";
+                $posttext4->text_desc = $request->text4;
+                if($request->textstatus4 != ''){
+                    $posttext4->status = $request->textstatus4;
+                }
+                $posttext4->admin_id = Auth::guard('admin')->user()->id;
+                $posttext4->save();
+            }
+
+            if($request->textoverview != ''){
+                $updatetextoverview = Cvsetting::find($request->textoverview);
+                $updatetextoverview->text_desc = $request->text_overview;
+                if($request->overviewtextstatus != ''){
+                    $updatetextoverview->status = $request->overviewtextstatus;
+                }
+                $updatetextoverview->save();
+            }else{
+                $postoverviewtext = new Cvsetting();
+                $postoverviewtext->label_name = "Overview Text";
+                $postoverviewtext->db_field_name = "text_overview";
+                $postoverviewtext->text_desc = $request->text_overview;
+                if($request->overviewtextstatus != ''){
+                    $postoverviewtext->status = $request->overviewtextstatus;
+                }
+                $postoverviewtext->admin_id = Auth::guard('admin')->user()->id;
+                $postoverviewtext->save();
+            }
+
+            if($request->remarktext != ''){
+                $updateremarktext = Cvsetting::find($request->remarktext);
+                $updateremarktext->text_desc = $request->remark_text;
+                if($request->remarktextstatus != ''){
+                    $updateremarktext->status = $request->remarktextstatus;
+                }
+                $updateremarktext->save();
+            }else{
+                $postremarktext = new Cvsetting();
+                $postremarktext->label_name = "Remark Text";
+                $postremarktext->db_field_name = "remark_text";
+                $postremarktext->text_desc = $request->remark_text;
+                if($request->remarktextstatus != ''){
+                    $postremarktext->status = $request->remarktextstatus;
+                }
+                $postremarktext->admin_id = Auth::guard('admin')->user()->id;
+                $postremarktext->save();
+            }
+
+
+            return redirect()->back()->with('success','CV image setting updated!');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('cverror','Something went wrong! please check details before submit!');
+        }
+
+    }
+
+
+    public function downloadcvcomp(Request $request,$id){
+
+        $post = DB::table('candidates as cand')
+        ->leftJoin('placeofissues as poi','cand.poi','=','poi.id')
+        ->leftJoin('countries as nation','cand.nation_id','=','nation.id')
+        ->leftJoin('regions as region','cand.region_id','region.id')
+        ->leftJoin('cities as candcity','cand.candcity_id','=','candcity.id')
+        ->leftJoin('cities as plb','cand.plb_id','plb.id')
+        ->leftJoin('professions as occupation','cand.jobtype_id','=','occupation.id')
+        ->leftJoin('education as educ','cand.education_id','=','educ.id')
+        ->leftJoin('embassies as embassy','cand.embassy_for','=','embassy.id')
+        ->select('cand.*','embassy.embassy as embname','educ.name as educname','poi.name as poiname','nation.name as nationname','nation.arname as nationarname','region.name as regionname','candcity.name as cancityname','plb.name as plbname','occupation.ar_name as prarname','occupation.eng_name as pengname')
+        // ->select('cand.*','poi.name as poiname','nation.name as nationname','region.name as regionname','candcity.name as cancityname','plb.name as plbname','occupation.ar_name as prarname','occupation.eng_name as pengname')
+        ->where('cand.id','=',$id)
+        ->first();
+
+        // Car Know List
+        $carkns = Carnknown::wherein('id',explode(",",$post->carknown_id))->get();
+        $carlist = [];
+        if(isset($carkns)){
+            foreach($carkns as $carkn){
+                $carlist [] = $carkn->name;
+            }
+        }else{
+            $carlist [] = "";
+        }
+        // Expected Work place
+        // $expwps = City::wherein('id',explode(",",$post->expwp_id))->get();
+        $expwps = DB::table('expecworkcities')->wherein('id',explode(",",$post->expwp_id))->get();
+        $exp_wp = [];
+        if(isset($expwps)){
+            foreach($expwps as $expwp){
+                $exp_wp [] = $expwp->name;
+            }
+        }else{
+            $exp_wp [] = "";
+        }
+        
+                
+        
+        // Fetch details as per cv setting
+        $cand_name_cvsetting = Cvsetting::where('db_field_name','=','cand_name')->first();
+        $cand_name_ar_cvsetting = Cvsetting::where('db_field_name','=','cand_name_ar')->first();
+        $exp_sal_cvsetting = Cvsetting::where('db_field_name','=','exp_sal')->first();
+        $expwp_id_cvsetting = Cvsetting::where('db_field_name','=','expwp_id')->first();
+        $age_cvsetting = Cvsetting::where('db_field_name','=','age')->first();
+        $marital_status_cvsetting = Cvsetting::where('db_field_name','=','marital_status')->first();
+        $religion_cvsetting = Cvsetting::where('db_field_name','=','religion')->first();
+        $dob_cvsetting = Cvsetting::where('db_field_name','=','dob')->first();
+        $plb_id_cvsetting = Cvsetting::where('db_field_name','=','plb_id')->first();
+        $nation_id_cvsetting = Cvsetting::where('db_field_name','=','nation_id')->first();
+        $region_id_cvsetting = Cvsetting::where('db_field_name','=','region_id')->first();
+        $lang_known_cvsetting = Cvsetting::where('db_field_name','=','lang_known')->first();
+        $google_map_cvsetting = Cvsetting::where('db_field_name','=','google_map')->first();
+        $carknown_id_cvsetting = Cvsetting::where('db_field_name','=','carknown_id')->first();
+        $proff_id_cvsetting = Cvsetting::where('db_field_name','=','proff_id')->first();
+        $experience_cvsetting = Cvsetting::where('db_field_name','=','experience')->first();
+        $expcountry_id_cvsetting = Cvsetting::where('db_field_name','=','expcountry_id')->first();
+        $expcity_id_cvsetting = Cvsetting::where('db_field_name','=','expcity_id')->first();
+        $pass_no_cvsetting = Cvsetting::where('db_field_name','=','pass_no')->first();
+        $pass_type_cvsetting = Cvsetting::where('db_field_name','=','pass_type')->first();
+        $doi_cvsetting = Cvsetting::where('db_field_name','=','doi')->first();
+        $doe_cvsetting = Cvsetting::where('db_field_name','=','doe')->first();
+        $poi_cvsetting = Cvsetting::where('db_field_name','=','poi')->first();
+        $photo_cvsetting = Cvsetting::where('db_field_name','=','photo')->first();
+        $fullsize_cvsetting = Cvsetting::where('db_field_name','=','fullsize')->first();
+        $reference_no_cvsetting = Cvsetting::where('db_field_name','=','reference_no')->first();
+        $gulf_experience_cvsetting = Cvsetting::where('db_field_name','=','gulf_experience')->first();
+        $gulf_experience_arabic_cvsetting = Cvsetting::where('db_field_name','=','gulf_experience_arabic')->first();
+        $remark_cvsetting = Cvsetting::where('db_field_name','=','remark')->first();
+        
+        $created_date_cvsetting = Cvsetting::where('db_field_name','=','created_date')->first();
+        $education_cvsetting = Cvsetting::where('db_field_name','=','education')->first();
+        $image1_cvsetting = Cvsetting::where('db_field_name','=','image1')->first();
+        $image2_cvsetting = Cvsetting::where('db_field_name','=','image2')->first();
+        $image3_cvsetting = Cvsetting::where('db_field_name','=','image3')->first();
+        $image4_cvsetting = Cvsetting::where('db_field_name','=','image4')->first();
+        $image5_cvsetting = Cvsetting::where('db_field_name','=','image5')->first();
+        $text1_cvsetting = Cvsetting::where('db_field_name','=','text1')->first();
+        $text2_cvsetting = Cvsetting::where('db_field_name','=','text2')->first();
+        $text3_cvsetting = Cvsetting::where('db_field_name','=','text3')->first();
+        $text4_cvsetting = Cvsetting::where('db_field_name','=','text4')->first();
+
+        $embassyreq_cvsetting =  Cvsetting::where('db_field_name','=','embassy_required')->first();
+        $embassyreq_ar_cvsetting =  Cvsetting::where('db_field_name','=','embassy_required_ar')->first();
+
+        // Partner CV setting
+        $partnerimage1 =  Partnercvsetting::where('partner_id','=',$request->partner_id)->where('db_field_name','=','image1')->first();
+        $partnerimage2 =  Partnercvsetting::where('partner_id','=',$request->partner_id)->where('db_field_name','=','image2')->first();
+
+        // Base Path Status
+        $basepathSt = Basepathstatus::first();
+                
+        try {
+            // $backfile = base_path().'/public/admin/assets/images/resume/SVG_ONE_FINE_L.svg';
+            // $backfile = base_path().'/public/admin/assets/images/resume/final_cv.pdf';
+            // $backfile = base_path().'/public/admin/assets/images/resume/resumes_format_svg.svg';
+            // $backfile = base_path().'/public/admin/assets/images/resume/SVG3.svg';
+            // $backfile = url('/admin/assets/images/resume/SVG3.svg');
+            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                $backfile = base_path('public/admin/assets/images/resume/cv_back_15072023.svg');
+                // $backfile = base_path('public/admin/assets/images/resume/SVG3.svg');
+            }else{
+                $backfile = base_path('public_html/admin/assets/images/resume/cv_back_15072023.svg');
+                // $backfile = base_path('public_html/admin/assets/images/resume/SVG3.svg');
+            }
+
+
+            PDF::SetCreator('Qamr International');
+            PDF::SetAuthor('Qamr International');
+            PDF::SetTitle($post->cand_name.' CV');
+            PDF::SetSubject($post->cand_name.' CV');
+            PDF::SetKeywords('Qamr, PDF, visa, form, guide');
+
+
+            PDF::AddPage();
+            PDF::ImageSVG($backfile,'','',210,297,'','','',0,false);
+
+            // Candidate Name
+            if (isset($cand_name_cvsetting)) {
+                if($cand_name_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($cand_name_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $candpopinsfont = TCPDF_FONTS::addTTFfont($candpopins,'','',32);
+
+                if($cand_name_cvsetting->font_family == 'none'){
+                    $candfonttype = "";
+                }else{
+                    $candfonttype = $cand_name_cvsetting->font_family;
+                }
+
+                if($cand_name_cvsetting->font_size != ''){
+                    $candfontsize = $cand_name_cvsetting->font_size;
+                }else{
+                    $candfontsize = '11';
+                }
+
+                PDF::SetFont($candpopinsfont,$candfonttype, $candfontsize,'',false);
+                if($cand_name_cvsetting->font_color != ''){
+                    $candfontcolor = explode(",",$cand_name_cvsetting->font_color);
+                    PDF::SetTextColor($candfontcolor[0],$candfontcolor[1],$candfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($cand_name_cvsetting->x_axis,$cand_name_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->cand_name);
+
+            }
+
+            // Candidate Arabic Name
+            if (isset($cand_name_ar_cvsetting)) {
+                if($cand_name_ar_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+                }elseif($cand_name_ar_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+
+
+                }
+                $candarpopinsfont = TCPDF_FONTS::addTTFfont($candarpopins,'','',32);
+
+                if($cand_name_ar_cvsetting->font_family == 'none'){
+                    $candarfonttype = "";
+                }else{
+                    $candarfonttype = $cand_name_ar_cvsetting->font_family;
+                }
+
+                if($cand_name_ar_cvsetting->font_size != ''){
+                    $candarfontsize = $cand_name_ar_cvsetting->font_size;
+                }else{
+                    $candarfontsize = '11';
+                }
+
+                PDF::SetFont($candarpopinsfont,$candarfonttype, $candarfontsize,'',false);
+                if($cand_name_ar_cvsetting->font_color != ''){
+                    $candarfontcolor = explode(",",$cand_name_ar_cvsetting->font_color);
+                    PDF::SetTextColor($candarfontcolor[0],$candarfontcolor[1],$candarfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($cand_name_ar_cvsetting->x_axis,$cand_name_ar_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->arcand_name);
+
+            }
+
+            // Embassy Required
+
+            if (isset($embassyreq_cvsetting)) {
+                if($embassyreq_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($embassyreq_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+
+
+                }
+                $embassypopinsfont = TCPDF_FONTS::addTTFfont($embassypopins,'','',32);
+
+                if($embassyreq_cvsetting->font_family == 'none'){
+                    $embassyfonttype = "";
+                }else{
+                    $embassyfonttype = $embassyreq_cvsetting->font_family;
+                }
+
+                if($embassyreq_cvsetting->font_size != ''){
+                    $embassyfontsize = $embassyreq_cvsetting->font_size;
+                }else{
+                    $embassyfontsize = '11';
+                }
+
+                PDF::SetFont($embassypopinsfont,$embassyfonttype, $embassyfontsize,'',false);
+                if($embassyreq_cvsetting->font_color != ''){
+                    $embassyfontcolor = explode(",",$embassyreq_cvsetting->font_color);
+                    PDF::SetTextColor($embassyfontcolor[0],$embassyfontcolor[1],$embassyfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($embassyreq_cvsetting->x_axis,$embassyreq_cvsetting->y_axis);
+                
+                if($post->embname == 'MUMBAI VISA REQUIRED'){
+                    $visaEmbE = "Required visa under Saudi Embassy Mumbai";
+                }elseif($post->embname == 'DELHI VISA REQUIRED'){
+                    $visaEmbE = "Required visa under Saudi Embassy New Delhi";
+                }else{
+                    $visaEmbE = "";
+                }
+
+                PDF::Cell(0,0,$visaEmbE);
+
+            }
+
+            // Embassy Required Arabic
+
+            if (isset($embassyreq_ar_cvsetting)) {
+                if($embassyreq_ar_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                         $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');
+                    }
+                }elseif($embassyreq_ar_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');
+                    }
+
+
+                }
+                $embassyarpopinsfont = TCPDF_FONTS::addTTFfont($embassyarpopins,'','',32);
+
+                if($embassyreq_ar_cvsetting->font_family == 'none'){
+                    $embassyarfonttype = "";
+                }else{
+                    $embassyarfonttype = $embassyreq_ar_cvsetting->font_family;
+                }
+
+                if($embassyreq_ar_cvsetting->font_size != ''){
+                    $embassyarfontsize = $embassyreq_ar_cvsetting->font_size;
+                }else{
+                    $embassyarfontsize = '11';
+                }
+
+                PDF::SetFont($embassyarpopinsfont,$embassyarfonttype, $embassyarfontsize,'',false);
+                if($embassyreq_ar_cvsetting->font_color != ''){
+                    $embassyarfontcolor = explode(",",$embassyreq_ar_cvsetting->font_color);
+                    PDF::SetTextColor($embassyarfontcolor[0],$embassyarfontcolor[1],$embassyarfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($embassyreq_ar_cvsetting->x_axis,$embassyreq_ar_cvsetting->y_axis);
+
+                
+                if($post->embname == 'MUMBAI VISA REQUIRED'){
+                    $visaEmb = "مطلوب تأشيرة تحت السفارة السعودية في مومباي";
+                }elseif($post->embname == 'DELHI VISA REQUIRED'){
+                    $visaEmb = "مطلوب تأشيرة تحت السفارة السعودية في نيودلهي";
+                }else{
+                    $visaEmb = "";
+                }
+
+                PDF::Cell(0,0,$visaEmb);
+
+            }
+
+
+
+            // Remark
+            if(isset($remark_cvsetting)){
+                // Remark Text 
+                $remark_text_desc = Cvsetting::where('db_field_name','=','remark_text')->where('status','=',1)->first();
+                if(isset($remark_text_desc)){
+                    $remarkDisp = 'Remark: '.$remark_text_desc->text_desc;
+                }else{
+                    $remarkDisp = 'Remark: ';
+                }
+
+                if($remark_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($remark_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $remarkpopinsfont = TCPDF_FONTS::addTTFfont($remarkpopins,'','',32);
+
+                if($remark_cvsetting->font_family == 'none'){
+                    $remarkfonttype = "";
+                }else{
+                    $remarkfonttype = $remark_cvsetting->font_family;
+                }
+
+                if($remark_cvsetting->font_size != ''){
+                    $remarkfontsize = $remark_cvsetting->font_size;
+                }else{
+                    $remarkfontsize = "11";
+                }
+
+                PDF::SetFont($remarkpopinsfont, $remarkfonttype, $remarkfontsize,'',false);
+                if($remark_cvsetting->font_color != ''){
+                    $remarkfontcolor = explode(",",$remark_cvsetting->font_color);
+                    PDF::SetTextColor($remarkfontcolor[0],$remarkfontcolor[1],$remarkfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($remark_cvsetting->x_axis,$remark_cvsetting->y_axis);
+                PDF::Cell(0,0,$remarkDisp);
+            }
+
+            // CV Create Date
+
+            if(isset($created_date_cvsetting)){
+                if($created_date_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($created_date_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $cvdatecreatepopinsfont = TCPDF_FONTS::addTTFfont($cvdatecreatepopins,'','',32);
+
+                if($created_date_cvsetting->font_family == 'none'){
+                    $cvdatecreatefonttype = "";
+                }else{
+                    $cvdatecreatefonttype = $created_date_cvsetting->font_family;
+                }
+
+                if($created_date_cvsetting->font_size != ''){
+                    $cvdatecreatefontsize = $created_date_cvsetting->font_size;
+                }else{
+                    $cvdatecreatefontsize = "11";
+                }
+
+                PDF::SetFont($cvdatecreatepopinsfont, $cvdatecreatefonttype, $cvdatecreatefontsize,'',false);
+                if($created_date_cvsetting->font_color != ''){
+                    $cvdatecreatefontcolor = explode(",",$created_date_cvsetting->font_color);
+                    PDF::SetTextColor($cvdatecreatefontcolor[0],$cvdatecreatefontcolor[1],$cvdatecreatefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($created_date_cvsetting->x_axis,$created_date_cvsetting->y_axis);
+                if($post->cv_executae_date != ''){
+                    $cvDate = date('d-m-Y',strtotime($post->cv_executae_date));
+                }else{
+
+                    $cvDate = date('d-m-Y');
+                }
+                PDF::Cell(0,0,'Date: '.$cvDate);
+            }
+
+            // Image1 and Image2
+            if(isset($image1_cvsetting)){
+                if($image1_cvsetting->status == 1 && $image1_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image1_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image1_cvsetting->filename;
+                    }else{
+                        $image1_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image1_cvsetting->filename);                    
+                    }
+
+                    $image1_cvsettingext = pathinfo($image1_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image1_cvsettingpath,$image1_cvsetting->x_axis, $image1_cvsetting->y_axis, $image1_cvsetting->width, '',$image1_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image2_cvsetting)){
+                if($image2_cvsetting->status == 1 && $image2_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image2_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image2_cvsetting->filename;
+                    }else{
+                        $image2_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image2_cvsetting->filename);                    
+                    }
+                    $image2_cvsettingext = pathinfo($image2_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image2_cvsettingpath,$image2_cvsetting->x_axis, $image2_cvsetting->y_axis, $image2_cvsetting->width, '',$image2_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image3_cvsetting)){
+                if($image3_cvsetting->status == 1 && $image3_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image3_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image3_cvsetting->filename;
+                    }else{
+                        $image3_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image3_cvsetting->filename);                    
+                    }
+
+                    $image3_cvsettingext = pathinfo($image3_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image3_cvsettingpath,$image3_cvsetting->x_axis, $image3_cvsetting->y_axis, $image3_cvsetting->width, '',$image3_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image4_cvsetting)){
+                if($image4_cvsetting->status == 1 && $image4_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image4_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image4_cvsetting->filename;
+                    }else{
+                        $image4_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image4_cvsetting->filename);                    
+                    }
+
+                    $image4_cvsettingext = pathinfo($image4_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image4_cvsettingpath,$image4_cvsetting->x_axis, $image4_cvsetting->y_axis, $image4_cvsetting->width, '',$image4_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image5_cvsetting)){
+                if($image5_cvsetting->status == 1 && $image5_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image5_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image5_cvsetting->filename;
+                    }else{
+                        $image5_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image5_cvsetting->filename);                    
+                    }
+
+                    $image5_cvsettingext = pathinfo($image5_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image5_cvsettingpath,$image5_cvsetting->x_axis, $image5_cvsetting->y_axis, $image5_cvsetting->width, '',$image5_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            // Text1, Text2, Text3, Text4,
+            if (isset($text1_cvsetting)) {
+                if($text1_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text1_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text1popinsfont = TCPDF_FONTS::addTTFfont($text1popins,'','',32);
+
+                if($text1_cvsetting->font_family == 'none'){
+                    $text1fonttype = "";
+                }else{
+                    $text1fonttype = $text1_cvsetting->font_family;
+                }
+
+                if($text1_cvsetting->font_size != ''){
+                    $text1fontsize = $text1_cvsetting->font_size;
+                }else{
+                    $text1fontsize = '11';
+                }
+
+                PDF::SetFont($text1popinsfont,$text1fonttype, $text1fontsize,'',false);
+                if($text1_cvsetting->font_color != ''){
+                    $text1fontcolor = explode(",",$text1_cvsetting->font_color);
+                    PDF::SetTextColor($text1fontcolor[0],$text1fontcolor[1],$text1fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text1_cvsetting->x_axis,$text1_cvsetting->y_axis);
+                PDF::Cell(0,0,$text1_cvsetting->text_desc);
+
+            }
+
+            if (isset($text2_cvsetting)) {
+                if($text2_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text2_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text2popinsfont = TCPDF_FONTS::addTTFfont($text2popins,'','',32);
+
+                if($text2_cvsetting->font_family == 'none'){
+                    $text2fonttype = "";
+                }else{
+                    $text2fonttype = $text2_cvsetting->font_family;
+                }
+
+                if($text2_cvsetting->font_size != ''){
+                    $text2fontsize = $text2_cvsetting->font_size;
+                }else{
+                    $text2fontsize = '11';
+                }
+
+                PDF::SetFont($text2popinsfont,$text2fonttype, $text2fontsize,'',false);
+                if($text2_cvsetting->font_color != ''){
+                    $text2fontcolor = explode(",",$text2_cvsetting->font_color);
+                    PDF::SetTextColor($text2fontcolor[0],$text2fontcolor[1],$text2fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text2_cvsetting->x_axis,$text2_cvsetting->y_axis);
+                PDF::Cell(0,0,$text2_cvsetting->text_desc);
+
+            }
+
+            if (isset($text3_cvsetting)) {
+                if($text3_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text3_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text3popinsfont = TCPDF_FONTS::addTTFfont($text3popins,'','',32);
+
+                if($text3_cvsetting->font_family == 'none'){
+                    $text3fonttype = "";
+                }else{
+                    $text3fonttype = $text3_cvsetting->font_family;
+                }
+
+                if($text3_cvsetting->font_size != ''){
+                    $text3fontsize = $text3_cvsetting->font_size;
+                }else{
+                    $text3fontsize = '11';
+                }
+
+                PDF::SetFont($text3popinsfont,$text3fonttype, $text3fontsize,'',false);
+                if($text3_cvsetting->font_color != ''){
+                    $text3fontcolor = explode(",",$text3_cvsetting->font_color);
+                    PDF::SetTextColor($text3fontcolor[0],$text3fontcolor[1],$text3fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text3_cvsetting->x_axis,$text3_cvsetting->y_axis);
+                PDF::Cell(0,0,$text3_cvsetting->text_desc);
+
+            }
+
+            if (isset($text4_cvsetting)) {
+                if($text4_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text4_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text4popinsfont = TCPDF_FONTS::addTTFfont($text4popins,'','',32);
+
+                if($text4_cvsetting->font_family == 'none'){
+                    $text4fonttype = "";
+                }else{
+                    $text4fonttype = $text4_cvsetting->font_family;
+                }
+
+                if($text4_cvsetting->font_size != ''){
+                    $text4fontsize = $text4_cvsetting->font_size;
+                }else{
+                    $text4fontsize = '11';
+                }
+
+                PDF::SetFont($text4popinsfont,$text4fonttype, $text4fontsize,'',false);
+                if($text4_cvsetting->font_color != ''){
+                    $text4fontcolor = explode(",",$text4_cvsetting->font_color);
+                    PDF::SetTextColor($text4fontcolor[0],$text4fontcolor[1],$text4fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text4_cvsetting->x_axis,$text4_cvsetting->y_axis);
+                PDF::Cell(0,0,$text4_cvsetting->text_desc);
+
+            }
+
+
+            // Partner Images display
+            if(isset($partnerimage1)){
+                if($partnerimage1->status == 1 && $partnerimage1->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image1_partnercvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$partnerimage1->filename;
+                    }else{
+                        $image1_partnercvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$partnerimage1->filename);
+                    }
+
+                    $image1_partnercvsettingext = pathinfo($partnerimage1->filename, PATHINFO_EXTENSION);
+                    PDF::Image($image1_partnercvsettingpath,$partnerimage1->x_axis, $partnerimage1->y_axis, $partnerimage1->width, '',$image1_partnercvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($partnerimage2)){
+                if($partnerimage2->status == 1 && $partnerimage2->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image2_partnercvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$partnerimage2->filename;
+                    }else{
+                        $image2_partnercvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$partnerimage2->filename);
+                    }
+
+                    $image1_partnercvsettingext = pathinfo($partnerimage2->filename, PATHINFO_EXTENSION);
+                    PDF::Image($image2_partnercvsettingpath,$partnerimage2->x_axis, $partnerimage2->y_axis, $partnerimage2->width, '',$image1_partnercvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+
+
+            // Profile and fullsize Photo
+            if ($post->photo_file != '') {
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $photfilepath = base_path().'/public/admin/assets/images/candidate/'.$post->photo_file;
+                }else{
+                    $photfilepath = base_path('public_html/admin/assets/images/candidate/'.$post->photo_file);                
+                }
+
+                $photext = pathinfo($post->photo_file, PATHINFO_EXTENSION);
+
+                if(isset($photo_cvsetting)){
+                    PDF::Image($photfilepath,$photo_cvsetting->x_axis,$photo_cvsetting->y_axis,'50','54',$photext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+            if ($post->cv_file != '') {
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $fullsizepath = base_path().'/public/admin/assets/images/candidate/'.$post->cv_file;
+                }else{
+                    $fullsizepath = base_path('public_html/admin/assets/images/candidate/'.$post->cv_file);                  
+                }
+                
+                $fullsizeext = pathinfo($post->cv_file, PATHINFO_EXTENSION);
+
+                if(isset($fullsize_cvsetting)){
+                    PDF::Image($fullsizepath,$fullsize_cvsetting->x_axis, $fullsize_cvsetting->y_axis, '', '',$fullsizeext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+            // Reference No
+            if (isset($reference_no_cvsetting)) {
+                // if($reference_no_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                //     }
+                // }elseif($reference_no_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                //     }
+
+                // }
+
+                if($reference_no_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+                $refrenceNopopinsfont = TCPDF_FONTS::addTTFfont($refrenceNopopins,'','',32);
+
+                if($reference_no_cvsetting->font_family == 'none'){
+                    $refereneceFont = "";
+                }else{
+                    $refereneceFont = $reference_no_cvsetting->font_family;
+                }
+
+                if($reference_no_cvsetting->font_size != ''){
+                    $refrenceNoFontsize = $reference_no_cvsetting->font_size;
+                }else{
+                    $refrenceNoFontsize = '11';
+                }
+
+                PDF::SetFont($refrenceNopopinsfont,$refereneceFont, $refrenceNoFontsize,'',false);
+                if($reference_no_cvsetting->font_color != ''){
+                    $refnofontcolor = explode(",",$reference_no_cvsetting->font_color);
+                    PDF::SetTextColor($refnofontcolor[0],$refnofontcolor[1],$refnofontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($reference_no_cvsetting->x_axis,$reference_no_cvsetting->y_axis);
+                PDF::Cell(0,0,'Reference No: '.$post->id.'  :رقم المرجع ');
+
+            }
+            // Gulf experience and occupation
+            // if(isset($gulf_experience_cvsetting)){
+            //     if($gulf_experience_cvsetting->font_family == 'B'){
+            //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+            //             $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+            //         }else{
+            //             $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                    
+            //         }
+            //     }else{
+            //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+            //             $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+            //         }else{
+            //             $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+            //         }
+            //     }
+            //     $gulf_experience_arabic_font = TCPDF_FONTS::addTTFfont($gulf_experience_arabic,'','',32);
+
+            //     if($gulf_experience_cvsetting->font_family == 'none'){
+            //         $gulfexpFont = "";
+            //     }else{
+            //         $gulfexpFont = $gulf_experience_cvsetting->font_family;
+            //     }
+
+            //     if($gulf_experience_cvsetting->font_size != ''){
+                
+            //         $gulfexpFontsize = $gulf_experience_cvsetting->font_size;
+            //     }else{
+            //         $gulfexpFontsize = "11";
+            //     }
+            //     PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+
+            //     if($gulf_experience_cvsetting->font_color != ''){
+            //         $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+            //         PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+            //     }else{
+            //         PDF::SetTextColor(0,0,0);
+            //     }
+
+            //     PDF::SetXY($gulf_experience_cvsetting->x_axis,$gulf_experience_cvsetting->y_axis);
+            //     if($post->gulfexperience == 1){
+            //         $gulfexperience1 = $post->prarname.' قد اشتغل في الهند فقط';
+            //         PDF::Cell(0,0,$gulfexperience1);
+            //     }
+    
+            //     if($post->gulfexperience == 2){
+            //         $gulfexperience2 = $post->prarname.' سبق له العمل';
+            //         PDF::Cell(0,0,$gulfexperience2);
+            //     }
+
+            //     if($post->gulfexperience == 1){
+            //         PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+            //         if($gulf_experience_cvsetting->font_color != ''){
+            //             $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+            //             PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+            //         }else{
+            //             PDF::SetTextColor(0,0,0);
+            //         }
+            //         $gyaxis = $gulf_experience_cvsetting->y_axis + 4;
+            //         PDF::SetXY($gulf_experience_cvsetting->x_axis,$gyaxis);
+            //         PDF::Cell(0,0,'Indian Experience '.$post->pengname);
+            //     }
+
+            //     if($post->gulfexperience == 2){
+            //         PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+            //         if($gulf_experience_cvsetting->font_color != ''){
+            //             $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+            //             PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+            //         }else{
+            //             PDF::SetTextColor(0,0,0);
+            //         }
+            //         $gyaxis = $gulf_experience_cvsetting->y_axis + 4;
+            //         PDF::SetXY($gulf_experience_cvsetting->x_axis,$gyaxis);
+            //         PDF::Cell(0,0,'Ex-Abroad '.$post->pengname);
+            //     }
+            // }
+
+            if(isset($gulf_experience_cvsetting)){
+                if($gulf_experience_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($gulf_experience_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+                $gulf_experiencepopinsfont = TCPDF_FONTS::addTTFfont($gulf_experiencepopins,'','',32);
+
+                if($gulf_experience_cvsetting->font_family == 'none'){
+                    $gulf_experiencefonttype = "";
+                }else{
+                    $gulf_experiencefonttype = $gulf_experience_cvsetting->font_family;
+                }
+
+                if($gulf_experience_cvsetting->font_size != ''){
+                    $gulf_experiencefontsize = $gulf_experience_cvsetting->font_size;
+                }else{
+                    $gulf_experiencefontsize = "11";
+                }
+
+                PDF::SetFont($gulf_experiencepopinsfont, $gulf_experiencefonttype, $gulf_experiencefontsize,'',false);
+
+                if($gulf_experience_cvsetting->font_color != ''){
+                    $gulf_experiencefontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+                    PDF::SetTextColor($gulf_experiencefontcolor[0],$gulf_experiencefontcolor[1],$gulf_experiencefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($gulf_experience_cvsetting->x_axis,$gulf_experience_cvsetting->y_axis);
+                if($post->gulfexperience == 1){
+                    $expEng = 'Indian Experience '.$post->pengname;
+                }elseif($post->gulfexperience == 2){
+                    $expEng = 'Ex-Abroad '.$post->pengname;
+                }else{
+                    $expEng = '---';
+                }
+                PDF::Cell(0,0,$expEng);
+
+            }
+
+            if(isset($gulf_experience_arabic_cvsetting)){
+                if($gulf_experience_arabic_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+                $gulf_experience_arabic_font = TCPDF_FONTS::addTTFfont($gulf_experience_arabic,'','',32);
+
+                if($gulf_experience_arabic_cvsetting->font_family == 'none'){
+                    $gulfexpFont = "";
+                }else{
+                    $gulfexpFont = $gulf_experience_arabic_cvsetting->font_family;
+                }
+
+                if($gulf_experience_arabic_cvsetting->font_size != ''){
+                
+                    $gulfexpFontsize = $gulf_experience_arabic_cvsetting->font_size;
+                }else{
+                    $gulfexpFontsize = "11";
+                }
+
+                PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+
+                if($gulf_experience_arabic_cvsetting->font_color != ''){
+                    $gulfexpfontcolor = explode(",",$gulf_experience_arabic_cvsetting->font_color);
+                    PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($gulf_experience_arabic_cvsetting->x_axis,$gulf_experience_arabic_cvsetting->y_axis);
+                if($post->gulfexperience == 1){
+                    $arexp = $post->prarname.' قد اشتغل في الهند فقط';
+                }elseif($post->gulfexperience == 2){
+                    $arexp = $post->prarname.' سبق له العمل';
+                }else{
+                    $arexp = "---";
+                }
+                PDF::Cell(0,0,$arexp);
+            }
+
+
+            // Expected salary and location
+            if(isset($exp_sal_cvsetting)){
+                if($exp_sal_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($exp_sal_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $expsalpopinsfont = TCPDF_FONTS::addTTFfont($expsalpopins,'','',32);
+
+                if($exp_sal_cvsetting->font_family == 'none'){
+                    $expsalfonttype = "";
+                }else{
+                    $expsalfonttype = $exp_sal_cvsetting->font_family;
+                }
+
+                if($exp_sal_cvsetting->font_size != ''){
+                    $expsalfontsize = $exp_sal_cvsetting->font_size;
+                }else{
+                    $expsalfontsize = "11";
+                }
+
+                PDF::SetFont($expsalpopinsfont, $expsalfonttype, $expsalfontsize,'',false);
+                if($exp_sal_cvsetting->font_color != ''){
+                    $expsalfontcolor = explode(",",$exp_sal_cvsetting->font_color);
+                    PDF::SetTextColor($expsalfontcolor[0],$expsalfontcolor[1],$expsalfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($exp_sal_cvsetting->x_axis,$exp_sal_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->exp_sal);
+            }
+
+            if(isset($expwp_id_cvsetting)){
+                if($expwp_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($expwp_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+
+                $expwppopinsfont = TCPDF_FONTS::addTTFfont($expwppopins,'','',32);
+
+                if($expwp_id_cvsetting->font_family == 'none'){
+                    $expwpfonttype = "";
+                }else{
+                    $expwpfonttype = $expwp_id_cvsetting->font_family;
+                }
+
+                if($expwp_id_cvsetting->font_size != ''){
+                    $expwpfontsize = $expwp_id_cvsetting->font_size;
+                }else{
+                    $expwpfontsize = "11";
+                }
+
+                PDF::SetFont($expwppopinsfont, $expwpfonttype, $expwpfontsize,'',false);
+                if($expwp_id_cvsetting->font_color != ''){
+                    $expwpfontcolor = explode(",",$expwp_id_cvsetting->font_color);
+                    PDF::SetTextColor($expwpfontcolor[0],$expwpfontcolor[1],$expwpfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($expwp_id_cvsetting->x_axis,$expwp_id_cvsetting->y_axis);
+                PDF::Cell(0,0,implode(",",$exp_wp));
+            }
+
+            // Age
+            if(isset($age_cvsetting)){
+                if($age_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $agepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+
+                }elseif($age_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $agepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $agepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+
+                $agepopinsfont = TCPDF_FONTS::addTTFfont($agepopins,'','',32);
+
+                if($age_cvsetting->font_family == 'none'){
+                    $agefonttype = "";
+                }else{
+                    $agefonttype = $age_cvsetting->font_family;
+                }
+
+                if($age_cvsetting->font_size != ''){
+                    $agefontsize = $age_cvsetting->font_size;
+                }else{
+                    $agefontsize = "11";
+                }
+
+                PDF::SetFont($agepopinsfont, $agefonttype, $agefontsize,'',false);
+                if($age_cvsetting->font_color != ''){
+                    $agefontcolor = explode(",",$age_cvsetting->font_color);
+                    PDF::SetTextColor($agefontcolor[0],$agefontcolor[1],$agefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($age_cvsetting->x_axis,$age_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->age);
+
+            }
+            // Marital
+            if(isset($marital_status_cvsetting)){
+                if($marital_status_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $maritalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($marital_status_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $maritalpopins = base_path('public_html/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $maritalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $maritalpopinsfont = TCPDF_FONTS::addTTFfont($maritalpopins,'','',32);
+
+
+                if($marital_status_cvsetting->font_family == 'none'){
+                    $mariedfonttype = "";
+                }else{
+                    $mariedfonttype = $marital_status_cvsetting->font_family;
+                }
+
+                if($marital_status_cvsetting->font_size != ''){
+                    $mariedfontsize = $marital_status_cvsetting->font_size;
+                }else{
+                    $mariedfontsize = "11";                
+                }
+
+                PDF::SetFont($maritalpopinsfont, $mariedfonttype, $mariedfontsize,'',false);
+                if($marital_status_cvsetting->font_color != ''){
+                    $marital_statusfontcolor = explode(",",$marital_status_cvsetting->font_color);
+                    PDF::SetTextColor($marital_statusfontcolor[0],$marital_statusfontcolor[1],$marital_statusfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($marital_status_cvsetting->x_axis,$marital_status_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->marital_status);
+                
+            }
+            // Religion
+            if(isset($religion_cvsetting)){
+                // if($religion_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                //     }
+                // }elseif($religion_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                //     }
+                // }
+    
+
+                if($religion_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $religionpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $religionpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $religionpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $religionpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+
+                $religionpopinsfont = TCPDF_FONTS::addTTFfont($religionpopins,'','',32);
+
+                if($religion_cvsetting->font_family == 'none'){
+                    $relfonttype = "";
+                }else{
+                    $relfonttype = $religion_cvsetting->font_family;
+                }
+
+                if($religion_cvsetting->font_size != ''){
+                    $relfontsize = $religion_cvsetting->font_size;
+                }else{
+                    $relfontsize = "11";
+                }
+
+                PDF::SetFont($religionpopinsfont, $relfonttype, $relfontsize,'',false);
+                if($religion_cvsetting->font_color != ''){
+                    $religionfontcolor = explode(",",$religion_cvsetting->font_color);
+                    PDF::SetTextColor($religionfontcolor[0],$religionfontcolor[1],$religionfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($religion_cvsetting->x_axis,$religion_cvsetting->y_axis);
+                if($post->religion != '' && $post->religion == 'Muslim'){
+                    PDF::Cell(0,0,$post->religion.' مسلم');
+                }
+                if($post->religion != '' && $post->religion != 'Muslim'){
+                    PDF::Cell(0,0,$post->religion.'  غير مسلم');
+                }
+
+
+            }
+            // Date of Birth
+            if(isset($dob_cvsetting)){
+
+                if($dob_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $dobpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($dob_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $dobpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $dobpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $dobpopinsfont = TCPDF_FONTS::addTTFfont($dobpopins,'','',32);
+
+                if($dob_cvsetting->font_family == 'none'){
+                    $dobfonttype = "";
+                }else{
+                    $dobfonttype = $dob_cvsetting->font_family;
+                }
+
+                if($dob_cvsetting->font_size != ''){
+                    $dobfontsize = $dob_cvsetting->font_size;
+                }else{
+                    $dobfontsize = "11";
+                }
+
+                PDF::SetFont($dobpopinsfont, $dobfonttype, $dobfontsize,'',false);
+                if($dob_cvsetting->font_color != ''){
+                    $dobfontcolor = explode(",",$dob_cvsetting->font_color);
+                    PDF::SetTextColor($dobfontcolor[0],$dobfontcolor[1],$dobfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($dob_cvsetting->x_axis,$dob_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->dob)));
+
+            }
+            // Place of Birth
+            if(isset($plb_id_cvsetting)){
+                if($plb_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $plb_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($plb_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $plb_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $plb_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $plb_idpopinsfont = TCPDF_FONTS::addTTFfont($plb_idpopins,'','',32);
+
+                if($plb_id_cvsetting->font_family == 'none'){
+                    $plb_idfonttype = "";
+                }else{
+                    $plb_idfonttype = $plb_id_cvsetting->font_family;
+                }
+
+                if($plb_id_cvsetting->font_size != ''){
+                    $plb_idfontsize = $plb_id_cvsetting->font_size;
+                }else{
+                    $plb_idfontsize = "11";
+                }
+
+                PDF::SetFont($plb_idpopinsfont, $plb_idfonttype, $plb_idfontsize,'',false);
+                if($plb_id_cvsetting->font_color != ''){
+                    $plb_idfontcolor = explode(",",$plb_id_cvsetting->font_color);
+                    PDF::SetTextColor($plb_idfontcolor[0],$plb_idfontcolor[1],$plb_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($plb_id_cvsetting->x_axis,$plb_id_cvsetting->y_axis);
+                // PDF::Cell(0,0,$post->plbname);
+                PDF::Cell(0,0,$post->plb_text);
+            }
+            // Nationality
+            if(isset($nation_id_cvsetting)){
+
+                // if($nation_id_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                //     }
+                // }elseif($nation_id_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                //     }
+                
+                // }
+                
+                if($nation_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+                $nation_idpopinsfont = TCPDF_FONTS::addTTFfont($nation_idpopins,'','',32);
+
+                if($nation_id_cvsetting->font_family == 'none'){
+                    $nation_idfonttype = "";
+                }else{
+                    $nation_idfonttype = $nation_id_cvsetting->font_family;
+                }
+
+                if($nation_id_cvsetting->font_size != ''){
+
+                    $nation_idfontsize = $nation_id_cvsetting->font_size;
+                }else{
+                    $nation_idfontsize = "11";
+                }
+
+                PDF::SetFont($nation_idpopinsfont, $nation_idfonttype, $nation_idfontsize,'',false);
+                if($nation_id_cvsetting->font_color != ''){
+                    $nation_idfontcolor = explode(",",$nation_id_cvsetting->font_color);
+                    PDF::SetTextColor($nation_idfontcolor[0],$nation_idfontcolor[1],$nation_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($nation_id_cvsetting->x_axis,$nation_id_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->nationname.'  '.$post->nationarname);
+
+                
+            }
+            // Region
+            if(isset($region_id_cvsetting)){
+
+                if($region_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $regionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($region_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $regionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $regionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+
+                $regionpopinsfont = TCPDF_FONTS::addTTFfont($regionpopins,'','',32);
+
+                if($region_id_cvsetting->font_family == 'none'){
+                    $region_idfonttype = "";
+                }else{
+                    $region_idfonttype = $region_id_cvsetting->font_family;
+                }
+
+                if($region_id_cvsetting->font_size != ''){
+                    $region_idfonttype = $region_id_cvsetting->font_size;
+                }else{
+                    $region_idfonttype = "11";
+                }
+
+                PDF::SetFont($regionpopinsfont, $region_idfonttype, $region_idfonttype,'',false);
+                if($region_id_cvsetting->font_color != ''){
+                    $region_idfontcolor = explode(",",$region_id_cvsetting->font_color);
+                    PDF::SetTextColor($region_idfontcolor[0],$region_idfontcolor[1],$region_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($region_id_cvsetting->x_axis,$region_id_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->regionname);
+            }
+
+            // Education
+            if(isset($education_cvsetting)){
+
+                if($education_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $educationpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($education_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $educationpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $educationpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $educationpopinsfont = TCPDF_FONTS::addTTFfont($educationpopins,'','',32);
+
+                if($education_cvsetting->font_family == 'none'){
+                    $educationfonttype = "";
+                }else{
+                    $educationfonttype = $education_cvsetting->font_family;
+                }
+
+                if($education_cvsetting->font_size != ''){
+                    $educationfontsize = $education_cvsetting->font_size;
+                }else{
+                    $educationfontsize = "11";
+                }
+
+                PDF::SetFont($educationpopinsfont, $educationfonttype, $educationfontsize,'',false);
+                if($education_cvsetting->font_color != ''){
+                    $educationfontcolor = explode(",",$education_cvsetting->font_color);
+                    PDF::SetTextColor($educationfontcolor[0],$educationfontcolor[1],$educationfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($education_cvsetting->x_axis,$education_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->educname);
+
+            }
+
+            // Language
+            if(isset($lang_known_cvsetting)){
+
+                if($lang_known_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $langknownpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($lang_known_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $langknownpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $langknownpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $langknownpopinsfont = TCPDF_FONTS::addTTFfont($langknownpopins,'','',32);
+
+                if($lang_known_cvsetting->font_family == 'none'){
+                    $lang_knownfonttype = "";
+                }else{
+                    $lang_knownfonttype = $lang_known_cvsetting->font_family;
+                }
+
+                if($lang_known_cvsetting->font_size != ''){
+                    $lang_knownfontsize = $lang_known_cvsetting->font_size;
+                }else{
+                    $lang_knownfontsize = "11";
+                }
+
+                PDF::SetFont($langknownpopinsfont, $lang_knownfonttype, $lang_knownfontsize,'',false);
+                if($lang_known_cvsetting->font_color != ''){
+                    $lang_knownfontcolor = explode(",",$lang_known_cvsetting->font_color);
+                    PDF::SetTextColor($lang_knownfontcolor[0],$lang_knownfontcolor[1],$lang_knownfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($lang_known_cvsetting->x_axis,$lang_known_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->lang_known);
+
+            }
+            // Google Map
+            if(isset($google_map_cvsetting)){
+
+                if($google_map_cvsetting->font_family == 'none'){
+                    $google_mapfonttype = "";
+                }else{
+                    $google_mapfonttype = $google_map_cvsetting->font_family;
+                }
+
+                if($google_map_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $google_map_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $google_map_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $google_map_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $google_map_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }    
+                }
+
+                $google_map_arabic_font = TCPDF_FONTS::addTTFfont($google_map_arabic,'','',32);
+
+                if($google_map_cvsetting->font_size != ''){
+                    $google_mapfontsize = $google_map_cvsetting->font_size;
+                }else{
+                    $google_mapfontsize = "11";
+                }
+
+                if($post->google_map == 1){
+                    $gmap = "Yes  نعم";
+                }else{
+                    $gmap = "No  لا";
+                }
+
+                PDF::SetFont($google_map_arabic_font, $google_mapfonttype, $google_mapfontsize,'',false);
+                if($google_map_cvsetting->font_color != ''){
+                    $google_mapfontcolor = explode(",",$google_map_cvsetting->font_color);
+                    PDF::SetTextColor($google_mapfontcolor[0],$google_mapfontcolor[1],$google_mapfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($google_map_cvsetting->x_axis,$google_map_cvsetting->y_axis);
+                PDF::Cell(0,0,$gmap);
+
+            }
+            // Vehical
+            if(isset($carknown_id_cvsetting)){
+
+                if($carknown_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $carknown_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($carknown_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $carknown_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $carknown_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }    
+                }
+
+                $carknown_idpopinsfont = TCPDF_FONTS::addTTFfont($carknown_idpopins,'','',32);
+
+                if($carknown_id_cvsetting->font_family == 'none'){
+                    $carknown_idfonttype = "";
+                }else{
+                    $carknown_idfonttype = $carknown_id_cvsetting->font_family;
+                }
+
+                if($carknown_id_cvsetting->font_size != ''){
+                    $carknown_idfontsize = $carknown_id_cvsetting->font_size;
+                }else{
+                    $carknown_idfontsize = "11";
+                }
+
+                PDF::SetFont($carknown_idpopinsfont, $carknown_idfonttype, $carknown_idfontsize,'',false);
+                if($carknown_id_cvsetting->font_color != ''){
+                    $carknown_idfontcolor = explode(",",$carknown_id_cvsetting->font_color);
+                    PDF::SetTextColor($carknown_idfontcolor[0],$carknown_idfontcolor[1],$carknown_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($carknown_id_cvsetting->x_axis,$carknown_id_cvsetting->y_axis);
+                PDF::Cell(0,0,implode(",",$carlist));
+            }
+
+            // Work Experience
+            $cexperience = explode(",",$post->experience);
+            $cprofessions = explode(",",$post->proff_id);
+            $cexpcountry = explode(",",$post->expcountry_id);
+            // $cexpcity = explode(",",$post->expcity_id);
+            $cexpcitytext = explode(",",$post->expcity_id_text);
+
+            $iec = 0;
+            $iprof = 0;
+            $icont = 0;
+            // $icity = 0;
+            $icitytext = 0;
+            $icco = 0;
+
+            foreach($cexperience as $index => $value){
+
+                // Job
+                
+                if(isset($proff_id_cvsetting)){
+                    $py_axis = $proff_id_cvsetting->y_axis + $iprof;
+
+                    if($proff_id_cvsetting->font_family == 'none'){
+                        $proff_idfonttype = "";
+                    }else{
+                        $proff_idfonttype = $proff_id_cvsetting->font_family;
+                    }
+                    
+                    if($proff_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $proff_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                        }
+
+                    }elseif($proff_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $proff_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                        
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $proff_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+                    }
+
+                    $proff_idpopinsfont = TCPDF_FONTS::addTTFfont($proff_idpopins,'','',32);
+
+                    if($proff_id_cvsetting->font_size != ''){
+                        $proff_idfontsize = $proff_id_cvsetting->font_size;
+                    }else{
+                        $proff_idfontsize = "11";
+                    }
+                    $professionF = Profession::find($cprofessions[$index]);
+                    PDF::SetFont($proff_idpopinsfont, $proff_idfonttype, $proff_idfontsize,'',false);
+
+                    if($proff_id_cvsetting->font_color != ''){
+                        $proff_idfontcolor = explode(",",$proff_id_cvsetting->font_color);
+                        PDF::SetTextColor($proff_idfontcolor[0],$proff_idfontcolor[1],$proff_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+                    PDF::SetXY($proff_id_cvsetting->x_axis,$py_axis);
+                    if(isset($professionF)){
+                        PDF::Cell(0,0,$professionF->eng_name);
+                    }
+
+                    $iprof = $iprof + $proff_id_cvsetting->add_y_axis;
+                }
+                // Country
+                if(isset($expcountry_id_cvsetting)){
+                    $cony_axis = $expcountry_id_cvsetting->y_axis + $icont;
+
+                    if($expcountry_id_cvsetting->font_family == 'none'){
+                        $expcountry_idfonttype = "";
+                    }else{
+                        $expcountry_idfonttype = $expcountry_id_cvsetting->font_family;
+                    }
+
+                    if($expcountry_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                        }
+
+                    }elseif($expcountry_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                        
+                        }
+                    }
+
+                    $expcountry_idpopinsfont = TCPDF_FONTS::addTTFfont($expcountry_idpopins,'','',32);
+
+                    if($expcountry_id_cvsetting->font_size != ''){
+                        $expcountry_idfontsize = $expcountry_id_cvsetting->font_size;
+                    }else{
+                        $expcountry_idfontsize = "11";
+                    }
+
+                    $countryF = Country::find($cexpcountry[$index]);
+                    PDF::SetFont($expcountry_idpopinsfont, $expcountry_idfonttype, $expcountry_idfontsize,'',false);
+                    if($expcountry_id_cvsetting->font_color != ''){
+                        $expcountry_idfontcolor = explode(",",$expcountry_id_cvsetting->font_color);
+                        PDF::SetTextColor($expcountry_idfontcolor[0],$expcountry_idfontcolor[1],$expcountry_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($expcountry_id_cvsetting->x_axis,$cony_axis);
+                    if(isset($countryF)){
+                        PDF::Cell(0,0,$countryF->name);
+                    }
+
+
+                    $icont = $icont + $expcountry_id_cvsetting->add_y_axis;
+                }
+                // City
+                // if(isset($expcity_id_cvsetting)){
+                //     $cit_axis = $expcity_id_cvsetting->y_axis + $icity;
+
+                //     if($expcity_id_cvsetting->font_family == 'none'){
+                //         $expcity_idfonttype = "";
+                //     }else{
+                //         $expcity_idfonttype = $expcity_id_cvsetting->font_family;
+                //     }
+
+                //     if($expcity_id_cvsetting->font_family == 'B'){
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                //         }
+                //     }elseif($expcity_id_cvsetting->font_family == 'I'){
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //         }
+                //     }else{
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                //         }
+                //     }
+
+                //     $expcity_idpopinsfont = TCPDF_FONTS::addTTFfont($expcity_idpopins,'','',32);
+
+                //     if($expcity_id_cvsetting->font_size != ''){
+                //         $expcity_idfontsize = $expcity_id_cvsetting->font_size;
+                //     }else{
+                //         $expcity_idfontsize = "11";
+                //     }
+
+                //     $cityF = City::find($cexpcity[$index]);
+                //     PDF::SetFont($expcity_idpopinsfont, $expcity_idfonttype, $expcity_idfontsize,'',false);
+                //     if($expcity_id_cvsetting->font_color != ''){
+                //         $expcity_idfontcolor = explode(",",$expcity_id_cvsetting->font_color);
+                //         PDF::SetTextColor($expcity_idfontcolor[0],$expcity_idfontcolor[1],$expcity_idfontcolor[2]);
+                //     }else{
+                //         PDF::SetTextColor(0,0,0);
+                //     }
+                //     PDF::SetXY($expcity_id_cvsetting->x_axis,$cit_axis);
+                //     if(isset($cityF)){
+                //         PDF::Cell(0,0,$cityF->name);
+                //     }
+
+
+                //     $icity = $icity + $expcity_id_cvsetting->add_y_axis;
+
+                // }
+
+                // City Text
+                if(isset($expcity_id_cvsetting)){
+                    $cit_axis = $expcity_id_cvsetting->y_axis + $icitytext;
+
+                    if($expcity_id_cvsetting->font_family == 'none'){
+                        $expcity_idfonttype = "";
+                    }else{
+                        $expcity_idfonttype = $expcity_id_cvsetting->font_family;
+                    }
+
+                    if($expcity_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                        }
+                    }elseif($expcity_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+                    }
+
+                    $expcity_idpopinsfont = TCPDF_FONTS::addTTFfont($expcity_idpopins,'','',32);
+
+                    if($expcity_id_cvsetting->font_size != ''){
+                        $expcity_idfontsize = $expcity_id_cvsetting->font_size;
+                    }else{
+                        $expcity_idfontsize = "11";
+                    }
+
+                    
+                    PDF::SetFont($expcity_idpopinsfont, $expcity_idfonttype, $expcity_idfontsize,'',false);
+                    if($expcity_id_cvsetting->font_color != ''){
+                        $expcity_idfontcolor = explode(",",$expcity_id_cvsetting->font_color);
+                        PDF::SetTextColor($expcity_idfontcolor[0],$expcity_idfontcolor[1],$expcity_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($expcity_id_cvsetting->x_axis,$cit_axis);
+                    if(count($cexpcitytext) > $icco){
+                        PDF::Cell(0,0,$cexpcitytext[$index]);
+                    }
+
+
+                    $icitytext = $icitytext + $expcity_id_cvsetting->add_y_axis;
+
+                }
+
+                // Experience
+                if(isset($experience_cvsetting)){
+                    $ey_axis = $experience_cvsetting->y_axis + $iec;
+
+                    if($experience_cvsetting->font_family == 'none'){
+                        $experiencefonttype = "";
+                    }else{
+                        $experiencefonttype = $experience_cvsetting->font_family;
+                    }
+
+                    if($experience_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                        }
+                    }elseif($experience_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                        
+                        }
+                    }
+
+                    $experiencepopinsfont = TCPDF_FONTS::addTTFfont($experiencepopins,'','',32);
+
+                    if($experience_cvsetting->font_size != ''){
+                        $experiencefontsize = $experience_cvsetting->font_size;
+                    }else{
+                        $experiencefontsize = "11";
+                    }
+
+                    PDF::SetFont($experiencepopinsfont, $experiencefonttype, $experiencefontsize,'',false);
+                    if($experience_cvsetting->font_color != ''){
+                        $experiencefontcolor = explode(",",$experience_cvsetting->font_color);
+                        PDF::SetTextColor($experiencefontcolor[0],$experiencefontcolor[1],$experiencefontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($experience_cvsetting->x_axis,$ey_axis);
+                    PDF::Cell(0,0,$value.' Years');
+
+                    $iec = $iec + $experience_cvsetting->add_y_axis;
+                }
+
+                $icco++;
+            }
+
+            // Passport No
+            if(isset($pass_no_cvsetting)){
+
+                if($pass_no_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $pass_nopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($pass_no_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $pass_nopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $pass_nopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $pass_nopopinsfont = TCPDF_FONTS::addTTFfont($pass_nopopins,'','',32);
+
+                if($pass_no_cvsetting->font_family == 'none'){
+                    $pass_nofonttype = "";
+                }else{
+                    $pass_nofonttype = $pass_no_cvsetting->font_family;
+                }
+
+                if($pass_no_cvsetting->font_size != ''){
+                    $pass_nofontsize = $pass_no_cvsetting->font_size;
+    
+                }else{
+                    $pass_nofontsize = "11";               
+                }
+
+                PDF::SetFont($pass_nopopinsfont, $pass_nofonttype, $pass_nofontsize,'',false);
+                if($pass_no_cvsetting->font_color != ''){
+                    $pass_nofontcolor = explode(",",$pass_no_cvsetting->font_color);
+                    PDF::SetTextColor($pass_nofontcolor[0],$pass_nofontcolor[1],$pass_nofontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($pass_no_cvsetting->x_axis,$pass_no_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->pass_no);
+            }
+            // Passport Type
+            if(isset($pass_type_cvsetting)){
+                if($pass_type_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $pass_typepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($pass_type_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $pass_typepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $pass_typepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $pass_typepopinsfont = TCPDF_FONTS::addTTFfont($pass_typepopins,'','',32);
+
+                if($pass_type_cvsetting->font_family == 'none'){
+                    $pass_typefonttype = "";
+                }else{
+                    $pass_typefonttype = $pass_type_cvsetting->font_family;
+                }
+
+                if($pass_type_cvsetting->font_size != ''){
+                    $pass_typefontsize = $pass_type_cvsetting->font_size;
+    
+                }else{
+                    $pass_typefontsize = "11";                
+                }
+
+                PDF::SetFont($pass_typepopinsfont, $pass_typefonttype, $pass_typefontsize,'',false);
+                if($pass_type_cvsetting->font_color != ''){
+                    $pass_typefontcolor = explode(",",$pass_type_cvsetting->font_color);
+                    PDF::SetTextColor($pass_typefontcolor[0],$pass_typefontcolor[1],$pass_typefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($pass_type_cvsetting->x_axis,$pass_type_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->pass_type);
+            }
+            // Date of issue
+            if(isset($doi_cvsetting)){
+
+                if($doi_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $doipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($doi_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $doipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $doipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $doipopinsfont = TCPDF_FONTS::addTTFfont($doipopins,'','',32);
+
+                if($doi_cvsetting->font_family == 'none'){
+                    $doifonttype = "";
+                }else{
+                    $doifonttype = $doi_cvsetting->font_family;
+                }
+
+                if($doi_cvsetting->font_size != ''){
+                    $doifontsize = $doi_cvsetting->font_size;
+    
+                }else{
+                    $doifontsize = "11";
+                }
+
+                PDF::SetFont($doipopinsfont, $doifonttype, $doifontsize,'',false);
+                if($doi_cvsetting->font_color != ''){
+                    $doifontcolor = explode(",",$doi_cvsetting->font_color);
+                    PDF::SetTextColor($doifontcolor[0],$doifontcolor[1],$doifontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($doi_cvsetting->x_axis,$doi_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->doi)));
+            }
+            // Date of expiry
+            if(isset($doe_cvsetting)){
+                if($doe_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $doepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($doe_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $doepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $doepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $doepopinsfont = TCPDF_FONTS::addTTFfont($doepopins,'','',32);
+
+                if($doe_cvsetting->font_family == 'none'){
+                    $doefonttype = "";
+                }else{
+                    $doefonttype = $doe_cvsetting->font_family;
+                }
+
+                if($doe_cvsetting->font_size != ''){
+                    $doefontsize = $doe_cvsetting->font_size;
+                }else{
+                    $doefontsize = "11";
+                }
+
+                PDF::SetFont($doepopinsfont, $doefonttype, $doefontsize,'',false);
+                if($doe_cvsetting->font_color != ''){
+                    $doefontcolor = explode(",",$doe_cvsetting->font_color);
+                    PDF::SetTextColor($doefontcolor[0],$doefontcolor[1],$doefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($doe_cvsetting->x_axis,$doe_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->doe)));
+            }
+            // Place of Issue
+            if(isset($poi_cvsetting)){
+                if($poi_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $poipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($poi_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $poipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $poipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $poipopinsfont = TCPDF_FONTS::addTTFfont($poipopins,'','',32);
+
+                if($poi_cvsetting->font_family == 'none'){
+                    $poifonttype = "";
+                }else{
+                    $poifonttype = $poi_cvsetting->font_family;
+                }
+
+                if($poi_cvsetting->font_size != ''){
+                    $poifontsize = $poi_cvsetting->font_size;
+    
+                }else{
+                    $poifontsize = "11";
+                }
+
+                PDF::SetFont($poipopinsfont, $poifonttype, $poifontsize,'',false);
+                if($poi_cvsetting->font_color != ''){
+                    $poifontcolor = explode(",",$poi_cvsetting->font_color);
+                    PDF::SetTextColor($poifontcolor[0],$poifontcolor[1],$poifontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($poi_cvsetting->x_axis,$poi_cvsetting->y_axis);
+                // PDF::Cell(0,0,$post->poiname);
+                PDF::Cell(0,0,$post->poi_text);
+            }
+
+            PDF::AddPage();
+            // Default fonts set
+
+            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                $sansarabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                $filecand_pepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+            }else{
+                $filecand_pepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                $sansarabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');            
+            }
+
+            // $tajawalfont = TCPDF_FONTS::addTTFfont($tajawal,'','',32); 
+            $sansarabicfont = TCPDF_FONTS::addTTFfont($sansarabic,'','',32);
+            $filecand_pepopinsfont = TCPDF_FONTS::addTTFfont($filecand_pepopins,'','',32);
+
+            if($post->pass_file != ''){
+                // Passport
+                PDF::SetFont($filecand_pepopinsfont, '', 16);
+                PDF::SetXY(10,10);
+                PDF::Cell(0,0,"Passport Copy:");
+
+                PDF::SetFont($sansarabicfont, '', 16);
+                PDF::SetXY(160,10);
+                PDF::Cell(0,0,"صورة جواز السفر:",0,0,'R');
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $passpath = base_path().'/public/admin/assets/images/candidate/'.$post->pass_file;
+                }else{
+                    $passpath = base_path('public_html/admin/assets/images/candidate/'.$post->pass_file);                
+                }
+
+
+
+                $passext = pathinfo($post->pass_file, PATHINFO_EXTENSION);
+
+                PDF::Image($passpath,30,30, '150', '',$passext,'','',false,'300','',false,false,0,false,false,false);
+            }
+
+            if($post->lic_file != ''){
+                
+                PDF::SetFont($filecand_pepopinsfont, '', 16);
+                PDF::SetXY(10,140);
+                PDF::Cell(0,0,"Driving Licence:");
+
+                PDF::SetFont($sansarabicfont, '', 16);
+                PDF::SetXY(160,140);
+                PDF::Cell(0,0,"رخصة قيادة:",0,0,"R");
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $licpath = base_path().'/public/admin/assets/images/candidate/'.$post->lic_file;
+                }else{
+                    $licpath = base_path('public_html/admin/assets/images/candidate/'.$post->lic_file);                
+                }
+
+                $licext = pathinfo($post->lic_file, PATHINFO_EXTENSION);
+    
+    
+                PDF::Image($licpath,30,160, '150', '',$licext,'','',false,'300','',false,false,0,false,false,false);
+            }
+            ob_end_clean();
+            // PDF::Output($post->cand_name.'_cv.pdf');
+            $findcvex = Companycvexecute::where('cand_id','=',$id)->where('partner_id','=',$request->partner_id)->first();
+            
+            $filename = $id.'_'.$request->partner_id.'_'.$post->cand_name;
+            if(isset($findcvex)){
+                // remove file from folder 
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $filepath = base_path('public/admin/assets/images/pdf/partner/'.$findcvex->cv_file);
+                }else{
+                    $filepath = base_path('public_html/admin/assets/images/pdf/partner/'.$findcvex->cv_file);
+                }
+
+                if(file_exists($filepath)){
+                    File::delete($filepath);
+                    $findcvex->cv_file = $filename;
+                }else{
+                    $findcvex->cv_file = $filename;
+                }
+
+                $findcvex->save();
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    PDF::Output(base_path('public/admin/assets/images/pdf/partner').'/'.$filename,'F');
+                }else{
+                    PDF::Output(base_path('public_html/admin/assets/images/pdf/partner').'/'.$filename,'F');
+                }
+
+            }else{
+                // Create file in
+                $postcvex = New Companycvexecute();
+                $postcvex->cand_id = $id;
+                $postcvex->partner_id = $request->partner_id;
+                $postcvex->cv_file = $filename;
+                $postcvex->save();
+            
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    PDF::Output(base_path('public/admin/assets/images/pdf/partner').'/'.$filename,'F');
+                }else{
+                    PDF::Output(base_path('public_html/admin/assets/images/pdf/partner').'/'.$filename,'F');
+                }
+            }
+
+            return redirect()->back()->with('success','CV execute as per company!');
+
+
+        } catch (\Exception $e) {
+            return redirect()->back()->with('pdfError','Something is wrong please check the CV Text format ');
+        }
+
+    }
+
+    
+
+    public function cvsinglemultdownload($partner,$id){
+        $post = DB::table('candidates as cand')
+        ->leftJoin('placeofissues as poi','cand.poi','=','poi.id')
+        ->leftJoin('countries as nation','cand.nation_id','=','nation.id')
+        ->leftJoin('regions as region','cand.region_id','region.id')
+        ->leftJoin('cities as candcity','cand.candcity_id','=','candcity.id')
+        ->leftJoin('cities as plb','cand.plb_id','plb.id')
+        ->leftJoin('professions as occupation','cand.jobtype_id','=','occupation.id')
+        ->leftJoin('education as educ','cand.education_id','=','educ.id')
+        ->leftJoin('embassies as embassy','cand.embassy_for','=','embassy.id')
+        ->select('cand.*','embassy.embassy as embname','educ.name as educname','poi.name as poiname','nation.name as nationname','nation.arname as nationarname','region.name as regionname','candcity.name as cancityname','plb.name as plbname','occupation.ar_name as prarname','occupation.eng_name as pengname')
+        // ->select('cand.*','poi.name as poiname','nation.name as nationname','region.name as regionname','candcity.name as cancityname','plb.name as plbname','occupation.ar_name as prarname','occupation.eng_name as pengname')
+        ->where('cand.id','=',$id)
+        ->first();
+
+        // Car Know List
+        $carkns = Carnknown::wherein('id',explode(",",$post->carknown_id))->get();
+        $carlist = [];
+        if(isset($carkns)){
+            foreach($carkns as $carkn){
+                $carlist [] = $carkn->name;
+            }
+        }else{
+            $carlist [] = "";
+        }
+        // Expected Work place
+        // $expwps = City::wherein('id',explode(",",$post->expwp_id))->get();
+        $expwps = DB::table('expecworkcities')->wherein('id',explode(",",$post->expwp_id))->get();
+        $exp_wp = [];
+        if(isset($expwps)){
+            foreach($expwps as $expwp){
+                $exp_wp [] = $expwp->name;
+            }
+        }else{
+            $exp_wp [] = "";
+        }
+        
+                
+        
+        // Fetch details as per cv setting
+        $cand_name_cvsetting = Cvsetting::where('db_field_name','=','cand_name')->first();
+        $cand_name_ar_cvsetting = Cvsetting::where('db_field_name','=','cand_name_ar')->first();
+        $exp_sal_cvsetting = Cvsetting::where('db_field_name','=','exp_sal')->first();
+        $expwp_id_cvsetting = Cvsetting::where('db_field_name','=','expwp_id')->first();
+        $age_cvsetting = Cvsetting::where('db_field_name','=','age')->first();
+        $marital_status_cvsetting = Cvsetting::where('db_field_name','=','marital_status')->first();
+        $religion_cvsetting = Cvsetting::where('db_field_name','=','religion')->first();
+        $dob_cvsetting = Cvsetting::where('db_field_name','=','dob')->first();
+        $plb_id_cvsetting = Cvsetting::where('db_field_name','=','plb_id')->first();
+        $nation_id_cvsetting = Cvsetting::where('db_field_name','=','nation_id')->first();
+        $region_id_cvsetting = Cvsetting::where('db_field_name','=','region_id')->first();
+        $lang_known_cvsetting = Cvsetting::where('db_field_name','=','lang_known')->first();
+        $google_map_cvsetting = Cvsetting::where('db_field_name','=','google_map')->first();
+        $carknown_id_cvsetting = Cvsetting::where('db_field_name','=','carknown_id')->first();
+        $proff_id_cvsetting = Cvsetting::where('db_field_name','=','proff_id')->first();
+        $experience_cvsetting = Cvsetting::where('db_field_name','=','experience')->first();
+        $expcountry_id_cvsetting = Cvsetting::where('db_field_name','=','expcountry_id')->first();
+        $expcity_id_cvsetting = Cvsetting::where('db_field_name','=','expcity_id')->first();
+        $pass_no_cvsetting = Cvsetting::where('db_field_name','=','pass_no')->first();
+        $pass_type_cvsetting = Cvsetting::where('db_field_name','=','pass_type')->first();
+        $doi_cvsetting = Cvsetting::where('db_field_name','=','doi')->first();
+        $doe_cvsetting = Cvsetting::where('db_field_name','=','doe')->first();
+        $poi_cvsetting = Cvsetting::where('db_field_name','=','poi')->first();
+        $photo_cvsetting = Cvsetting::where('db_field_name','=','photo')->first();
+        $fullsize_cvsetting = Cvsetting::where('db_field_name','=','fullsize')->first();
+        $reference_no_cvsetting = Cvsetting::where('db_field_name','=','reference_no')->first();
+        $gulf_experience_cvsetting = Cvsetting::where('db_field_name','=','gulf_experience')->first();
+        $gulf_experience_arabic_cvsetting = Cvsetting::where('db_field_name','=','gulf_experience_arabic')->first();
+        $remark_cvsetting = Cvsetting::where('db_field_name','=','remark')->first();
+        $created_date_cvsetting = Cvsetting::where('db_field_name','=','created_date')->first();
+        $education_cvsetting = Cvsetting::where('db_field_name','=','education')->first();
+        $image1_cvsetting = Cvsetting::where('db_field_name','=','image1')->first();
+        $image2_cvsetting = Cvsetting::where('db_field_name','=','image2')->first();
+        $image3_cvsetting = Cvsetting::where('db_field_name','=','image3')->first();
+        $image4_cvsetting = Cvsetting::where('db_field_name','=','image4')->first();
+        $image5_cvsetting = Cvsetting::where('db_field_name','=','image5')->first();
+        $text1_cvsetting = Cvsetting::where('db_field_name','=','text1')->first();
+        $text2_cvsetting = Cvsetting::where('db_field_name','=','text2')->first();
+        $text3_cvsetting = Cvsetting::where('db_field_name','=','text3')->first();
+        $text4_cvsetting = Cvsetting::where('db_field_name','=','text4')->first();
+    
+        $embassyreq_cvsetting =  Cvsetting::where('db_field_name','=','embassy_required')->first();
+        $embassyreq_ar_cvsetting =  Cvsetting::where('db_field_name','=','embassy_required_ar')->first();
+
+        // Partner CV setting
+        $partnerimage1 =  Partnercvsetting::where('partner_id','=',$partner)->where('db_field_name','=','image1')->first();
+        $partnerimage2 =  Partnercvsetting::where('partner_id','=',$partner)->where('db_field_name','=','image2')->first();
+
+        // Base Path Status
+        $basepathSt = Basepathstatus::first();
+            
+        
+
+        try {
+            // $backfile = base_path().'/public/admin/assets/images/resume/SVG_ONE_FINE_L.svg';
+            // $backfile = base_path().'/public/admin/assets/images/resume/final_cv.pdf';
+            // $backfile = base_path().'/public/admin/assets/images/resume/resumes_format_svg.svg';
+            // $backfile = base_path().'/public/admin/assets/images/resume/SVG3.svg';
+            // $backfile = url('/admin/assets/images/resume/SVG3.svg');
+            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                // $backfile = base_path('public/admin/assets/images/resume/SVG3.svg');
+                $backfile = base_path('public/admin/assets/images/resume/cv_back_15072023.svg');
+            }else{
+                // $backfile = base_path('public_html/admin/assets/images/resume/SVG3.svg');
+                $backfile = base_path('public_html/admin/assets/images/resume/cv_back_15072023.svg');
+            }
+
+
+            PDF::SetCreator('Qamr International');
+            PDF::SetAuthor('Qamr International');
+            PDF::SetTitle($post->cand_name.' CV');
+            PDF::SetSubject($post->cand_name.' CV');
+            PDF::SetKeywords('Qamr, PDF, visa, form, guide');
+
+
+            PDF::AddPage();
+            PDF::ImageSVG($backfile,'','',210,297,'','','',0,false);
+
+            // Candidate Name
+            if (isset($cand_name_cvsetting)) {
+                if($cand_name_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($cand_name_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $candpopinsfont = TCPDF_FONTS::addTTFfont($candpopins,'','',32);
+
+                if($cand_name_cvsetting->font_family == 'none'){
+                    $candfonttype = "";
+                }else{
+                    $candfonttype = $cand_name_cvsetting->font_family;
+                }
+
+                if($cand_name_cvsetting->font_size != ''){
+                    $candfontsize = $cand_name_cvsetting->font_size;
+                }else{
+                    $candfontsize = '11';
+                }
+
+                PDF::SetFont($candpopinsfont,$candfonttype, $candfontsize,'',false);
+                if($cand_name_cvsetting->font_color != ''){
+                    $candfontcolor = explode(",",$cand_name_cvsetting->font_color);
+                    PDF::SetTextColor($candfontcolor[0],$candfontcolor[1],$candfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($cand_name_cvsetting->x_axis,$cand_name_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->cand_name);
+
+            }
+
+            // Candidate Arabic Name
+            if (isset($cand_name_ar_cvsetting)) {
+                if($cand_name_ar_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+                }elseif($cand_name_ar_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+
+
+                }
+                $candarpopinsfont = TCPDF_FONTS::addTTFfont($candarpopins,'','',32);
+
+                if($cand_name_ar_cvsetting->font_family == 'none'){
+                    $candarfonttype = "";
+                }else{
+                    $candarfonttype = $cand_name_ar_cvsetting->font_family;
+                }
+
+                if($cand_name_ar_cvsetting->font_size != ''){
+                    $candarfontsize = $cand_name_ar_cvsetting->font_size;
+                }else{
+                    $candarfontsize = '11';
+                }
+
+                PDF::SetFont($candarpopinsfont,$candarfonttype, $candarfontsize,'',false);
+                if($cand_name_ar_cvsetting->font_color != ''){
+                    $candarfontcolor = explode(",",$cand_name_ar_cvsetting->font_color);
+                    PDF::SetTextColor($candarfontcolor[0],$candarfontcolor[1],$candarfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($cand_name_ar_cvsetting->x_axis,$cand_name_ar_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->arcand_name);
+
+            }
+
+
+            // Embassy Required
+
+            if (isset($embassyreq_cvsetting)) {
+                if($embassyreq_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($embassyreq_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+
+
+                }
+                $embassypopinsfont = TCPDF_FONTS::addTTFfont($embassypopins,'','',32);
+
+                if($embassyreq_cvsetting->font_family == 'none'){
+                    $embassyfonttype = "";
+                }else{
+                    $embassyfonttype = $embassyreq_cvsetting->font_family;
+                }
+
+                if($embassyreq_cvsetting->font_size != ''){
+                    $embassyfontsize = $embassyreq_cvsetting->font_size;
+                }else{
+                    $embassyfontsize = '11';
+                }
+
+                PDF::SetFont($embassypopinsfont,$embassyfonttype, $embassyfontsize,'',false);
+                if($embassyreq_cvsetting->font_color != ''){
+                    $embassyfontcolor = explode(",",$embassyreq_cvsetting->font_color);
+                    PDF::SetTextColor($embassyfontcolor[0],$embassyfontcolor[1],$embassyfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($embassyreq_cvsetting->x_axis,$embassyreq_cvsetting->y_axis);
+                
+                if($post->embname == 'MUMBAI VISA REQUIRED'){
+                    $visaEmbE = "Required visa under Saudi Embassy Mumbai";
+                }elseif($post->embname == 'DELHI VISA REQUIRED'){
+                    $visaEmbE = "Required visa under Saudi Embassy New Delhi";
+                }else{
+                    $visaEmbE = "";
+                }
+
+                PDF::Cell(0,0,$visaEmbE);
+
+            }
+
+            // Embassy Required Arabic
+
+            if (isset($embassyreq_ar_cvsetting)) {
+                if($embassyreq_ar_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                         $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');
+                    }
+                }elseif($embassyreq_ar_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');
+                    }
+
+
+                }
+                $embassyarpopinsfont = TCPDF_FONTS::addTTFfont($embassyarpopins,'','',32);
+
+                if($embassyreq_ar_cvsetting->font_family == 'none'){
+                    $embassyarfonttype = "";
+                }else{
+                    $embassyarfonttype = $embassyreq_ar_cvsetting->font_family;
+                }
+
+                if($embassyreq_ar_cvsetting->font_size != ''){
+                    $embassyarfontsize = $embassyreq_ar_cvsetting->font_size;
+                }else{
+                    $embassyarfontsize = '11';
+                }
+
+                PDF::SetFont($embassyarpopinsfont,$embassyarfonttype, $embassyarfontsize,'',false);
+                if($embassyreq_ar_cvsetting->font_color != ''){
+                    $embassyarfontcolor = explode(",",$embassyreq_ar_cvsetting->font_color);
+                    PDF::SetTextColor($embassyarfontcolor[0],$embassyarfontcolor[1],$embassyarfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($embassyreq_ar_cvsetting->x_axis,$embassyreq_ar_cvsetting->y_axis);
+
+                
+                if($post->embname == 'MUMBAI VISA REQUIRED'){
+                    $visaEmb = "مطلوب تأشيرة تحت السفارة السعودية في مومباي";
+                }elseif($post->embname == 'DELHI VISA REQUIRED'){
+                    $visaEmb = "مطلوب تأشيرة تحت السفارة السعودية في نيودلهي";
+                }else{
+                    $visaEmb = "";
+                }
+
+                PDF::Cell(0,0,$visaEmb);
+
+            }
+
+
+
+            // Remark
+            if(isset($remark_cvsetting)){
+                // Remark Text 
+                $remark_text_desc = Cvsetting::where('db_field_name','=','remark_text')->where('status','=',1)->first();
+                if(isset($remark_text_desc)){
+                    $remarkDisp = 'Remark: '.$remark_text_desc->text_desc;
+                }else{
+                    $remarkDisp = 'Remark: ';
+                }
+
+                if($remark_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($remark_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $remarkpopinsfont = TCPDF_FONTS::addTTFfont($remarkpopins,'','',32);
+
+                if($remark_cvsetting->font_family == 'none'){
+                    $remarkfonttype = "";
+                }else{
+                    $remarkfonttype = $remark_cvsetting->font_family;
+                }
+
+                if($remark_cvsetting->font_size != ''){
+                    $remarkfontsize = $remark_cvsetting->font_size;
+                }else{
+                    $remarkfontsize = "11";
+                }
+
+                PDF::SetFont($remarkpopinsfont, $remarkfonttype, $remarkfontsize,'',false);
+                if($remark_cvsetting->font_color != ''){
+                    $remarkfontcolor = explode(",",$remark_cvsetting->font_color);
+                    PDF::SetTextColor($remarkfontcolor[0],$remarkfontcolor[1],$remarkfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($remark_cvsetting->x_axis,$remark_cvsetting->y_axis);
+                PDF::Cell(0,0,$remarkDisp);
+            }
+
+            // CV Create Date
+
+            if(isset($created_date_cvsetting)){
+                if($created_date_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($created_date_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $cvdatecreatepopinsfont = TCPDF_FONTS::addTTFfont($cvdatecreatepopins,'','',32);
+
+                if($created_date_cvsetting->font_family == 'none'){
+                    $cvdatecreatefonttype = "";
+                }else{
+                    $cvdatecreatefonttype = $created_date_cvsetting->font_family;
+                }
+
+                if($created_date_cvsetting->font_size != ''){
+                    $cvdatecreatefontsize = $created_date_cvsetting->font_size;
+                }else{
+                    $cvdatecreatefontsize = "11";
+                }
+
+                PDF::SetFont($cvdatecreatepopinsfont, $cvdatecreatefonttype, $cvdatecreatefontsize,'',false);
+                if($created_date_cvsetting->font_color != ''){
+                    $cvdatecreatefontcolor = explode(",",$created_date_cvsetting->font_color);
+                    PDF::SetTextColor($cvdatecreatefontcolor[0],$cvdatecreatefontcolor[1],$cvdatecreatefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($created_date_cvsetting->x_axis,$created_date_cvsetting->y_axis);
+                if($post->cv_executae_date != ''){
+                    $cvDate = date('d-m-Y',strtotime($post->cv_executae_date));
+                }else{
+
+                    $cvDate = date('d-m-Y');
+                }
+                PDF::Cell(0,0,'Date: '.$cvDate);
+            }
+
+            // Image1 and Image2
+            if(isset($image1_cvsetting)){
+                if($image1_cvsetting->status == 1 && $image1_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image1_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image1_cvsetting->filename;
+                    }else{
+                        $image1_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image1_cvsetting->filename);                    
+                    }
+
+                    $image1_cvsettingext = pathinfo($image1_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image1_cvsettingpath,$image1_cvsetting->x_axis, $image1_cvsetting->y_axis, $image1_cvsetting->width, '',$image1_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image2_cvsetting)){
+                if($image2_cvsetting->status == 1 && $image2_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image2_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image2_cvsetting->filename;
+                    }else{
+                        $image2_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image2_cvsetting->filename);                    
+                    }
+                    $image2_cvsettingext = pathinfo($image2_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image2_cvsettingpath,$image2_cvsetting->x_axis, $image2_cvsetting->y_axis, $image2_cvsetting->width, '',$image2_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image3_cvsetting)){
+                if($image3_cvsetting->status == 1 && $image3_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image3_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image3_cvsetting->filename;
+                    }else{
+                        $image3_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image3_cvsetting->filename);                    
+                    }
+
+                    $image3_cvsettingext = pathinfo($image3_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image3_cvsettingpath,$image3_cvsetting->x_axis, $image3_cvsetting->y_axis, $image3_cvsetting->width, '',$image3_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image4_cvsetting)){
+                if($image4_cvsetting->status == 1 && $image4_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image4_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image4_cvsetting->filename;
+                    }else{
+                        $image4_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image4_cvsetting->filename);                    
+                    }
+
+                    $image4_cvsettingext = pathinfo($image4_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image4_cvsettingpath,$image4_cvsetting->x_axis, $image4_cvsetting->y_axis, $image4_cvsetting->width, '',$image4_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image5_cvsetting)){
+                if($image5_cvsetting->status == 1 && $image5_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image5_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image5_cvsetting->filename;
+                    }else{
+                        $image5_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image5_cvsetting->filename);                    
+                    }
+
+                    $image5_cvsettingext = pathinfo($image5_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image5_cvsettingpath,$image5_cvsetting->x_axis, $image5_cvsetting->y_axis, $image5_cvsetting->width, '',$image5_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            // Text1, Text2, Text3, Text4,
+            if (isset($text1_cvsetting)) {
+                if($text1_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text1_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text1popinsfont = TCPDF_FONTS::addTTFfont($text1popins,'','',32);
+
+                if($text1_cvsetting->font_family == 'none'){
+                    $text1fonttype = "";
+                }else{
+                    $text1fonttype = $text1_cvsetting->font_family;
+                }
+
+                if($text1_cvsetting->font_size != ''){
+                    $text1fontsize = $text1_cvsetting->font_size;
+                }else{
+                    $text1fontsize = '11';
+                }
+
+                PDF::SetFont($text1popinsfont,$text1fonttype, $text1fontsize,'',false);
+                if($text1_cvsetting->font_color != ''){
+                    $text1fontcolor = explode(",",$text1_cvsetting->font_color);
+                    PDF::SetTextColor($text1fontcolor[0],$text1fontcolor[1],$text1fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text1_cvsetting->x_axis,$text1_cvsetting->y_axis);
+                PDF::Cell(0,0,$text1_cvsetting->text_desc);
+
+            }
+
+            if (isset($text2_cvsetting)) {
+                if($text2_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text2_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text2popinsfont = TCPDF_FONTS::addTTFfont($text2popins,'','',32);
+
+                if($text2_cvsetting->font_family == 'none'){
+                    $text2fonttype = "";
+                }else{
+                    $text2fonttype = $text2_cvsetting->font_family;
+                }
+
+                if($text2_cvsetting->font_size != ''){
+                    $text2fontsize = $text2_cvsetting->font_size;
+                }else{
+                    $text2fontsize = '11';
+                }
+
+                PDF::SetFont($text2popinsfont,$text2fonttype, $text2fontsize,'',false);
+                if($text2_cvsetting->font_color != ''){
+                    $text2fontcolor = explode(",",$text2_cvsetting->font_color);
+                    PDF::SetTextColor($text2fontcolor[0],$text2fontcolor[1],$text2fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text2_cvsetting->x_axis,$text2_cvsetting->y_axis);
+                PDF::Cell(0,0,$text2_cvsetting->text_desc);
+
+            }
+
+            if (isset($text3_cvsetting)) {
+                if($text3_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text3_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text3popinsfont = TCPDF_FONTS::addTTFfont($text3popins,'','',32);
+
+                if($text3_cvsetting->font_family == 'none'){
+                    $text3fonttype = "";
+                }else{
+                    $text3fonttype = $text3_cvsetting->font_family;
+                }
+
+                if($text3_cvsetting->font_size != ''){
+                    $text3fontsize = $text3_cvsetting->font_size;
+                }else{
+                    $text3fontsize = '11';
+                }
+
+                PDF::SetFont($text3popinsfont,$text3fonttype, $text3fontsize,'',false);
+                if($text3_cvsetting->font_color != ''){
+                    $text3fontcolor = explode(",",$text3_cvsetting->font_color);
+                    PDF::SetTextColor($text3fontcolor[0],$text3fontcolor[1],$text3fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text3_cvsetting->x_axis,$text3_cvsetting->y_axis);
+                PDF::Cell(0,0,$text3_cvsetting->text_desc);
+
+            }
+
+            if (isset($text4_cvsetting)) {
+                if($text4_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text4_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text4popinsfont = TCPDF_FONTS::addTTFfont($text4popins,'','',32);
+
+                if($text4_cvsetting->font_family == 'none'){
+                    $text4fonttype = "";
+                }else{
+                    $text4fonttype = $text4_cvsetting->font_family;
+                }
+
+                if($text4_cvsetting->font_size != ''){
+                    $text4fontsize = $text4_cvsetting->font_size;
+                }else{
+                    $text4fontsize = '11';
+                }
+
+                PDF::SetFont($text4popinsfont,$text4fonttype, $text4fontsize,'',false);
+                if($text4_cvsetting->font_color != ''){
+                    $text4fontcolor = explode(",",$text4_cvsetting->font_color);
+                    PDF::SetTextColor($text4fontcolor[0],$text4fontcolor[1],$text4fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text4_cvsetting->x_axis,$text4_cvsetting->y_axis);
+                PDF::Cell(0,0,$text4_cvsetting->text_desc);
+
+            }
+
+
+            // Partner Images display
+            if(isset($partnerimage1)){
+                if($partnerimage1->status == 1 && $partnerimage1->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image1_partnercvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$partnerimage1->filename;
+                    }else{
+                        $image1_partnercvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$partnerimage1->filename);
+                    }
+
+                    $image1_partnercvsettingext = pathinfo($partnerimage1->filename, PATHINFO_EXTENSION);
+                    PDF::Image($image1_partnercvsettingpath,$partnerimage1->x_axis, $partnerimage1->y_axis, $partnerimage1->width, '',$image1_partnercvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($partnerimage2)){
+                if($partnerimage2->status == 1 && $partnerimage2->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image2_partnercvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$partnerimage2->filename;
+                    }else{
+                        $image2_partnercvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$partnerimage2->filename);
+                    }
+
+                    $image1_partnercvsettingext = pathinfo($partnerimage2->filename, PATHINFO_EXTENSION);
+                    PDF::Image($image2_partnercvsettingpath,$partnerimage2->x_axis, $partnerimage2->y_axis, $partnerimage2->width, '',$image1_partnercvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            // Profile and fullsize Photo
+            if ($post->photo_file != '') {
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $photfilepath = base_path().'/public/admin/assets/images/candidate/'.$post->photo_file;
+                }else{
+                    $photfilepath = base_path('public_html/admin/assets/images/candidate/'.$post->photo_file);                
+                }
+
+                $photext = pathinfo($post->photo_file, PATHINFO_EXTENSION);
+
+                if(isset($photo_cvsetting)){
+                    PDF::Image($photfilepath,$photo_cvsetting->x_axis,$photo_cvsetting->y_axis,'50','54',$photext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+            if ($post->cv_file != '') {
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $fullsizepath = base_path().'/public/admin/assets/images/candidate/'.$post->cv_file;
+                }else{
+                    $fullsizepath = base_path('public_html/admin/assets/images/candidate/'.$post->cv_file);                  
+                }
+                
+                $fullsizeext = pathinfo($post->cv_file, PATHINFO_EXTENSION);
+
+                if(isset($fullsize_cvsetting)){
+                    PDF::Image($fullsizepath,$fullsize_cvsetting->x_axis, $fullsize_cvsetting->y_axis, '', '',$fullsizeext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+            // Reference No
+            if (isset($reference_no_cvsetting)) {
+                // if($reference_no_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                //     }
+                // }elseif($reference_no_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                //     }
+
+                // }
+
+                if($reference_no_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+                $refrenceNopopinsfont = TCPDF_FONTS::addTTFfont($refrenceNopopins,'','',32);
+
+                if($reference_no_cvsetting->font_family == 'none'){
+                    $refereneceFont = "";
+                }else{
+                    $refereneceFont = $reference_no_cvsetting->font_family;
+                }
+
+                if($reference_no_cvsetting->font_size != ''){
+                    $refrenceNoFontsize = $reference_no_cvsetting->font_size;
+                }else{
+                    $refrenceNoFontsize = '11';
+                }
+
+                PDF::SetFont($refrenceNopopinsfont,$refereneceFont, $refrenceNoFontsize,'',false);
+                if($reference_no_cvsetting->font_color != ''){
+                    $refnofontcolor = explode(",",$reference_no_cvsetting->font_color);
+                    PDF::SetTextColor($refnofontcolor[0],$refnofontcolor[1],$refnofontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+
+                PDF::SetXY($reference_no_cvsetting->x_axis,$reference_no_cvsetting->y_axis);
+                // $disrefno = 'Reference No: '.$post->id.' : رقم المرجع';
+                $disrefno = 'رقم المرجع : '.$post->id.' :No Reference';
+            
+
+                // dd($disrefno);
+                PDF::Cell(0,0,$disrefno);
+            }
+            // Gulf experience and occupation
+            // if(isset($gulf_experience_cvsetting)){
+            //     if($gulf_experience_cvsetting->font_family == 'B'){
+            //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+            //             $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+            //         }else{
+            //             $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                    
+            //         }
+            //     }else{
+            //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+            //             $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+            //         }else{
+            //             $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+            //         }
+            //     }
+            //     $gulf_experience_arabic_font = TCPDF_FONTS::addTTFfont($gulf_experience_arabic,'','',32);
+
+            //     if($gulf_experience_cvsetting->font_family == 'none'){
+            //         $gulfexpFont = "";
+            //     }else{
+            //         $gulfexpFont = $gulf_experience_cvsetting->font_family;
+            //     }
+
+            //     if($gulf_experience_cvsetting->font_size != ''){
+                
+            //         $gulfexpFontsize = $gulf_experience_cvsetting->font_size;
+            //     }else{
+            //         $gulfexpFontsize = "11";
+            //     }
+            //     PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+
+            //     if($gulf_experience_cvsetting->font_color != ''){
+            //         $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+            //         PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+            //     }else{
+            //         PDF::SetTextColor(0,0,0);
+            //     }
+
+            //     PDF::SetXY($gulf_experience_cvsetting->x_axis,$gulf_experience_cvsetting->y_axis);
+            //     if($post->gulfexperience == 1){
+            //         $gulfexperience1 = $post->prarname.' قد اشتغل في الهند فقط';
+            //         PDF::Cell(0,0,$gulfexperience1);
+            //     }
+    
+            //     if($post->gulfexperience == 2){
+            //         $gulfexperience2 = $post->prarname.' سبق له العمل';
+            //         PDF::Cell(0,0,$gulfexperience2);
+            //     }
+
+            
+            //     if($post->gulfexperience == 1){
+            //         PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+            //         if($gulf_experience_cvsetting->font_color != ''){
+            //             $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+            //             PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+            //         }else{
+            //             PDF::SetTextColor(0,0,0);
+            //         }
+            //         $gyaxis = $gulf_experience_cvsetting->y_axis + 4;
+            //         PDF::SetXY($gulf_experience_cvsetting->x_axis,$gyaxis);
+            //         PDF::Cell(0,0,'Indian Experience '.$post->pengname);
+            //     }
+
+            //     if($post->gulfexperience == 2){
+            //         PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+            //         if($gulf_experience_cvsetting->font_color != ''){
+            //             $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+            //             PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+            //         }else{
+            //             PDF::SetTextColor(0,0,0);
+            //         }
+            //         $gyaxis = $gulf_experience_cvsetting->y_axis + 4;
+            //         PDF::SetXY($gulf_experience_cvsetting->x_axis,$gyaxis);
+            //         PDF::Cell(0,0,'Ex-Abroad '.$post->pengname);
+            //     }
+
+            // }
+
+            if(isset($gulf_experience_cvsetting)){
+                if($gulf_experience_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($gulf_experience_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+                $gulf_experiencepopinsfont = TCPDF_FONTS::addTTFfont($gulf_experiencepopins,'','',32);
+
+                if($gulf_experience_cvsetting->font_family == 'none'){
+                    $gulf_experiencefonttype = "";
+                }else{
+                    $gulf_experiencefonttype = $gulf_experience_cvsetting->font_family;
+                }
+
+                if($gulf_experience_cvsetting->font_size != ''){
+                    $gulf_experiencefontsize = $gulf_experience_cvsetting->font_size;
+                }else{
+                    $gulf_experiencefontsize = "11";
+                }
+
+                PDF::SetFont($gulf_experiencepopinsfont, $gulf_experiencefonttype, $gulf_experiencefontsize,'',false);
+
+                if($gulf_experience_cvsetting->font_color != ''){
+                    $gulf_experiencefontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+                    PDF::SetTextColor($gulf_experiencefontcolor[0],$gulf_experiencefontcolor[1],$gulf_experiencefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($gulf_experience_cvsetting->x_axis,$gulf_experience_cvsetting->y_axis);
+                if($post->gulfexperience == 1){
+                    $expEng = 'Indian Experience '.$post->pengname;
+                }elseif($post->gulfexperience == 2){
+                    $expEng = 'Ex-Abroad '.$post->pengname;
+                }else{
+                    $expEng = '---';
+                }
+                PDF::Cell(0,0,$expEng);
+
+            }
+
+            if(isset($gulf_experience_arabic_cvsetting)){
+                if($gulf_experience_arabic_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+                $gulf_experience_arabic_font = TCPDF_FONTS::addTTFfont($gulf_experience_arabic,'','',32);
+
+                if($gulf_experience_arabic_cvsetting->font_family == 'none'){
+                    $gulfexpFont = "";
+                }else{
+                    $gulfexpFont = $gulf_experience_arabic_cvsetting->font_family;
+                }
+
+                if($gulf_experience_arabic_cvsetting->font_size != ''){
+                
+                    $gulfexpFontsize = $gulf_experience_arabic_cvsetting->font_size;
+                }else{
+                    $gulfexpFontsize = "11";
+                }
+
+                PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+
+                if($gulf_experience_arabic_cvsetting->font_color != ''){
+                    $gulfexpfontcolor = explode(",",$gulf_experience_arabic_cvsetting->font_color);
+                    PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($gulf_experience_arabic_cvsetting->x_axis,$gulf_experience_arabic_cvsetting->y_axis);
+                if($post->gulfexperience == 1){
+                    $arexp = $post->prarname.' قد اشتغل في الهند فقط';
+                }elseif($post->gulfexperience == 2){
+                    $arexp = $post->prarname.' سبق له العمل';
+                }else{
+                    $arexp = "---";
+                }
+                PDF::Cell(0,0,$arexp);
+            }
+
+
+            // Expected salary and location
+            if(isset($exp_sal_cvsetting)){
+                if($exp_sal_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($exp_sal_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $expsalpopinsfont = TCPDF_FONTS::addTTFfont($expsalpopins,'','',32);
+
+                if($exp_sal_cvsetting->font_family == 'none'){
+                    $expsalfonttype = "";
+                }else{
+                    $expsalfonttype = $exp_sal_cvsetting->font_family;
+                }
+
+                if($exp_sal_cvsetting->font_size != ''){
+                    $expsalfontsize = $exp_sal_cvsetting->font_size;
+                }else{
+                    $expsalfontsize = "11";
+                }
+
+                PDF::SetFont($expsalpopinsfont, $expsalfonttype, $expsalfontsize,'',false);
+                if($exp_sal_cvsetting->font_color != ''){
+                    $expsalfontcolor = explode(",",$exp_sal_cvsetting->font_color);
+                    PDF::SetTextColor($expsalfontcolor[0],$expsalfontcolor[1],$expsalfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($exp_sal_cvsetting->x_axis,$exp_sal_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->exp_sal);
+            }
+
+            if(isset($expwp_id_cvsetting)){
+                if($expwp_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($expwp_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+
+                $expwppopinsfont = TCPDF_FONTS::addTTFfont($expwppopins,'','',32);
+
+                if($expwp_id_cvsetting->font_family == 'none'){
+                    $expwpfonttype = "";
+                }else{
+                    $expwpfonttype = $expwp_id_cvsetting->font_family;
+                }
+
+                if($expwp_id_cvsetting->font_size != ''){
+                    $expwpfontsize = $expwp_id_cvsetting->font_size;
+                }else{
+                    $expwpfontsize = "11";
+                }
+
+                PDF::SetFont($expwppopinsfont, $expwpfonttype, $expwpfontsize,'',false);
+                if($expwp_id_cvsetting->font_color != ''){
+                    $expwpfontcolor = explode(",",$expwp_id_cvsetting->font_color);
+                    PDF::SetTextColor($expwpfontcolor[0],$expwpfontcolor[1],$expwpfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($expwp_id_cvsetting->x_axis,$expwp_id_cvsetting->y_axis);
+                PDF::Cell(0,0,implode(",",$exp_wp));
+            }
+
+            // Age
+            if(isset($age_cvsetting)){
+                if($age_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $agepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+
+                }elseif($age_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $agepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $agepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+
+                $agepopinsfont = TCPDF_FONTS::addTTFfont($agepopins,'','',32);
+
+                if($age_cvsetting->font_family == 'none'){
+                    $agefonttype = "";
+                }else{
+                    $agefonttype = $age_cvsetting->font_family;
+                }
+
+                if($age_cvsetting->font_size != ''){
+                    $agefontsize = $age_cvsetting->font_size;
+                }else{
+                    $agefontsize = "11";
+                }
+
+                PDF::SetFont($agepopinsfont, $agefonttype, $agefontsize,'',false);
+                if($age_cvsetting->font_color != ''){
+                    $agefontcolor = explode(",",$age_cvsetting->font_color);
+                    PDF::SetTextColor($agefontcolor[0],$agefontcolor[1],$agefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($age_cvsetting->x_axis,$age_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->age);
+
+            }
+            // Marital
+            if(isset($marital_status_cvsetting)){
+                if($marital_status_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $maritalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($marital_status_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $maritalpopins = base_path('public_html/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $maritalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $maritalpopinsfont = TCPDF_FONTS::addTTFfont($maritalpopins,'','',32);
+
+
+                if($marital_status_cvsetting->font_family == 'none'){
+                    $mariedfonttype = "";
+                }else{
+                    $mariedfonttype = $marital_status_cvsetting->font_family;
+                }
+
+                if($marital_status_cvsetting->font_size != ''){
+                    $mariedfontsize = $marital_status_cvsetting->font_size;
+                }else{
+                    $mariedfontsize = "11";                
+                }
+
+                PDF::SetFont($maritalpopinsfont, $mariedfonttype, $mariedfontsize,'',false);
+                if($marital_status_cvsetting->font_color != ''){
+                    $marital_statusfontcolor = explode(",",$marital_status_cvsetting->font_color);
+                    PDF::SetTextColor($marital_statusfontcolor[0],$marital_statusfontcolor[1],$marital_statusfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($marital_status_cvsetting->x_axis,$marital_status_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->marital_status);
+                
+            }
+            // Religion
+            if(isset($religion_cvsetting)){
+                // if($religion_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                //     }
+                // }elseif($religion_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                //     }
+                // }
+    
+
+                if($religion_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $religionpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $religionpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $religionpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $religionpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+
+                $religionpopinsfont = TCPDF_FONTS::addTTFfont($religionpopins,'','',32);
+
+                if($religion_cvsetting->font_family == 'none'){
+                    $relfonttype = "";
+                }else{
+                    $relfonttype = $religion_cvsetting->font_family;
+                }
+
+                if($religion_cvsetting->font_size != ''){
+                    $relfontsize = $religion_cvsetting->font_size;
+                }else{
+                    $relfontsize = "11";
+                }
+
+                PDF::SetFont($religionpopinsfont, $relfonttype, $relfontsize,'',false);
+                if($religion_cvsetting->font_color != ''){
+                    $religionfontcolor = explode(",",$religion_cvsetting->font_color);
+                    PDF::SetTextColor($religionfontcolor[0],$religionfontcolor[1],$religionfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($religion_cvsetting->x_axis,$religion_cvsetting->y_axis);
+                if($post->religion != '' && $post->religion == 'Muslim'){
+                    PDF::Cell(0,0,$post->religion.' مسلم');
+                }
+                if($post->religion != '' && $post->religion != 'Muslim'){
+                    PDF::Cell(0,0,$post->religion.'  غير مسلم');
+                }
+
+
+            }
+
+            // Date of Birth
+            if(isset($dob_cvsetting)){
+
+                if($dob_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $dobpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($dob_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $dobpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $dobpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $dobpopinsfont = TCPDF_FONTS::addTTFfont($dobpopins,'','',32);
+
+                if($dob_cvsetting->font_family == 'none'){
+                    $dobfonttype = "";
+                }else{
+                    $dobfonttype = $dob_cvsetting->font_family;
+                }
+
+                if($dob_cvsetting->font_size != ''){
+                    $dobfontsize = $dob_cvsetting->font_size;
+                }else{
+                    $dobfontsize = "11";
+                }
+
+                PDF::SetFont($dobpopinsfont, $dobfonttype, $dobfontsize,'',false);
+                if($dob_cvsetting->font_color != ''){
+                    $dobfontcolor = explode(",",$dob_cvsetting->font_color);
+                    PDF::SetTextColor($dobfontcolor[0],$dobfontcolor[1],$dobfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($dob_cvsetting->x_axis,$dob_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->dob)));
+
+            }
+            // Place of Birth
+            if(isset($plb_id_cvsetting)){
+                if($plb_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $plb_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($plb_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $plb_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $plb_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $plb_idpopinsfont = TCPDF_FONTS::addTTFfont($plb_idpopins,'','',32);
+
+                if($plb_id_cvsetting->font_family == 'none'){
+                    $plb_idfonttype = "";
+                }else{
+                    $plb_idfonttype = $plb_id_cvsetting->font_family;
+                }
+
+                if($plb_id_cvsetting->font_size != ''){
+                    $plb_idfontsize = $plb_id_cvsetting->font_size;
+                }else{
+                    $plb_idfontsize = "11";
+                }
+
+                PDF::SetFont($plb_idpopinsfont, $plb_idfonttype, $plb_idfontsize,'',false);
+                if($plb_id_cvsetting->font_color != ''){
+                    $plb_idfontcolor = explode(",",$plb_id_cvsetting->font_color);
+                    PDF::SetTextColor($plb_idfontcolor[0],$plb_idfontcolor[1],$plb_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($plb_id_cvsetting->x_axis,$plb_id_cvsetting->y_axis);
+                // PDF::Cell(0,0,$post->plbname);
+                PDF::Cell(0,0,$post->plb_text);
+            }
+            // Nationality
+            if(isset($nation_id_cvsetting)){
+
+                // if($nation_id_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                //     }
+                // }elseif($nation_id_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                //     }
+                
+                // }
+                
+                if($nation_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+                $nation_idpopinsfont = TCPDF_FONTS::addTTFfont($nation_idpopins,'','',32);
+
+                if($nation_id_cvsetting->font_family == 'none'){
+                    $nation_idfonttype = "";
+                }else{
+                    $nation_idfonttype = $nation_id_cvsetting->font_family;
+                }
+
+                if($nation_id_cvsetting->font_size != ''){
+
+                    $nation_idfontsize = $nation_id_cvsetting->font_size;
+                }else{
+                    $nation_idfontsize = "11";
+                }
+
+                PDF::SetFont($nation_idpopinsfont, $nation_idfonttype, $nation_idfontsize,'',false);
+                if($nation_id_cvsetting->font_color != ''){
+                    $nation_idfontcolor = explode(",",$nation_id_cvsetting->font_color);
+                    PDF::SetTextColor($nation_idfontcolor[0],$nation_idfontcolor[1],$nation_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($nation_id_cvsetting->x_axis,$nation_id_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->nationname.'  '.$post->nationarname);
+
+                
+            }
+            // Region
+            if(isset($region_id_cvsetting)){
+
+                if($region_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $regionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($region_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $regionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $regionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+
+                $regionpopinsfont = TCPDF_FONTS::addTTFfont($regionpopins,'','',32);
+
+                if($region_id_cvsetting->font_family == 'none'){
+                    $region_idfonttype = "";
+                }else{
+                    $region_idfonttype = $region_id_cvsetting->font_family;
+                }
+
+                if($region_id_cvsetting->font_size != ''){
+                    $region_idfonttype = $region_id_cvsetting->font_size;
+                }else{
+                    $region_idfonttype = "11";
+                }
+
+                PDF::SetFont($regionpopinsfont, $region_idfonttype, $region_idfonttype,'',false);
+                if($region_id_cvsetting->font_color != ''){
+                    $region_idfontcolor = explode(",",$region_id_cvsetting->font_color);
+                    PDF::SetTextColor($region_idfontcolor[0],$region_idfontcolor[1],$region_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($region_id_cvsetting->x_axis,$region_id_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->regionname);
+            }
+
+            // Education
+            if(isset($education_cvsetting)){
+
+                if($education_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $educationpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($education_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $educationpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $educationpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $educationpopinsfont = TCPDF_FONTS::addTTFfont($educationpopins,'','',32);
+
+                if($education_cvsetting->font_family == 'none'){
+                    $educationfonttype = "";
+                }else{
+                    $educationfonttype = $education_cvsetting->font_family;
+                }
+
+                if($education_cvsetting->font_size != ''){
+                    $educationfontsize = $education_cvsetting->font_size;
+                }else{
+                    $educationfontsize = "11";
+                }
+
+                PDF::SetFont($educationpopinsfont, $educationfonttype, $educationfontsize,'',false);
+                if($education_cvsetting->font_color != ''){
+                    $educationfontcolor = explode(",",$education_cvsetting->font_color);
+                    PDF::SetTextColor($educationfontcolor[0],$educationfontcolor[1],$educationfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($education_cvsetting->x_axis,$education_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->educname);
+
+            }
+            
+            // Language
+            if(isset($lang_known_cvsetting)){
+
+                if($lang_known_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $langknownpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($lang_known_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $langknownpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $langknownpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $langknownpopinsfont = TCPDF_FONTS::addTTFfont($langknownpopins,'','',32);
+
+                if($lang_known_cvsetting->font_family == 'none'){
+                    $lang_knownfonttype = "";
+                }else{
+                    $lang_knownfonttype = $lang_known_cvsetting->font_family;
+                }
+
+                if($lang_known_cvsetting->font_size != ''){
+                    $lang_knownfontsize = $lang_known_cvsetting->font_size;
+                }else{
+                    $lang_knownfontsize = "11";
+                }
+
+                PDF::SetFont($langknownpopinsfont, $lang_knownfonttype, $lang_knownfontsize,'',false);
+                if($lang_known_cvsetting->font_color != ''){
+                    $lang_knownfontcolor = explode(",",$lang_known_cvsetting->font_color);
+                    PDF::SetTextColor($lang_knownfontcolor[0],$lang_knownfontcolor[1],$lang_knownfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($lang_known_cvsetting->x_axis,$lang_known_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->lang_known);
+
+            }
+            // Google Map
+            if(isset($google_map_cvsetting)){
+
+                if($google_map_cvsetting->font_family == 'none'){
+                    $google_mapfonttype = "";
+                }else{
+                    $google_mapfonttype = $google_map_cvsetting->font_family;
+                }
+
+                if($google_map_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $google_map_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $google_map_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $google_map_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $google_map_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }    
+                }
+
+                $google_map_arabic_font = TCPDF_FONTS::addTTFfont($google_map_arabic,'','',32);
+
+                if($google_map_cvsetting->font_size != ''){
+                    $google_mapfontsize = $google_map_cvsetting->font_size;
+                }else{
+                    $google_mapfontsize = "11";
+                }
+
+                if($post->google_map == 1){
+                    $gmap = "Yes  نعم";
+                }else{
+                    $gmap = "No  لا";
+                }
+
+                PDF::SetFont($google_map_arabic_font, $google_mapfonttype, $google_mapfontsize,'',false);
+                if($google_map_cvsetting->font_color != ''){
+                    $google_mapfontcolor = explode(",",$google_map_cvsetting->font_color);
+                    PDF::SetTextColor($google_mapfontcolor[0],$google_mapfontcolor[1],$google_mapfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($google_map_cvsetting->x_axis,$google_map_cvsetting->y_axis);
+                PDF::Cell(0,0,$gmap);
+
+            }
+            // Vehical
+            if(isset($carknown_id_cvsetting)){
+
+                if($carknown_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $carknown_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($carknown_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $carknown_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $carknown_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }    
+                }
+
+                $carknown_idpopinsfont = TCPDF_FONTS::addTTFfont($carknown_idpopins,'','',32);
+
+                if($carknown_id_cvsetting->font_family == 'none'){
+                    $carknown_idfonttype = "";
+                }else{
+                    $carknown_idfonttype = $carknown_id_cvsetting->font_family;
+                }
+
+                if($carknown_id_cvsetting->font_size != ''){
+                    $carknown_idfontsize = $carknown_id_cvsetting->font_size;
+                }else{
+                    $carknown_idfontsize = "11";
+                }
+
+                PDF::SetFont($carknown_idpopinsfont, $carknown_idfonttype, $carknown_idfontsize,'',false);
+                if($carknown_id_cvsetting->font_color != ''){
+                    $carknown_idfontcolor = explode(",",$carknown_id_cvsetting->font_color);
+                    PDF::SetTextColor($carknown_idfontcolor[0],$carknown_idfontcolor[1],$carknown_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($carknown_id_cvsetting->x_axis,$carknown_id_cvsetting->y_axis);
+                PDF::Cell(0,0,implode(",",$carlist));
+            }
+
+            // Work Experience
+            $cexperience = explode(",",$post->experience);
+            $cprofessions = explode(",",$post->proff_id);
+            $cexpcountry = explode(",",$post->expcountry_id);
+            // $cexpcity = explode(",",$post->expcity_id);
+            $cexpcitytext = explode(",",$post->expcity_id_text);
+
+            $iec = 0;
+            $iprof = 0;
+            $icont = 0;
+            // $icity = 0;
+            $icitytext = 0;
+            $icco = 0;
+
+
+            foreach($cexperience as $index => $value){
+
+                // Job
+                
+                if(isset($proff_id_cvsetting)){
+                    $py_axis = $proff_id_cvsetting->y_axis + $iprof;
+
+                    if($proff_id_cvsetting->font_family == 'none'){
+                        $proff_idfonttype = "";
+                    }else{
+                        $proff_idfonttype = $proff_id_cvsetting->font_family;
+                    }
+                    
+                    if($proff_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $proff_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                        }
+
+                    }elseif($proff_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $proff_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                        
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $proff_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+                    }
+
+                    $proff_idpopinsfont = TCPDF_FONTS::addTTFfont($proff_idpopins,'','',32);
+
+                    if($proff_id_cvsetting->font_size != ''){
+                        $proff_idfontsize = $proff_id_cvsetting->font_size;
+                    }else{
+                        $proff_idfontsize = "11";
+                    }
+                    $professionF = Profession::find($cprofessions[$index]);
+                    PDF::SetFont($proff_idpopinsfont, $proff_idfonttype, $proff_idfontsize,'',false);
+
+                    if($proff_id_cvsetting->font_color != ''){
+                        $proff_idfontcolor = explode(",",$proff_id_cvsetting->font_color);
+                        PDF::SetTextColor($proff_idfontcolor[0],$proff_idfontcolor[1],$proff_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+                    PDF::SetXY($proff_id_cvsetting->x_axis,$py_axis);
+                    if(isset($professionF)){
+                        PDF::Cell(0,0,$professionF->eng_name);
+                    }
+
+                    $iprof = $iprof + $proff_id_cvsetting->add_y_axis;
+                }
+                // Country
+                if(isset($expcountry_id_cvsetting)){
+                    $cony_axis = $expcountry_id_cvsetting->y_axis + $icont;
+
+                    if($expcountry_id_cvsetting->font_family == 'none'){
+                        $expcountry_idfonttype = "";
+                    }else{
+                        $expcountry_idfonttype = $expcountry_id_cvsetting->font_family;
+                    }
+
+                    if($expcountry_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                        }
+
+                    }elseif($expcountry_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                        
+                        }
+                    }
+
+                    $expcountry_idpopinsfont = TCPDF_FONTS::addTTFfont($expcountry_idpopins,'','',32);
+
+                    if($expcountry_id_cvsetting->font_size != ''){
+                        $expcountry_idfontsize = $expcountry_id_cvsetting->font_size;
+                    }else{
+                        $expcountry_idfontsize = "11";
+                    }
+
+                    $countryF = Country::find($cexpcountry[$index]);
+                    PDF::SetFont($expcountry_idpopinsfont, $expcountry_idfonttype, $expcountry_idfontsize,'',false);
+                    if($expcountry_id_cvsetting->font_color != ''){
+                        $expcountry_idfontcolor = explode(",",$expcountry_id_cvsetting->font_color);
+                        PDF::SetTextColor($expcountry_idfontcolor[0],$expcountry_idfontcolor[1],$expcountry_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($expcountry_id_cvsetting->x_axis,$cony_axis);
+                    if(isset($countryF)){
+                        PDF::Cell(0,0,$countryF->name);
+                    }
+
+
+                    $icont = $icont + $expcountry_id_cvsetting->add_y_axis;
+                }
+                // City
+                // if(isset($expcity_id_cvsetting)){
+                //     $cit_axis = $expcity_id_cvsetting->y_axis + $icity;
+
+                //     if($expcity_id_cvsetting->font_family == 'none'){
+                //         $expcity_idfonttype = "";
+                //     }else{
+                //         $expcity_idfonttype = $expcity_id_cvsetting->font_family;
+                //     }
+
+                //     if($expcity_id_cvsetting->font_family == 'B'){
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                //         }
+                //     }elseif($expcity_id_cvsetting->font_family == 'I'){
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //         }
+                //     }else{
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                //         }
+                //     }
+
+                //     $expcity_idpopinsfont = TCPDF_FONTS::addTTFfont($expcity_idpopins,'','',32);
+
+                //     if($expcity_id_cvsetting->font_size != ''){
+                //         $expcity_idfontsize = $expcity_id_cvsetting->font_size;
+                //     }else{
+                //         $expcity_idfontsize = "11";
+                //     }
+
+                //     $cityF = City::find($cexpcity[$index]);
+                //     PDF::SetFont($expcity_idpopinsfont, $expcity_idfonttype, $expcity_idfontsize,'',false);
+                //     if($expcity_id_cvsetting->font_color != ''){
+                //         $expcity_idfontcolor = explode(",",$expcity_id_cvsetting->font_color);
+                //         PDF::SetTextColor($expcity_idfontcolor[0],$expcity_idfontcolor[1],$expcity_idfontcolor[2]);
+                //     }else{
+                //         PDF::SetTextColor(0,0,0);
+                //     }
+                //     PDF::SetXY($expcity_id_cvsetting->x_axis,$cit_axis);
+                //     if(isset($cityF)){
+                //         PDF::Cell(0,0,$cityF->name);
+                //     }
+
+
+                //     $icity = $icity + $expcity_id_cvsetting->add_y_axis;
+
+                // }
+
+                // City Text
+                if(isset($expcity_id_cvsetting)){
+                    $cit_axis = $expcity_id_cvsetting->y_axis + $icitytext;
+
+                    if($expcity_id_cvsetting->font_family == 'none'){
+                        $expcity_idfonttype = "";
+                    }else{
+                        $expcity_idfonttype = $expcity_id_cvsetting->font_family;
+                    }
+
+                    if($expcity_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                        }
+                    }elseif($expcity_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+                    }
+
+                    $expcity_idpopinsfont = TCPDF_FONTS::addTTFfont($expcity_idpopins,'','',32);
+
+                    if($expcity_id_cvsetting->font_size != ''){
+                        $expcity_idfontsize = $expcity_id_cvsetting->font_size;
+                    }else{
+                        $expcity_idfontsize = "11";
+                    }
+
+                    
+                    PDF::SetFont($expcity_idpopinsfont, $expcity_idfonttype, $expcity_idfontsize,'',false);
+                    if($expcity_id_cvsetting->font_color != ''){
+                        $expcity_idfontcolor = explode(",",$expcity_id_cvsetting->font_color);
+                        PDF::SetTextColor($expcity_idfontcolor[0],$expcity_idfontcolor[1],$expcity_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($expcity_id_cvsetting->x_axis,$cit_axis);
+                    if(count($cexpcitytext) > $icco){
+                        PDF::Cell(0,0,$cexpcitytext[$index]);
+                    }
+
+
+                    $icitytext = $icitytext + $expcity_id_cvsetting->add_y_axis;
+
+                }
+
+                // Experience
+                if(isset($experience_cvsetting)){
+                    $ey_axis = $experience_cvsetting->y_axis + $iec;
+
+                    if($experience_cvsetting->font_family == 'none'){
+                        $experiencefonttype = "";
+                    }else{
+                        $experiencefonttype = $experience_cvsetting->font_family;
+                    }
+
+                    if($experience_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                        }
+                    }elseif($experience_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                        
+                        }
+                    }
+
+                    $experiencepopinsfont = TCPDF_FONTS::addTTFfont($experiencepopins,'','',32);
+
+                    if($experience_cvsetting->font_size != ''){
+                        $experiencefontsize = $experience_cvsetting->font_size;
+                    }else{
+                        $experiencefontsize = "11";
+                    }
+
+                    PDF::SetFont($experiencepopinsfont, $experiencefonttype, $experiencefontsize,'',false);
+                    if($experience_cvsetting->font_color != ''){
+                        $experiencefontcolor = explode(",",$experience_cvsetting->font_color);
+                        PDF::SetTextColor($experiencefontcolor[0],$experiencefontcolor[1],$experiencefontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($experience_cvsetting->x_axis,$ey_axis);
+                    PDF::Cell(0,0,$value.' Years');
+
+                    $iec = $iec + $experience_cvsetting->add_y_axis;
+
+                }
+
+                $icco++;
+            }
+
+            // Passport No
+            if(isset($pass_no_cvsetting)){
+
+                if($pass_no_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $pass_nopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($pass_no_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $pass_nopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $pass_nopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $pass_nopopinsfont = TCPDF_FONTS::addTTFfont($pass_nopopins,'','',32);
+
+                if($pass_no_cvsetting->font_family == 'none'){
+                    $pass_nofonttype = "";
+                }else{
+                    $pass_nofonttype = $pass_no_cvsetting->font_family;
+                }
+
+                if($pass_no_cvsetting->font_size != ''){
+                    $pass_nofontsize = $pass_no_cvsetting->font_size;
+    
+                }else{
+                    $pass_nofontsize = "11";               
+                }
+
+                PDF::SetFont($pass_nopopinsfont, $pass_nofonttype, $pass_nofontsize,'',false);
+                if($pass_no_cvsetting->font_color != ''){
+                    $pass_nofontcolor = explode(",",$pass_no_cvsetting->font_color);
+                    PDF::SetTextColor($pass_nofontcolor[0],$pass_nofontcolor[1],$pass_nofontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($pass_no_cvsetting->x_axis,$pass_no_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->pass_no);
+            }
+            // Passport Type
+            if(isset($pass_type_cvsetting)){
+                if($pass_type_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $pass_typepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($pass_type_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $pass_typepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $pass_typepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $pass_typepopinsfont = TCPDF_FONTS::addTTFfont($pass_typepopins,'','',32);
+
+                if($pass_type_cvsetting->font_family == 'none'){
+                    $pass_typefonttype = "";
+                }else{
+                    $pass_typefonttype = $pass_type_cvsetting->font_family;
+                }
+
+                if($pass_type_cvsetting->font_size != ''){
+                    $pass_typefontsize = $pass_type_cvsetting->font_size;
+    
+                }else{
+                    $pass_typefontsize = "11";                
+                }
+
+                PDF::SetFont($pass_typepopinsfont, $pass_typefonttype, $pass_typefontsize,'',false);
+                if($pass_type_cvsetting->font_color != ''){
+                    $pass_typefontcolor = explode(",",$pass_type_cvsetting->font_color);
+                    PDF::SetTextColor($pass_typefontcolor[0],$pass_typefontcolor[1],$pass_typefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($pass_type_cvsetting->x_axis,$pass_type_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->pass_type);
+            }
+            // Date of issue
+            if(isset($doi_cvsetting)){
+
+                if($doi_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $doipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($doi_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $doipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $doipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $doipopinsfont = TCPDF_FONTS::addTTFfont($doipopins,'','',32);
+
+                if($doi_cvsetting->font_family == 'none'){
+                    $doifonttype = "";
+                }else{
+                    $doifonttype = $doi_cvsetting->font_family;
+                }
+
+                if($doi_cvsetting->font_size != ''){
+                    $doifontsize = $doi_cvsetting->font_size;
+    
+                }else{
+                    $doifontsize = "11";
+                }
+
+                PDF::SetFont($doipopinsfont, $doifonttype, $doifontsize,'',false);
+                if($doi_cvsetting->font_color != ''){
+                    $doifontcolor = explode(",",$doi_cvsetting->font_color);
+                    PDF::SetTextColor($doifontcolor[0],$doifontcolor[1],$doifontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($doi_cvsetting->x_axis,$doi_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->doi)));
+            }
+            // Date of expiry
+            if(isset($doe_cvsetting)){
+                if($doe_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $doepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($doe_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $doepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $doepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $doepopinsfont = TCPDF_FONTS::addTTFfont($doepopins,'','',32);
+
+                if($doe_cvsetting->font_family == 'none'){
+                    $doefonttype = "";
+                }else{
+                    $doefonttype = $doe_cvsetting->font_family;
+                }
+
+                if($doe_cvsetting->font_size != ''){
+                    $doefontsize = $doe_cvsetting->font_size;
+                }else{
+                    $doefontsize = "11";
+                }
+
+                PDF::SetFont($doepopinsfont, $doefonttype, $doefontsize,'',false);
+                if($doe_cvsetting->font_color != ''){
+                    $doefontcolor = explode(",",$doe_cvsetting->font_color);
+                    PDF::SetTextColor($doefontcolor[0],$doefontcolor[1],$doefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($doe_cvsetting->x_axis,$doe_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->doe)));
+            }
+            // Place of Issue
+            if(isset($poi_cvsetting)){
+                if($poi_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $poipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($poi_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $poipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $poipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $poipopinsfont = TCPDF_FONTS::addTTFfont($poipopins,'','',32);
+
+                if($poi_cvsetting->font_family == 'none'){
+                    $poifonttype = "";
+                }else{
+                    $poifonttype = $poi_cvsetting->font_family;
+                }
+
+                if($poi_cvsetting->font_size != ''){
+                    $poifontsize = $poi_cvsetting->font_size;
+    
+                }else{
+                    $poifontsize = "11";
+                }
+
+                PDF::SetFont($poipopinsfont, $poifonttype, $poifontsize,'',false);
+                if($poi_cvsetting->font_color != ''){
+                    $poifontcolor = explode(",",$poi_cvsetting->font_color);
+                    PDF::SetTextColor($poifontcolor[0],$poifontcolor[1],$poifontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($poi_cvsetting->x_axis,$poi_cvsetting->y_axis);
+                // PDF::Cell(0,0,$post->poiname);
+                PDF::Cell(0,0,$post->poi_text);
+            }
+
+            PDF::AddPage();
+            // Default fonts set
+
+            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                $sansarabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                $filecand_pepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+            }else{
+                $filecand_pepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                $sansarabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');            
+            }
+
+            // $tajawalfont = TCPDF_FONTS::addTTFfont($tajawal,'','',32); 
+            $sansarabicfont = TCPDF_FONTS::addTTFfont($sansarabic,'','',32);
+            $filecand_pepopinsfont = TCPDF_FONTS::addTTFfont($filecand_pepopins,'','',32);
+
+            if($post->pass_file != ''){
+                // Passport
+                PDF::SetFont($filecand_pepopinsfont, '', 16);
+                PDF::SetXY(10,10);
+                PDF::Cell(0,0,"Passport Copy:");
+
+                PDF::SetFont($sansarabicfont, '', 16);
+                PDF::SetXY(160,10);
+                PDF::Cell(0,0,"صورة جواز السفر:",0,0,'R');
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $passpath = base_path().'/public/admin/assets/images/candidate/'.$post->pass_file;
+                }else{
+                    $passpath = base_path('public_html/admin/assets/images/candidate/'.$post->pass_file);                
+                }
+
+
+
+                $passext = pathinfo($post->pass_file, PATHINFO_EXTENSION);
+
+                PDF::Image($passpath,30,30, '150', '',$passext,'','',false,'300','',false,false,0,false,false,false);
+            }
+
+            if($post->lic_file != ''){
+                
+                PDF::SetFont($filecand_pepopinsfont, '', 16);
+                PDF::SetXY(10,140);
+                PDF::Cell(0,0,"Driving Licence:");
+
+                PDF::SetFont($sansarabicfont, '', 16);
+                PDF::SetXY(160,140);
+                PDF::Cell(0,0,"رخصة قيادة:",0,0,"R");
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $licpath = base_path().'/public/admin/assets/images/candidate/'.$post->lic_file;
+                }else{
+                    $licpath = base_path('public_html/admin/assets/images/candidate/'.$post->lic_file);                
+                }
+
+                $licext = pathinfo($post->lic_file, PATHINFO_EXTENSION);
+    
+    
+                PDF::Image($licpath,30,160, '150', '',$licext,'','',false,'300','',false,false,0,false,false,false);
+            }
+            ob_end_clean();
+            PDF::Output($post->cand_name.'_cv.pdf');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('pdfError','Something is wrong please check the CV Text format ');
+        }
+    }
+
+    public function singlecvexecutepartner($id,$partner){
+        $post = DB::table('candidates as cand')
+        ->leftJoin('placeofissues as poi','cand.poi','=','poi.id')
+        ->leftJoin('countries as nation','cand.nation_id','=','nation.id')
+        ->leftJoin('regions as region','cand.region_id','region.id')
+        ->leftJoin('cities as candcity','cand.candcity_id','=','candcity.id')
+        ->leftJoin('cities as plb','cand.plb_id','plb.id')
+        ->leftJoin('professions as occupation','cand.jobtype_id','=','occupation.id')
+        ->leftJoin('religions as religion','religion.id','=','cand.religion_id')
+        ->leftJoin('education as educ','cand.education_id','=','educ.id')
+        ->leftJoin('embassies as embassy','cand.embassy_for','=','embassy.id')
+        ->select('cand.*','embassy.embassy as embname','poi.name as poiname','educ.name as educname','nation.name as nationname','nation.arname as nationarname','region.name as regionname','candcity.name as cancityname','plb.name as plbname','occupation.ar_name as prarname','occupation.eng_name as pengname','religion.name as relname','religion.arbname as relarbname')
+        // ->select('cand.*','poi.name as poiname','nation.name as nationname','region.name as regionname','candcity.name as cancityname','plb.name as plbname','occupation.ar_name as prarname','occupation.eng_name as pengname')
+        ->where('cand.id','=',$id)
+        ->first();
+
+        // Car Know List
+        $carkns = Carnknown::wherein('id',explode(",",$post->carknown_id))->get();
+        $carlist = [];
+        if(isset($carkns)){
+            foreach($carkns as $carkn){
+                $carlist [] = $carkn->name;
+            }
+        }else{
+            $carlist [] = "";
+        }
+        // Expected Work place
+        // $expwps = City::wherein('id',explode(",",$post->expwp_id))->get();
+        $expwps = DB::table('expecworkcities')->wherein('id',explode(",",$post->expwp_id))->get();
+        $exp_wp = [];
+        if(isset($expwps)){
+            foreach($expwps as $expwp){
+                $exp_wp [] = $expwp->name;
+            }
+        }else{
+            $exp_wp [] = "";
+        }
+        
+                
+        
+        // Fetch details as per cv setting
+        $cand_name_cvsetting = Cvsetting::where('db_field_name','=','cand_name')->first();
+        $cand_name_ar_cvsetting = Cvsetting::where('db_field_name','=','cand_name_ar')->first();
+        $exp_sal_cvsetting = Cvsetting::where('db_field_name','=','exp_sal')->first();
+        $expwp_id_cvsetting = Cvsetting::where('db_field_name','=','expwp_id')->first();
+        $age_cvsetting = Cvsetting::where('db_field_name','=','age')->first();
+        $marital_status_cvsetting = Cvsetting::where('db_field_name','=','marital_status')->first();
+        $religion_cvsetting = Cvsetting::where('db_field_name','=','religion')->first();
+        $dob_cvsetting = Cvsetting::where('db_field_name','=','dob')->first();
+        $plb_id_cvsetting = Cvsetting::where('db_field_name','=','plb_id')->first();
+        $nation_id_cvsetting = Cvsetting::where('db_field_name','=','nation_id')->first();
+        $region_id_cvsetting = Cvsetting::where('db_field_name','=','region_id')->first();
+        $lang_known_cvsetting = Cvsetting::where('db_field_name','=','lang_known')->first();
+        $google_map_cvsetting = Cvsetting::where('db_field_name','=','google_map')->first();
+        $carknown_id_cvsetting = Cvsetting::where('db_field_name','=','carknown_id')->first();
+        $proff_id_cvsetting = Cvsetting::where('db_field_name','=','proff_id')->first();
+        $experience_cvsetting = Cvsetting::where('db_field_name','=','experience')->first();
+        $expcountry_id_cvsetting = Cvsetting::where('db_field_name','=','expcountry_id')->first();
+        $expcity_id_cvsetting = Cvsetting::where('db_field_name','=','expcity_id')->first();
+        $pass_no_cvsetting = Cvsetting::where('db_field_name','=','pass_no')->first();
+        $pass_type_cvsetting = Cvsetting::where('db_field_name','=','pass_type')->first();
+        $doi_cvsetting = Cvsetting::where('db_field_name','=','doi')->first();
+        $doe_cvsetting = Cvsetting::where('db_field_name','=','doe')->first();
+        $poi_cvsetting = Cvsetting::where('db_field_name','=','poi')->first();
+        $photo_cvsetting = Cvsetting::where('db_field_name','=','photo')->first();
+        $fullsize_cvsetting = Cvsetting::where('db_field_name','=','fullsize')->first();
+        $reference_no_cvsetting = Cvsetting::where('db_field_name','=','reference_no')->first();
+        $gulf_experience_cvsetting = Cvsetting::where('db_field_name','=','gulf_experience')->first();
+        $gulf_experience_arabic_cvsetting = Cvsetting::where('db_field_name','=','gulf_experience_arabic')->first();
+        $remark_cvsetting = Cvsetting::where('db_field_name','=','remark')->first();
+        $created_date_cvsetting = Cvsetting::where('db_field_name','=','created_date')->first();
+        $education_cvsetting = Cvsetting::where('db_field_name','=','education')->first();
+        $image1_cvsetting = Cvsetting::where('db_field_name','=','image1')->first();
+        $image2_cvsetting = Cvsetting::where('db_field_name','=','image2')->first();
+        $image3_cvsetting = Cvsetting::where('db_field_name','=','image3')->first();
+        $image4_cvsetting = Cvsetting::where('db_field_name','=','image4')->first();
+        $image5_cvsetting = Cvsetting::where('db_field_name','=','image5')->first();
+        $text1_cvsetting = Cvsetting::where('db_field_name','=','text1')->first();
+        $text2_cvsetting = Cvsetting::where('db_field_name','=','text2')->first();
+        $text3_cvsetting = Cvsetting::where('db_field_name','=','text3')->first();
+        $text4_cvsetting = Cvsetting::where('db_field_name','=','text4')->first();
+
+        $embassyreq_cvsetting =  Cvsetting::where('db_field_name','=','embassy_required')->first();
+        $embassyreq_ar_cvsetting =  Cvsetting::where('db_field_name','=','embassy_required_ar')->first();
+
+        // Partner CV setting
+        $partnerimage1 =  Partnercvsetting::where('partner_id','=',$partner)->where('db_field_name','=','image1')->first();
+        $partnerimage2 =  Partnercvsetting::where('partner_id','=',$partner)->where('db_field_name','=','image2')->first();
+
+
+
+
+        // Base Path Status
+        $basepathSt = Basepathstatus::first();
+                
+        try {
+            // $backfile = base_path().'/public/admin/assets/images/resume/SVG_ONE_FINE_L.svg';
+            // $backfile = base_path().'/public/admin/assets/images/resume/final_cv.pdf';
+            // $backfile = base_path().'/public/admin/assets/images/resume/resumes_format_svg.svg';
+            // $backfile = base_path().'/public/admin/assets/images/resume/SVG3.svg';
+            // $backfile = url('/admin/assets/images/resume/SVG3.svg');
+            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                // $backfile = base_path('public/admin/assets/images/resume/SVG3.svg');
+                $backfile = base_path('public/admin/assets/images/resume/cv_back_15072023.svg');
+            }else{
+                // $backfile = base_path('public_html/admin/assets/images/resume/SVG3.svg');
+                $backfile = base_path('public_html/admin/assets/images/resume/cv_back_15072023.svg');
+            }
+
+
+            PDF::SetCreator('Qamr International');
+            PDF::SetAuthor('Qamr International');
+            PDF::SetTitle($post->cand_name.' CV');
+            PDF::SetSubject($post->cand_name.' CV');
+            PDF::SetKeywords('Qamr, PDF, visa, form, guide');
+
+
+            PDF::AddPage();
+            PDF::ImageSVG($backfile,'','',210,297,'','','',0,false);
+
+            // Candidate Name
+            if (isset($cand_name_cvsetting)) {
+                if($cand_name_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($cand_name_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $candpopinsfont = TCPDF_FONTS::addTTFfont($candpopins,'','',32);
+
+                if($cand_name_cvsetting->font_family == 'none'){
+                    $candfonttype = "";
+                }else{
+                    $candfonttype = $cand_name_cvsetting->font_family;
+                }
+
+                if($cand_name_cvsetting->font_size != ''){
+                    $candfontsize = $cand_name_cvsetting->font_size;
+                }else{
+                    $candfontsize = '11';
+                }
+
+                PDF::SetFont($candpopinsfont,$candfonttype, $candfontsize,'',false);
+                if($cand_name_cvsetting->font_color != ''){
+                    $candfontcolor = explode(",",$cand_name_cvsetting->font_color);
+                    PDF::SetTextColor($candfontcolor[0],$candfontcolor[1],$candfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($cand_name_cvsetting->x_axis,$cand_name_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->cand_name);
+
+            }
+
+            // Candidate Arabic Name
+            if (isset($cand_name_ar_cvsetting)) {
+                if($cand_name_ar_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+                }elseif($cand_name_ar_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+
+
+                }
+                $candarpopinsfont = TCPDF_FONTS::addTTFfont($candarpopins,'','',32);
+
+                if($cand_name_ar_cvsetting->font_family == 'none'){
+                    $candarfonttype = "";
+                }else{
+                    $candarfonttype = $cand_name_ar_cvsetting->font_family;
+                }
+
+                if($cand_name_ar_cvsetting->font_size != ''){
+                    $candarfontsize = $cand_name_ar_cvsetting->font_size;
+                }else{
+                    $candarfontsize = '11';
+                }
+
+                PDF::SetFont($candarpopinsfont,$candarfonttype, $candarfontsize,'',false);
+                if($cand_name_ar_cvsetting->font_color != ''){
+                    $candarfontcolor = explode(",",$cand_name_ar_cvsetting->font_color);
+                    PDF::SetTextColor($candarfontcolor[0],$candarfontcolor[1],$candarfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($cand_name_ar_cvsetting->x_axis,$cand_name_ar_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->arcand_name);
+
+            }
+
+            // Embassy Required
+
+            if (isset($embassyreq_cvsetting)) {
+                if($embassyreq_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($embassyreq_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+
+
+                }
+                $embassypopinsfont = TCPDF_FONTS::addTTFfont($embassypopins,'','',32);
+
+                if($embassyreq_cvsetting->font_family == 'none'){
+                    $embassyfonttype = "";
+                }else{
+                    $embassyfonttype = $embassyreq_cvsetting->font_family;
+                }
+
+                if($embassyreq_cvsetting->font_size != ''){
+                    $embassyfontsize = $embassyreq_cvsetting->font_size;
+                }else{
+                    $embassyfontsize = '11';
+                }
+
+                PDF::SetFont($embassypopinsfont,$embassyfonttype, $embassyfontsize,'',false);
+                if($embassyreq_cvsetting->font_color != ''){
+                    $embassyfontcolor = explode(",",$embassyreq_cvsetting->font_color);
+                    PDF::SetTextColor($embassyfontcolor[0],$embassyfontcolor[1],$embassyfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($embassyreq_cvsetting->x_axis,$embassyreq_cvsetting->y_axis);
+                
+                if($post->embname == 'MUMBAI VISA REQUIRED'){
+                    $visaEmbE = "Required visa under Saudi Embassy Mumbai";
+                }elseif($post->embname == 'DELHI VISA REQUIRED'){
+                    $visaEmbE = "Required visa under Saudi Embassy New Delhi";
+                }else{
+                    $visaEmbE = "";
+                }
+
+                PDF::Cell(0,0,$visaEmbE);
+
+            }
+
+            // Embassy Required Arabic
+
+            if (isset($embassyreq_ar_cvsetting)) {
+                if($embassyreq_ar_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                         $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');
+                    }
+                }elseif($embassyreq_ar_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');
+                    }
+
+
+                }
+                $embassyarpopinsfont = TCPDF_FONTS::addTTFfont($embassyarpopins,'','',32);
+
+                if($embassyreq_ar_cvsetting->font_family == 'none'){
+                    $embassyarfonttype = "";
+                }else{
+                    $embassyarfonttype = $embassyreq_ar_cvsetting->font_family;
+                }
+
+                if($embassyreq_ar_cvsetting->font_size != ''){
+                    $embassyarfontsize = $embassyreq_ar_cvsetting->font_size;
+                }else{
+                    $embassyarfontsize = '11';
+                }
+
+                PDF::SetFont($embassyarpopinsfont,$embassyarfonttype, $embassyarfontsize,'',false);
+                if($embassyreq_ar_cvsetting->font_color != ''){
+                    $embassyarfontcolor = explode(",",$embassyreq_ar_cvsetting->font_color);
+                    PDF::SetTextColor($embassyarfontcolor[0],$embassyarfontcolor[1],$embassyarfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($embassyreq_ar_cvsetting->x_axis,$embassyreq_ar_cvsetting->y_axis);
+
+                
+                if($post->embname == 'MUMBAI VISA REQUIRED'){
+                    $visaEmb = "مطلوب تأشيرة تحت السفارة السعودية في مومباي";
+                }elseif($post->embname == 'DELHI VISA REQUIRED'){
+                    $visaEmb = "مطلوب تأشيرة تحت السفارة السعودية في نيودلهي";
+                }else{
+                    $visaEmb = "";
+                }
+
+                PDF::Cell(0,0,$visaEmb);
+
+            }
+
+
+
+            // Remark
+            if(isset($remark_cvsetting)){
+                // Remark Text 
+                $remark_text_desc = Cvsetting::where('db_field_name','=','remark_text')->where('status','=',1)->first();
+                if(isset($remark_text_desc)){
+                    $remarkDisp = 'Remark: '.$remark_text_desc->text_desc;
+                }else{
+                    $remarkDisp = 'Remark: ';
+                }
+
+                if($remark_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($remark_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $remarkpopinsfont = TCPDF_FONTS::addTTFfont($remarkpopins,'','',32);
+
+                if($remark_cvsetting->font_family == 'none'){
+                    $remarkfonttype = "";
+                }else{
+                    $remarkfonttype = $remark_cvsetting->font_family;
+                }
+
+                if($remark_cvsetting->font_size != ''){
+                    $remarkfontsize = $remark_cvsetting->font_size;
+                }else{
+                    $remarkfontsize = "11";
+                }
+
+                PDF::SetFont($remarkpopinsfont, $remarkfonttype, $remarkfontsize,'',false);
+                if($remark_cvsetting->font_color != ''){
+                    $remarkfontcolor = explode(",",$remark_cvsetting->font_color);
+                    PDF::SetTextColor($remarkfontcolor[0],$remarkfontcolor[1],$remarkfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($remark_cvsetting->x_axis,$remark_cvsetting->y_axis);
+                PDF::Cell(0,0,$remarkDisp);
+            }
+
+            // CV Create Date
+
+            if(isset($created_date_cvsetting)){
+                if($created_date_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($created_date_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $cvdatecreatepopinsfont = TCPDF_FONTS::addTTFfont($cvdatecreatepopins,'','',32);
+
+                if($created_date_cvsetting->font_family == 'none'){
+                    $cvdatecreatefonttype = "";
+                }else{
+                    $cvdatecreatefonttype = $created_date_cvsetting->font_family;
+                }
+
+                if($created_date_cvsetting->font_size != ''){
+                    $cvdatecreatefontsize = $created_date_cvsetting->font_size;
+                }else{
+                    $cvdatecreatefontsize = "11";
+                }
+
+                PDF::SetFont($cvdatecreatepopinsfont, $cvdatecreatefonttype, $cvdatecreatefontsize,'',false);
+                if($created_date_cvsetting->font_color != ''){
+                    $cvdatecreatefontcolor = explode(",",$created_date_cvsetting->font_color);
+                    PDF::SetTextColor($cvdatecreatefontcolor[0],$cvdatecreatefontcolor[1],$cvdatecreatefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($created_date_cvsetting->x_axis,$created_date_cvsetting->y_axis);
+                if($post->cv_executae_date != ''){
+                    $cvDate = date('d-m-Y',strtotime($post->cv_executae_date));
+                }else{
+
+                    $cvDate = date('d-m-Y');
+                }
+                PDF::Cell(0,0,'Date: '.$cvDate);
+            }
+
+            // Image1 and Image2
+            if(isset($image1_cvsetting)){
+                if($image1_cvsetting->status == 1 && $image1_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image1_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image1_cvsetting->filename;
+                    }else{
+                        $image1_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image1_cvsetting->filename);                    
+                    }
+
+                    $image1_cvsettingext = pathinfo($image1_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image1_cvsettingpath,$image1_cvsetting->x_axis, $image1_cvsetting->y_axis, $image1_cvsetting->width, '',$image1_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image2_cvsetting)){
+                if($image2_cvsetting->status == 1 && $image2_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image2_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image2_cvsetting->filename;
+                    }else{
+                        $image2_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image2_cvsetting->filename);                    
+                    }
+                    $image2_cvsettingext = pathinfo($image2_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image2_cvsettingpath,$image2_cvsetting->x_axis, $image2_cvsetting->y_axis, $image2_cvsetting->width, '',$image2_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image3_cvsetting)){
+                if($image3_cvsetting->status == 1 && $image3_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image3_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image3_cvsetting->filename;
+                    }else{
+                        $image3_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image3_cvsetting->filename);                    
+                    }
+
+                    $image3_cvsettingext = pathinfo($image3_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image3_cvsettingpath,$image3_cvsetting->x_axis, $image3_cvsetting->y_axis, $image3_cvsetting->width, '',$image3_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image4_cvsetting)){
+                if($image4_cvsetting->status == 1 && $image4_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image4_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image4_cvsetting->filename;
+                    }else{
+                        $image4_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image4_cvsetting->filename);                    
+                    }
+
+                    $image4_cvsettingext = pathinfo($image4_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image4_cvsettingpath,$image4_cvsetting->x_axis, $image4_cvsetting->y_axis, $image4_cvsetting->width, '',$image4_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image5_cvsetting)){
+                if($image5_cvsetting->status == 1 && $image5_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image5_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image5_cvsetting->filename;
+                    }else{
+                        $image5_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image5_cvsetting->filename);                    
+                    }
+
+                    $image5_cvsettingext = pathinfo($image5_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image5_cvsettingpath,$image5_cvsetting->x_axis, $image5_cvsetting->y_axis, $image5_cvsetting->width, '',$image5_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            // Text1, Text2, Text3, Text4,
+            if (isset($text1_cvsetting)) {
+                if($text1_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text1_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text1popinsfont = TCPDF_FONTS::addTTFfont($text1popins,'','',32);
+
+                if($text1_cvsetting->font_family == 'none'){
+                    $text1fonttype = "";
+                }else{
+                    $text1fonttype = $text1_cvsetting->font_family;
+                }
+
+                if($text1_cvsetting->font_size != ''){
+                    $text1fontsize = $text1_cvsetting->font_size;
+                }else{
+                    $text1fontsize = '11';
+                }
+
+                PDF::SetFont($text1popinsfont,$text1fonttype, $text1fontsize,'',false);
+                if($text1_cvsetting->font_color != ''){
+                    $text1fontcolor = explode(",",$text1_cvsetting->font_color);
+                    PDF::SetTextColor($text1fontcolor[0],$text1fontcolor[1],$text1fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text1_cvsetting->x_axis,$text1_cvsetting->y_axis);
+                PDF::Cell(0,0,$text1_cvsetting->text_desc);
+
+            }
+
+            if (isset($text2_cvsetting)) {
+                if($text2_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text2_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text2popinsfont = TCPDF_FONTS::addTTFfont($text2popins,'','',32);
+
+                if($text2_cvsetting->font_family == 'none'){
+                    $text2fonttype = "";
+                }else{
+                    $text2fonttype = $text2_cvsetting->font_family;
+                }
+
+                if($text2_cvsetting->font_size != ''){
+                    $text2fontsize = $text2_cvsetting->font_size;
+                }else{
+                    $text2fontsize = '11';
+                }
+
+                PDF::SetFont($text2popinsfont,$text2fonttype, $text2fontsize,'',false);
+                if($text2_cvsetting->font_color != ''){
+                    $text2fontcolor = explode(",",$text2_cvsetting->font_color);
+                    PDF::SetTextColor($text2fontcolor[0],$text2fontcolor[1],$text2fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text2_cvsetting->x_axis,$text2_cvsetting->y_axis);
+                PDF::Cell(0,0,$text2_cvsetting->text_desc);
+
+            }
+
+            if (isset($text3_cvsetting)) {
+                if($text3_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text3_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text3popinsfont = TCPDF_FONTS::addTTFfont($text3popins,'','',32);
+
+                if($text3_cvsetting->font_family == 'none'){
+                    $text3fonttype = "";
+                }else{
+                    $text3fonttype = $text3_cvsetting->font_family;
+                }
+
+                if($text3_cvsetting->font_size != ''){
+                    $text3fontsize = $text3_cvsetting->font_size;
+                }else{
+                    $text3fontsize = '11';
+                }
+
+                PDF::SetFont($text3popinsfont,$text3fonttype, $text3fontsize,'',false);
+                if($text3_cvsetting->font_color != ''){
+                    $text3fontcolor = explode(",",$text3_cvsetting->font_color);
+                    PDF::SetTextColor($text3fontcolor[0],$text3fontcolor[1],$text3fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text3_cvsetting->x_axis,$text3_cvsetting->y_axis);
+                PDF::Cell(0,0,$text3_cvsetting->text_desc);
+
+            }
+
+            if (isset($text4_cvsetting)) {
+                if($text4_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text4_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text4popinsfont = TCPDF_FONTS::addTTFfont($text4popins,'','',32);
+
+                if($text4_cvsetting->font_family == 'none'){
+                    $text4fonttype = "";
+                }else{
+                    $text4fonttype = $text4_cvsetting->font_family;
+                }
+
+                if($text4_cvsetting->font_size != ''){
+                    $text4fontsize = $text4_cvsetting->font_size;
+                }else{
+                    $text4fontsize = '11';
+                }
+
+                PDF::SetFont($text4popinsfont,$text4fonttype, $text4fontsize,'',false);
+                if($text4_cvsetting->font_color != ''){
+                    $text4fontcolor = explode(",",$text4_cvsetting->font_color);
+                    PDF::SetTextColor($text4fontcolor[0],$text4fontcolor[1],$text4fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text4_cvsetting->x_axis,$text4_cvsetting->y_axis);
+                PDF::Cell(0,0,$text4_cvsetting->text_desc);
+
+            }
+
+
+            // Partner Images display
+            if(isset($partnerimage1)){
+                if($partnerimage1->status == 1 && $partnerimage1->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image1_partnercvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$partnerimage1->filename;
+                    }else{
+                        $image1_partnercvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$partnerimage1->filename);
+                    }
+
+                    $image1_partnercvsettingext = pathinfo($partnerimage1->filename, PATHINFO_EXTENSION);
+                    PDF::Image($image1_partnercvsettingpath,$partnerimage1->x_axis, $partnerimage1->y_axis, $partnerimage1->width, '',$image1_partnercvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($partnerimage2)){
+                if($partnerimage2->status == 1 && $partnerimage2->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image2_partnercvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$partnerimage2->filename;
+                    }else{
+                        $image2_partnercvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$partnerimage2->filename);
+                    }
+
+                    $image1_partnercvsettingext = pathinfo($partnerimage2->filename, PATHINFO_EXTENSION);
+                    PDF::Image($image2_partnercvsettingpath,$partnerimage2->x_axis, $partnerimage2->y_axis, $partnerimage2->width, '',$image1_partnercvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+
+
+            // Profile and fullsize Photo
+            if ($post->photo_file != '') {
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $photfilepath = base_path().'/public/admin/assets/images/candidate/'.$post->photo_file;
+                }else{
+                    $photfilepath = base_path('public_html/admin/assets/images/candidate/'.$post->photo_file);                
+                }
+
+                $photext = pathinfo($post->photo_file, PATHINFO_EXTENSION);
+
+                if(isset($photo_cvsetting)){
+                    PDF::Image($photfilepath,$photo_cvsetting->x_axis,$photo_cvsetting->y_axis,'50','54',$photext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+            if ($post->cv_file != '') {
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $fullsizepath = base_path().'/public/admin/assets/images/candidate/'.$post->cv_file;
+                }else{
+                    $fullsizepath = base_path('public_html/admin/assets/images/candidate/'.$post->cv_file);                  
+                }
+                
+                $fullsizeext = pathinfo($post->cv_file, PATHINFO_EXTENSION);
+
+                if(isset($fullsize_cvsetting)){
+                    PDF::Image($fullsizepath,$fullsize_cvsetting->x_axis, $fullsize_cvsetting->y_axis, '', '',$fullsizeext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+            // Reference No
+            if (isset($reference_no_cvsetting)) {
+                // if($reference_no_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                //     }
+                // }elseif($reference_no_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                //     }
+
+                // }
+
+                if($reference_no_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+                $refrenceNopopinsfont = TCPDF_FONTS::addTTFfont($refrenceNopopins,'','',32);
+
+                if($reference_no_cvsetting->font_family == 'none'){
+                    $refereneceFont = "";
+                }else{
+                    $refereneceFont = $reference_no_cvsetting->font_family;
+                }
+
+                if($reference_no_cvsetting->font_size != ''){
+                    $refrenceNoFontsize = $reference_no_cvsetting->font_size;
+                }else{
+                    $refrenceNoFontsize = '11';
+                }
+
+                PDF::SetFont($refrenceNopopinsfont,$refereneceFont, $refrenceNoFontsize,'',false);
+                if($reference_no_cvsetting->font_color != ''){
+                    $refnofontcolor = explode(",",$reference_no_cvsetting->font_color);
+                    PDF::SetTextColor($refnofontcolor[0],$refnofontcolor[1],$refnofontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+
+                PDF::SetXY($reference_no_cvsetting->x_axis,$reference_no_cvsetting->y_axis);
+                // $disrefno = 'Reference No: '.$post->id.' : رقم المرجع';
+                $disrefno = 'رقم المرجع : '.$post->id.' :No Reference';
+            
+
+                // dd($disrefno);
+                PDF::Cell(0,0,$disrefno);
+            }
+
+            // Gulf experience and occupation
+            // if(isset($gulf_experience_cvsetting)){
+            //     if($gulf_experience_cvsetting->font_family == 'B'){
+            //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+            //             $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+            //         }else{
+            //             $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                    
+            //         }
+            //     }else{
+            //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+            //             $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+            //         }else{
+            //             $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+            //         }
+            //     }
+            //     $gulf_experience_arabic_font = TCPDF_FONTS::addTTFfont($gulf_experience_arabic,'','',32);
+
+            //     if($gulf_experience_cvsetting->font_family == 'none'){
+            //         $gulfexpFont = "";
+            //     }else{
+            //         $gulfexpFont = $gulf_experience_cvsetting->font_family;
+            //     }
+
+            //     if($gulf_experience_cvsetting->font_size != ''){
+                
+            //         $gulfexpFontsize = $gulf_experience_cvsetting->font_size;
+            //     }else{
+            //         $gulfexpFontsize = "11";
+            //     }
+            //     PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+
+            //     if($gulf_experience_cvsetting->font_color != ''){
+            //         $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+            //         PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+            //     }else{
+            //         PDF::SetTextColor(0,0,0);
+            //     }
+
+            //     PDF::SetXY($gulf_experience_cvsetting->x_axis,$gulf_experience_cvsetting->y_axis);
+            //     if($post->gulfexperience == 1){
+            //         $gulfexperience1 = $post->prarname.' قد اشتغل في الهند فقط';
+            //         PDF::Cell(0,0,$gulfexperience1);
+            //     }
+    
+            //     if($post->gulfexperience == 2){
+            //         $gulfexperience2 = $post->prarname.' سبق له العمل';
+            //         PDF::Cell(0,0,$gulfexperience2);
+            //     }
+
+            //     if($post->gulfexperience == 1){
+            //         PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+            //         if($gulf_experience_cvsetting->font_color != ''){
+            //             $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+            //             PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+            //         }else{
+            //             PDF::SetTextColor(0,0,0);
+            //         }
+            //         $gyaxis = $gulf_experience_cvsetting->y_axis + 4;
+            //         PDF::SetXY($gulf_experience_cvsetting->x_axis,$gyaxis);
+            //         PDF::Cell(0,0,'Indian Experience '.$post->pengname);
+            //     }
+
+            //     if($post->gulfexperience == 2){
+            //         PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+            //         if($gulf_experience_cvsetting->font_color != ''){
+            //             $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+            //             PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+            //         }else{
+            //             PDF::SetTextColor(0,0,0);
+            //         }
+            //         $gyaxis = $gulf_experience_cvsetting->y_axis + 4;
+            //         PDF::SetXY($gulf_experience_cvsetting->x_axis,$gyaxis);
+            //         PDF::Cell(0,0,'Ex-Abroad '.$post->pengname);
+            //     }
+            // }
+
+            if(isset($gulf_experience_cvsetting)){
+                if($gulf_experience_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($gulf_experience_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+                $gulf_experiencepopinsfont = TCPDF_FONTS::addTTFfont($gulf_experiencepopins,'','',32);
+
+                if($gulf_experience_cvsetting->font_family == 'none'){
+                    $gulf_experiencefonttype = "";
+                }else{
+                    $gulf_experiencefonttype = $gulf_experience_cvsetting->font_family;
+                }
+
+                if($gulf_experience_cvsetting->font_size != ''){
+                    $gulf_experiencefontsize = $gulf_experience_cvsetting->font_size;
+                }else{
+                    $gulf_experiencefontsize = "11";
+                }
+
+                PDF::SetFont($gulf_experiencepopinsfont, $gulf_experiencefonttype, $gulf_experiencefontsize,'',false);
+
+                if($gulf_experience_cvsetting->font_color != ''){
+                    $gulf_experiencefontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+                    PDF::SetTextColor($gulf_experiencefontcolor[0],$gulf_experiencefontcolor[1],$gulf_experiencefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($gulf_experience_cvsetting->x_axis,$gulf_experience_cvsetting->y_axis);
+                if($post->gulfexperience == 1){
+                    $expEng = 'Indian Experience '.$post->pengname;
+                }elseif($post->gulfexperience == 2){
+                    $expEng = 'Ex-Abroad '.$post->pengname;
+                }else{
+                    $expEng = '---';
+                }
+                PDF::Cell(0,0,$expEng);
+
+            }
+
+            if(isset($gulf_experience_arabic_cvsetting)){
+                if($gulf_experience_arabic_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+                $gulf_experience_arabic_font = TCPDF_FONTS::addTTFfont($gulf_experience_arabic,'','',32);
+
+                if($gulf_experience_arabic_cvsetting->font_family == 'none'){
+                    $gulfexpFont = "";
+                }else{
+                    $gulfexpFont = $gulf_experience_arabic_cvsetting->font_family;
+                }
+
+                if($gulf_experience_arabic_cvsetting->font_size != ''){
+                
+                    $gulfexpFontsize = $gulf_experience_arabic_cvsetting->font_size;
+                }else{
+                    $gulfexpFontsize = "11";
+                }
+
+                PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+
+                if($gulf_experience_arabic_cvsetting->font_color != ''){
+                    $gulfexpfontcolor = explode(",",$gulf_experience_arabic_cvsetting->font_color);
+                    PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($gulf_experience_arabic_cvsetting->x_axis,$gulf_experience_arabic_cvsetting->y_axis);
+                if($post->gulfexperience == 1){
+                    $arexp = $post->prarname.' قد اشتغل في الهند فقط';
+                }elseif($post->gulfexperience == 2){
+                    $arexp = $post->prarname.' سبق له العمل';
+                }else{
+                    $arexp = "---";
+                }
+                PDF::Cell(0,0,$arexp);
+            }
+
+
+            // Expected salary and location
+            if(isset($exp_sal_cvsetting)){
+                if($exp_sal_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($exp_sal_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $expsalpopinsfont = TCPDF_FONTS::addTTFfont($expsalpopins,'','',32);
+
+                if($exp_sal_cvsetting->font_family == 'none'){
+                    $expsalfonttype = "";
+                }else{
+                    $expsalfonttype = $exp_sal_cvsetting->font_family;
+                }
+
+                if($exp_sal_cvsetting->font_size != ''){
+                    $expsalfontsize = $exp_sal_cvsetting->font_size;
+                }else{
+                    $expsalfontsize = "11";
+                }
+
+                PDF::SetFont($expsalpopinsfont, $expsalfonttype, $expsalfontsize,'',false);
+                if($exp_sal_cvsetting->font_color != ''){
+                    $expsalfontcolor = explode(",",$exp_sal_cvsetting->font_color);
+                    PDF::SetTextColor($expsalfontcolor[0],$expsalfontcolor[1],$expsalfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($exp_sal_cvsetting->x_axis,$exp_sal_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->exp_sal);
+            }
+
+            if(isset($expwp_id_cvsetting)){
+                if($expwp_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($expwp_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+
+                $expwppopinsfont = TCPDF_FONTS::addTTFfont($expwppopins,'','',32);
+
+                if($expwp_id_cvsetting->font_family == 'none'){
+                    $expwpfonttype = "";
+                }else{
+                    $expwpfonttype = $expwp_id_cvsetting->font_family;
+                }
+
+                if($expwp_id_cvsetting->font_size != ''){
+                    $expwpfontsize = $expwp_id_cvsetting->font_size;
+                }else{
+                    $expwpfontsize = "11";
+                }
+
+                PDF::SetFont($expwppopinsfont, $expwpfonttype, $expwpfontsize,'',false);
+                if($expwp_id_cvsetting->font_color != ''){
+                    $expwpfontcolor = explode(",",$expwp_id_cvsetting->font_color);
+                    PDF::SetTextColor($expwpfontcolor[0],$expwpfontcolor[1],$expwpfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($expwp_id_cvsetting->x_axis,$expwp_id_cvsetting->y_axis);
+                PDF::Cell(0,0,implode(",",$exp_wp));
+            }
+
+            // Age
+            if(isset($age_cvsetting)){
+                if($age_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $agepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+
+                }elseif($age_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $agepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $agepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+
+                $agepopinsfont = TCPDF_FONTS::addTTFfont($agepopins,'','',32);
+
+                if($age_cvsetting->font_family == 'none'){
+                    $agefonttype = "";
+                }else{
+                    $agefonttype = $age_cvsetting->font_family;
+                }
+
+                if($age_cvsetting->font_size != ''){
+                    $agefontsize = $age_cvsetting->font_size;
+                }else{
+                    $agefontsize = "11";
+                }
+
+                PDF::SetFont($agepopinsfont, $agefonttype, $agefontsize,'',false);
+                if($age_cvsetting->font_color != ''){
+                    $agefontcolor = explode(",",$age_cvsetting->font_color);
+                    PDF::SetTextColor($agefontcolor[0],$agefontcolor[1],$agefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($age_cvsetting->x_axis,$age_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->age);
+
+            }
+            // Marital
+            if(isset($marital_status_cvsetting)){
+                if($marital_status_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $maritalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($marital_status_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $maritalpopins = base_path('public_html/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $maritalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $maritalpopinsfont = TCPDF_FONTS::addTTFfont($maritalpopins,'','',32);
+
+
+                if($marital_status_cvsetting->font_family == 'none'){
+                    $mariedfonttype = "";
+                }else{
+                    $mariedfonttype = $marital_status_cvsetting->font_family;
+                }
+
+                if($marital_status_cvsetting->font_size != ''){
+                    $mariedfontsize = $marital_status_cvsetting->font_size;
+                }else{
+                    $mariedfontsize = "11";                
+                }
+
+                PDF::SetFont($maritalpopinsfont, $mariedfonttype, $mariedfontsize,'',false);
+                if($marital_status_cvsetting->font_color != ''){
+                    $marital_statusfontcolor = explode(",",$marital_status_cvsetting->font_color);
+                    PDF::SetTextColor($marital_statusfontcolor[0],$marital_statusfontcolor[1],$marital_statusfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($marital_status_cvsetting->x_axis,$marital_status_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->marital_status);
+                
+            }
+            // Religion
+            if(isset($religion_cvsetting)){
+                // if($religion_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                //     }
+                // }elseif($religion_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                //     }
+                // }
+    
+
+                if($religion_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $religionpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $religionpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $religionpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $religionpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+
+                $religionpopinsfont = TCPDF_FONTS::addTTFfont($religionpopins,'','',32);
+
+                if($religion_cvsetting->font_family == 'none'){
+                    $relfonttype = "";
+                }else{
+                    $relfonttype = $religion_cvsetting->font_family;
+                }
+
+                if($religion_cvsetting->font_size != ''){
+                    $relfontsize = $religion_cvsetting->font_size;
+                }else{
+                    $relfontsize = "11";
+                }
+
+                PDF::SetFont($religionpopinsfont, $relfonttype, $relfontsize,'',false);
+                if($religion_cvsetting->font_color != ''){
+                    $religionfontcolor = explode(",",$religion_cvsetting->font_color);
+                    PDF::SetTextColor($religionfontcolor[0],$religionfontcolor[1],$religionfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($religion_cvsetting->x_axis,$religion_cvsetting->y_axis);
+                $relname = $post->relarbname.'  '.$post->relname;
+                // dd($relname);
+                PDF::Cell(0,0,$relname);
+                // PDF::Cell(0,0,$post->relname.'  '.$post->relarbname);
+                // if($post->religion != '' && $post->religion == 'Muslim'){
+                //     PDF::Cell(0,0,$post->religion.' مسلم');
+                // }
+                // if($post->religion != '' && $post->religion != 'Muslim'){
+                //     PDF::Cell(0,0,$post->religion.' غير مسلم');
+                // }
+
+
+
+
+            }
+
+
+            // Date of Birth
+            if(isset($dob_cvsetting)){
+
+                if($dob_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $dobpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($dob_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $dobpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $dobpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $dobpopinsfont = TCPDF_FONTS::addTTFfont($dobpopins,'','',32);
+
+                if($dob_cvsetting->font_family == 'none'){
+                    $dobfonttype = "";
+                }else{
+                    $dobfonttype = $dob_cvsetting->font_family;
+                }
+
+                if($dob_cvsetting->font_size != ''){
+                    $dobfontsize = $dob_cvsetting->font_size;
+                }else{
+                    $dobfontsize = "11";
+                }
+
+                PDF::SetFont($dobpopinsfont, $dobfonttype, $dobfontsize,'',false);
+                if($dob_cvsetting->font_color != ''){
+                    $dobfontcolor = explode(",",$dob_cvsetting->font_color);
+                    PDF::SetTextColor($dobfontcolor[0],$dobfontcolor[1],$dobfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($dob_cvsetting->x_axis,$dob_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->dob)));
+
+            }
+            // Place of Birth
+            if(isset($plb_id_cvsetting)){
+                if($plb_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $plb_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($plb_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $plb_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $plb_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $plb_idpopinsfont = TCPDF_FONTS::addTTFfont($plb_idpopins,'','',32);
+
+                if($plb_id_cvsetting->font_family == 'none'){
+                    $plb_idfonttype = "";
+                }else{
+                    $plb_idfonttype = $plb_id_cvsetting->font_family;
+                }
+
+                if($plb_id_cvsetting->font_size != ''){
+                    $plb_idfontsize = $plb_id_cvsetting->font_size;
+                }else{
+                    $plb_idfontsize = "11";
+                }
+
+                PDF::SetFont($plb_idpopinsfont, $plb_idfonttype, $plb_idfontsize,'',false);
+                if($plb_id_cvsetting->font_color != ''){
+                    $plb_idfontcolor = explode(",",$plb_id_cvsetting->font_color);
+                    PDF::SetTextColor($plb_idfontcolor[0],$plb_idfontcolor[1],$plb_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($plb_id_cvsetting->x_axis,$plb_id_cvsetting->y_axis);
+                // PDF::Cell(0,0,$post->plbname);
+                PDF::Cell(0,0,$post->plb_text);
+            }
+            // Nationality
+            if(isset($nation_id_cvsetting)){
+
+                // if($nation_id_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                //     }
+                // }elseif($nation_id_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                //     }
+                
+                // }
+                
+                if($nation_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+                $nation_idpopinsfont = TCPDF_FONTS::addTTFfont($nation_idpopins,'','',32);
+
+                if($nation_id_cvsetting->font_family == 'none'){
+                    $nation_idfonttype = "";
+                }else{
+                    $nation_idfonttype = $nation_id_cvsetting->font_family;
+                }
+
+                if($nation_id_cvsetting->font_size != ''){
+
+                    $nation_idfontsize = $nation_id_cvsetting->font_size;
+                }else{
+                    $nation_idfontsize = "11";
+                }
+
+                PDF::SetFont($nation_idpopinsfont, $nation_idfonttype, $nation_idfontsize,'',false);
+                if($nation_id_cvsetting->font_color != ''){
+                    $nation_idfontcolor = explode(",",$nation_id_cvsetting->font_color);
+                    PDF::SetTextColor($nation_idfontcolor[0],$nation_idfontcolor[1],$nation_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($nation_id_cvsetting->x_axis,$nation_id_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->nationname.'  '.$post->nationarname);
+
+                
+            }
+            // Region
+            if(isset($region_id_cvsetting)){
+
+                if($region_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $regionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($region_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $regionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $regionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+
+                $regionpopinsfont = TCPDF_FONTS::addTTFfont($regionpopins,'','',32);
+
+                if($region_id_cvsetting->font_family == 'none'){
+                    $region_idfonttype = "";
+                }else{
+                    $region_idfonttype = $region_id_cvsetting->font_family;
+                }
+
+                if($region_id_cvsetting->font_size != ''){
+                    $region_idfonttype = $region_id_cvsetting->font_size;
+                }else{
+                    $region_idfonttype = "11";
+                }
+
+                PDF::SetFont($regionpopinsfont, $region_idfonttype, $region_idfonttype,'',false);
+                if($region_id_cvsetting->font_color != ''){
+                    $region_idfontcolor = explode(",",$region_id_cvsetting->font_color);
+                    PDF::SetTextColor($region_idfontcolor[0],$region_idfontcolor[1],$region_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($region_id_cvsetting->x_axis,$region_id_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->regionname);
+            }
+
+            // Education
+            if(isset($education_cvsetting)){
+
+                if($education_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $educationpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($education_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $educationpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $educationpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $educationpopinsfont = TCPDF_FONTS::addTTFfont($educationpopins,'','',32);
+
+                if($education_cvsetting->font_family == 'none'){
+                    $educationfonttype = "";
+                }else{
+                    $educationfonttype = $education_cvsetting->font_family;
+                }
+
+                if($education_cvsetting->font_size != ''){
+                    $educationfontsize = $education_cvsetting->font_size;
+                }else{
+                    $educationfontsize = "11";
+                }
+
+                PDF::SetFont($educationpopinsfont, $educationfonttype, $educationfontsize,'',false);
+                if($education_cvsetting->font_color != ''){
+                    $educationfontcolor = explode(",",$education_cvsetting->font_color);
+                    PDF::SetTextColor($educationfontcolor[0],$educationfontcolor[1],$educationfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($education_cvsetting->x_axis,$education_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->educname);
+
+            }
+            
+            
+            // Language
+            if(isset($lang_known_cvsetting)){
+
+                if($lang_known_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $langknownpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($lang_known_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $langknownpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $langknownpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $langknownpopinsfont = TCPDF_FONTS::addTTFfont($langknownpopins,'','',32);
+
+                if($lang_known_cvsetting->font_family == 'none'){
+                    $lang_knownfonttype = "";
+                }else{
+                    $lang_knownfonttype = $lang_known_cvsetting->font_family;
+                }
+
+                if($lang_known_cvsetting->font_size != ''){
+                    $lang_knownfontsize = $lang_known_cvsetting->font_size;
+                }else{
+                    $lang_knownfontsize = "11";
+                }
+
+                PDF::SetFont($langknownpopinsfont, $lang_knownfonttype, $lang_knownfontsize,'',false);
+                if($lang_known_cvsetting->font_color != ''){
+                    $lang_knownfontcolor = explode(",",$lang_known_cvsetting->font_color);
+                    PDF::SetTextColor($lang_knownfontcolor[0],$lang_knownfontcolor[1],$lang_knownfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($lang_known_cvsetting->x_axis,$lang_known_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->lang_known);
+
+            }
+            // Google Map
+            if(isset($google_map_cvsetting)){
+
+                if($google_map_cvsetting->font_family == 'none'){
+                    $google_mapfonttype = "";
+                }else{
+                    $google_mapfonttype = $google_map_cvsetting->font_family;
+                }
+
+                if($google_map_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $google_map_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $google_map_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $google_map_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $google_map_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }    
+                }
+
+                $google_map_arabic_font = TCPDF_FONTS::addTTFfont($google_map_arabic,'','',32);
+
+                if($google_map_cvsetting->font_size != ''){
+                    $google_mapfontsize = $google_map_cvsetting->font_size;
+                }else{
+                    $google_mapfontsize = "11";
+                }
+
+                if($post->google_map == 1){
+                    $gmap = "Yes  نعم";
+                }else{
+                    $gmap = "No  لا";
+                }
+
+                PDF::SetFont($google_map_arabic_font, $google_mapfonttype, $google_mapfontsize,'',false);
+                if($google_map_cvsetting->font_color != ''){
+                    $google_mapfontcolor = explode(",",$google_map_cvsetting->font_color);
+                    PDF::SetTextColor($google_mapfontcolor[0],$google_mapfontcolor[1],$google_mapfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($google_map_cvsetting->x_axis,$google_map_cvsetting->y_axis);
+                PDF::Cell(0,0,$gmap);
+
+            }
+            // Vehical
+            if(isset($carknown_id_cvsetting)){
+
+                if($carknown_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $carknown_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($carknown_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $carknown_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $carknown_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }    
+                }
+
+                $carknown_idpopinsfont = TCPDF_FONTS::addTTFfont($carknown_idpopins,'','',32);
+
+                if($carknown_id_cvsetting->font_family == 'none'){
+                    $carknown_idfonttype = "";
+                }else{
+                    $carknown_idfonttype = $carknown_id_cvsetting->font_family;
+                }
+
+                if($carknown_id_cvsetting->font_size != ''){
+                    $carknown_idfontsize = $carknown_id_cvsetting->font_size;
+                }else{
+                    $carknown_idfontsize = "11";
+                }
+
+                PDF::SetFont($carknown_idpopinsfont, $carknown_idfonttype, $carknown_idfontsize,'',false);
+                if($carknown_id_cvsetting->font_color != ''){
+                    $carknown_idfontcolor = explode(",",$carknown_id_cvsetting->font_color);
+                    PDF::SetTextColor($carknown_idfontcolor[0],$carknown_idfontcolor[1],$carknown_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($carknown_id_cvsetting->x_axis,$carknown_id_cvsetting->y_axis);
+                PDF::Cell(0,0,implode(",",$carlist));
+            }
+
+            // Work Experience
+            $cexperience = explode(",",$post->experience);
+            $cprofessions = explode(",",$post->proff_id);
+            $cexpcountry = explode(",",$post->expcountry_id);
+            // $cexpcity = explode(",",$post->expcity_id);
+            $cexpcitytext = explode(",",$post->expcity_id_text);
+
+
+            $iec = 0;
+            $iprof = 0;
+            $icont = 0;
+            // $icity = 0;
+            $icitytext = 0;
+            $icco = 0;
+
+            foreach($cexperience as $index => $value){
+
+                // Job
+                
+                if(isset($proff_id_cvsetting)){
+                    $py_axis = $proff_id_cvsetting->y_axis + $iprof;
+
+                    if($proff_id_cvsetting->font_family == 'none'){
+                        $proff_idfonttype = "";
+                    }else{
+                        $proff_idfonttype = $proff_id_cvsetting->font_family;
+                    }
+                    
+                    if($proff_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $proff_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                        }
+
+                    }elseif($proff_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $proff_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                        
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $proff_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+                    }
+
+                    $proff_idpopinsfont = TCPDF_FONTS::addTTFfont($proff_idpopins,'','',32);
+
+                    if($proff_id_cvsetting->font_size != ''){
+                        $proff_idfontsize = $proff_id_cvsetting->font_size;
+                    }else{
+                        $proff_idfontsize = "11";
+                    }
+                    $professionF = Profession::find($cprofessions[$index]);
+                    PDF::SetFont($proff_idpopinsfont, $proff_idfonttype, $proff_idfontsize,'',false);
+
+                    if($proff_id_cvsetting->font_color != ''){
+                        $proff_idfontcolor = explode(",",$proff_id_cvsetting->font_color);
+                        PDF::SetTextColor($proff_idfontcolor[0],$proff_idfontcolor[1],$proff_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+                    PDF::SetXY($proff_id_cvsetting->x_axis,$py_axis);
+                    if(isset($professionF)){
+                        PDF::Cell(0,0,$professionF->eng_name);
+                    }
+
+                    $iprof = $iprof + $proff_id_cvsetting->add_y_axis;
+                }
+                // Country
+                if(isset($expcountry_id_cvsetting)){
+                    $cony_axis = $expcountry_id_cvsetting->y_axis + $icont;
+
+                    if($expcountry_id_cvsetting->font_family == 'none'){
+                        $expcountry_idfonttype = "";
+                    }else{
+                        $expcountry_idfonttype = $expcountry_id_cvsetting->font_family;
+                    }
+
+                    if($expcountry_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                        }
+
+                    }elseif($expcountry_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                        
+                        }
+                    }
+
+                    $expcountry_idpopinsfont = TCPDF_FONTS::addTTFfont($expcountry_idpopins,'','',32);
+
+                    if($expcountry_id_cvsetting->font_size != ''){
+                        $expcountry_idfontsize = $expcountry_id_cvsetting->font_size;
+                    }else{
+                        $expcountry_idfontsize = "11";
+                    }
+
+                    $countryF = Country::find($cexpcountry[$index]);
+                    PDF::SetFont($expcountry_idpopinsfont, $expcountry_idfonttype, $expcountry_idfontsize,'',false);
+                    if($expcountry_id_cvsetting->font_color != ''){
+                        $expcountry_idfontcolor = explode(",",$expcountry_id_cvsetting->font_color);
+                        PDF::SetTextColor($expcountry_idfontcolor[0],$expcountry_idfontcolor[1],$expcountry_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($expcountry_id_cvsetting->x_axis,$cony_axis);
+                    if(isset($countryF)){
+                        PDF::Cell(0,0,$countryF->name);
+                    }
+
+
+                    $icont = $icont + $expcountry_id_cvsetting->add_y_axis;
+                }
+                // City
+                // if(isset($expcity_id_cvsetting)){
+                //     $cit_axis = $expcity_id_cvsetting->y_axis + $icity;
+
+                //     if($expcity_id_cvsetting->font_family == 'none'){
+                //         $expcity_idfonttype = "";
+                //     }else{
+                //         $expcity_idfonttype = $expcity_id_cvsetting->font_family;
+                //     }
+
+                //     if($expcity_id_cvsetting->font_family == 'B'){
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                //         }
+                //     }elseif($expcity_id_cvsetting->font_family == 'I'){
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //         }
+                //     }else{
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                //         }
+                //     }
+
+                //     $expcity_idpopinsfont = TCPDF_FONTS::addTTFfont($expcity_idpopins,'','',32);
+
+                //     if($expcity_id_cvsetting->font_size != ''){
+                //         $expcity_idfontsize = $expcity_id_cvsetting->font_size;
+                //     }else{
+                //         $expcity_idfontsize = "11";
+                //     }
+
+                //     $cityF = City::find($cexpcity[$index]);
+                //     PDF::SetFont($expcity_idpopinsfont, $expcity_idfonttype, $expcity_idfontsize,'',false);
+                //     if($expcity_id_cvsetting->font_color != ''){
+                //         $expcity_idfontcolor = explode(",",$expcity_id_cvsetting->font_color);
+                //         PDF::SetTextColor($expcity_idfontcolor[0],$expcity_idfontcolor[1],$expcity_idfontcolor[2]);
+                //     }else{
+                //         PDF::SetTextColor(0,0,0);
+                //     }
+                //     PDF::SetXY($expcity_id_cvsetting->x_axis,$cit_axis);
+                //     if(isset($cityF)){
+                //         PDF::Cell(0,0,$cityF->name);
+                //     }
+
+
+                //     $icity = $icity + $expcity_id_cvsetting->add_y_axis;
+
+                // }
+
+                // City Text
+                if(isset($expcity_id_cvsetting)){
+                    $cit_axis = $expcity_id_cvsetting->y_axis + $icitytext;
+
+                    if($expcity_id_cvsetting->font_family == 'none'){
+                        $expcity_idfonttype = "";
+                    }else{
+                        $expcity_idfonttype = $expcity_id_cvsetting->font_family;
+                    }
+
+                    if($expcity_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                        }
+                    }elseif($expcity_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+                    }
+
+                    $expcity_idpopinsfont = TCPDF_FONTS::addTTFfont($expcity_idpopins,'','',32);
+
+                    if($expcity_id_cvsetting->font_size != ''){
+                        $expcity_idfontsize = $expcity_id_cvsetting->font_size;
+                    }else{
+                        $expcity_idfontsize = "11";
+                    }
+
+                    
+                    PDF::SetFont($expcity_idpopinsfont, $expcity_idfonttype, $expcity_idfontsize,'',false);
+                    if($expcity_id_cvsetting->font_color != ''){
+                        $expcity_idfontcolor = explode(",",$expcity_id_cvsetting->font_color);
+                        PDF::SetTextColor($expcity_idfontcolor[0],$expcity_idfontcolor[1],$expcity_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($expcity_id_cvsetting->x_axis,$cit_axis);
+                    if(count($cexpcitytext) > $icco){
+                        PDF::Cell(0,0,$cexpcitytext[$index]);
+                    }
+
+
+                    $icitytext = $icitytext + $expcity_id_cvsetting->add_y_axis;
+
+                }
+
+                // Experience
+                if(isset($experience_cvsetting)){
+                    $ey_axis = $experience_cvsetting->y_axis + $iec;
+
+                    if($experience_cvsetting->font_family == 'none'){
+                        $experiencefonttype = "";
+                    }else{
+                        $experiencefonttype = $experience_cvsetting->font_family;
+                    }
+
+                    if($experience_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                        }
+                    }elseif($experience_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                        
+                        }
+                    }
+
+                    $experiencepopinsfont = TCPDF_FONTS::addTTFfont($experiencepopins,'','',32);
+
+                    if($experience_cvsetting->font_size != ''){
+                        $experiencefontsize = $experience_cvsetting->font_size;
+                    }else{
+                        $experiencefontsize = "11";
+                    }
+
+                    PDF::SetFont($experiencepopinsfont, $experiencefonttype, $experiencefontsize,'',false);
+                    if($experience_cvsetting->font_color != ''){
+                        $experiencefontcolor = explode(",",$experience_cvsetting->font_color);
+                        PDF::SetTextColor($experiencefontcolor[0],$experiencefontcolor[1],$experiencefontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($experience_cvsetting->x_axis,$ey_axis);
+                    PDF::Cell(0,0,$value.' Years');
+
+                    $iec = $iec + $experience_cvsetting->add_y_axis;
+                }
+
+                $icco++;
+            }
+
+            // Passport No
+            if(isset($pass_no_cvsetting)){
+
+                if($pass_no_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $pass_nopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($pass_no_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $pass_nopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $pass_nopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $pass_nopopinsfont = TCPDF_FONTS::addTTFfont($pass_nopopins,'','',32);
+
+                if($pass_no_cvsetting->font_family == 'none'){
+                    $pass_nofonttype = "";
+                }else{
+                    $pass_nofonttype = $pass_no_cvsetting->font_family;
+                }
+
+                if($pass_no_cvsetting->font_size != ''){
+                    $pass_nofontsize = $pass_no_cvsetting->font_size;
+    
+                }else{
+                    $pass_nofontsize = "11";               
+                }
+
+                PDF::SetFont($pass_nopopinsfont, $pass_nofonttype, $pass_nofontsize,'',false);
+                if($pass_no_cvsetting->font_color != ''){
+                    $pass_nofontcolor = explode(",",$pass_no_cvsetting->font_color);
+                    PDF::SetTextColor($pass_nofontcolor[0],$pass_nofontcolor[1],$pass_nofontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($pass_no_cvsetting->x_axis,$pass_no_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->pass_no);
+            }
+            // Passport Type
+            if(isset($pass_type_cvsetting)){
+                if($pass_type_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $pass_typepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($pass_type_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $pass_typepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $pass_typepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $pass_typepopinsfont = TCPDF_FONTS::addTTFfont($pass_typepopins,'','',32);
+
+                if($pass_type_cvsetting->font_family == 'none'){
+                    $pass_typefonttype = "";
+                }else{
+                    $pass_typefonttype = $pass_type_cvsetting->font_family;
+                }
+
+                if($pass_type_cvsetting->font_size != ''){
+                    $pass_typefontsize = $pass_type_cvsetting->font_size;
+    
+                }else{
+                    $pass_typefontsize = "11";                
+                }
+
+                PDF::SetFont($pass_typepopinsfont, $pass_typefonttype, $pass_typefontsize,'',false);
+                if($pass_type_cvsetting->font_color != ''){
+                    $pass_typefontcolor = explode(",",$pass_type_cvsetting->font_color);
+                    PDF::SetTextColor($pass_typefontcolor[0],$pass_typefontcolor[1],$pass_typefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($pass_type_cvsetting->x_axis,$pass_type_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->pass_type);
+            }
+            // Date of issue
+            if(isset($doi_cvsetting)){
+
+                if($doi_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $doipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($doi_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $doipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $doipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $doipopinsfont = TCPDF_FONTS::addTTFfont($doipopins,'','',32);
+
+                if($doi_cvsetting->font_family == 'none'){
+                    $doifonttype = "";
+                }else{
+                    $doifonttype = $doi_cvsetting->font_family;
+                }
+
+                if($doi_cvsetting->font_size != ''){
+                    $doifontsize = $doi_cvsetting->font_size;
+    
+                }else{
+                    $doifontsize = "11";
+                }
+
+                PDF::SetFont($doipopinsfont, $doifonttype, $doifontsize,'',false);
+                if($doi_cvsetting->font_color != ''){
+                    $doifontcolor = explode(",",$doi_cvsetting->font_color);
+                    PDF::SetTextColor($doifontcolor[0],$doifontcolor[1],$doifontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($doi_cvsetting->x_axis,$doi_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->doi)));
+            }
+            // Date of expiry
+            if(isset($doe_cvsetting)){
+                if($doe_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $doepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($doe_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $doepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $doepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $doepopinsfont = TCPDF_FONTS::addTTFfont($doepopins,'','',32);
+
+                if($doe_cvsetting->font_family == 'none'){
+                    $doefonttype = "";
+                }else{
+                    $doefonttype = $doe_cvsetting->font_family;
+                }
+
+                if($doe_cvsetting->font_size != ''){
+                    $doefontsize = $doe_cvsetting->font_size;
+                }else{
+                    $doefontsize = "11";
+                }
+
+                PDF::SetFont($doepopinsfont, $doefonttype, $doefontsize,'',false);
+                if($doe_cvsetting->font_color != ''){
+                    $doefontcolor = explode(",",$doe_cvsetting->font_color);
+                    PDF::SetTextColor($doefontcolor[0],$doefontcolor[1],$doefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($doe_cvsetting->x_axis,$doe_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->doe)));
+            }
+            // Place of Issue
+            if(isset($poi_cvsetting)){
+                if($poi_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $poipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($poi_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $poipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $poipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $poipopinsfont = TCPDF_FONTS::addTTFfont($poipopins,'','',32);
+
+                if($poi_cvsetting->font_family == 'none'){
+                    $poifonttype = "";
+                }else{
+                    $poifonttype = $poi_cvsetting->font_family;
+                }
+
+                if($poi_cvsetting->font_size != ''){
+                    $poifontsize = $poi_cvsetting->font_size;
+    
+                }else{
+                    $poifontsize = "11";
+                }
+
+                PDF::SetFont($poipopinsfont, $poifonttype, $poifontsize,'',false);
+                if($poi_cvsetting->font_color != ''){
+                    $poifontcolor = explode(",",$poi_cvsetting->font_color);
+                    PDF::SetTextColor($poifontcolor[0],$poifontcolor[1],$poifontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($poi_cvsetting->x_axis,$poi_cvsetting->y_axis);
+                // PDF::Cell(0,0,$post->poiname);
+                PDF::Cell(0,0,$post->poi_text);
+            }
+
+            PDF::AddPage();
+            // Default fonts set
+
+            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                $sansarabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                $filecand_pepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+            }else{
+                $filecand_pepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                $sansarabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');            
+            }
+
+            // $tajawalfont = TCPDF_FONTS::addTTFfont($tajawal,'','',32); 
+            $sansarabicfont = TCPDF_FONTS::addTTFfont($sansarabic,'','',32);
+            $filecand_pepopinsfont = TCPDF_FONTS::addTTFfont($filecand_pepopins,'','',32);
+
+            if($post->pass_file != ''){
+                // Passport
+                PDF::SetFont($filecand_pepopinsfont, '', 16);
+                PDF::SetXY(10,10);
+                PDF::Cell(0,0,"Passport Copy:");
+
+                PDF::SetFont($sansarabicfont, '', 16);
+                PDF::SetXY(160,10);
+                PDF::Cell(0,0,"صورة جواز السفر:",0,0,'R');
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $passpath = base_path().'/public/admin/assets/images/candidate/'.$post->pass_file;
+                }else{
+                    $passpath = base_path('public_html/admin/assets/images/candidate/'.$post->pass_file);                
+                }
+
+
+
+                $passext = pathinfo($post->pass_file, PATHINFO_EXTENSION);
+
+                PDF::Image($passpath,30,30, '150', '',$passext,'','',false,'300','',false,false,0,false,false,false);
+            }
+
+            if($post->lic_file != ''){
+                
+                PDF::SetFont($filecand_pepopinsfont, '', 16);
+                PDF::SetXY(10,140);
+                PDF::Cell(0,0,"Driving Licence:");
+
+                PDF::SetFont($sansarabicfont, '', 16);
+                PDF::SetXY(160,140);
+                PDF::Cell(0,0,"رخصة قيادة:",0,0,"R");
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $licpath = base_path().'/public/admin/assets/images/candidate/'.$post->lic_file;
+                }else{
+                    $licpath = base_path('public_html/admin/assets/images/candidate/'.$post->lic_file);                
+                }
+
+                $licext = pathinfo($post->lic_file, PATHINFO_EXTENSION);
+    
+    
+                PDF::Image($licpath,30,160, '150', '',$licext,'','',false,'300','',false,false,0,false,false,false);
+            }
+            ob_end_clean();
+            // PDF::Output($post->cand_name.'_cv.pdf');
+            $findcvex = Companycvexecute::where('cand_id','=',$id)->where('partner_id','=',$partner)->first();
+            
+            $filename = $id.'_'.$partner.'_'.$post->cand_name;
+            if(isset($findcvex)){
+                // remove file from folder 
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $filepath = base_path('public/admin/assets/images/pdf/partner/'.$findcvex->cv_file);
+                }else{
+                    $filepath = base_path('public_html/admin/assets/images/pdf/partner/'.$findcvex->cv_file);
+                }
+
+                if(file_exists($filepath)){
+                    File::delete($filepath);
+                    $findcvex->cv_file = $filename;
+                }else{
+                    $findcvex->cv_file = $filename;
+                }
+                $findcvex->status = true;
+
+                $findcvex->save();
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    PDF::Output(base_path('public/admin/assets/images/pdf/partner').'/'.$filename,'F');
+                }else{
+                    PDF::Output(base_path('public_html/admin/assets/images/pdf/partner').'/'.$filename,'F');
+                }
+
+            }else{
+                // Create file in
+                $postcvex = New Companycvexecute();
+                $postcvex->cand_id = $id;
+                $postcvex->partner_id = $partner;
+                $postcvex->cv_file = $filename;
+                $postcvex->save();
+            
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    PDF::Output(base_path('public/admin/assets/images/pdf/partner').'/'.$filename,'F');
+                }else{
+                    PDF::Output(base_path('public_html/admin/assets/images/pdf/partner').'/'.$filename,'F');
+                }
+            }
+
+            return redirect()->back()->with('success','CV execute as per company!');
+
+
+        } catch (\Exception $e) {
+            return redirect()->back()->with('pdfError','Something is wrong please check the CV Text format ');
+        }
+    }
+
+    public function cvmultiplepartexec(Request $request){
+        $ids = explode(",",$request->candcv_id);
+        $partner = $request->partner_id;
+        $countIds = count($ids);
+        $allpostID = [];
+
+        $allposts = Candidate::where('cv_execute','!=',0)->get();
+        if(isset($allposts)){
+            foreach($allposts as $allpost){
+                $allpostID [] = $allpost->id;
+            }
+        }
+
+        $newIds = array_intersect($ids,$allpostID);
+
+    
+        $posts = DB::table('candidates as cand')
+        ->leftJoin('placeofissues as poi','cand.poi','=','poi.id')
+        ->leftJoin('countries as nation','cand.nation_id','=','nation.id')
+        ->leftJoin('regions as region','cand.region_id','region.id')
+        ->leftJoin('cities as candcity','cand.candcity_id','=','candcity.id')
+        ->leftJoin('cities as plb','cand.plb_id','plb.id')
+        ->leftJoin('professions as occupation','cand.jobtype_id','=','occupation.id')
+        ->leftJoin('embassies as embassy','cand.embassy_for','=','embassy.id')
+        ->select('cand.*','embassy.embassy as embname','poi.name as poiname','nation.name as nationname','nation.arname as nationarname','region.name as regionname','candcity.name as cancityname','plb.name as plbname','occupation.ar_name as prarname','occupation.eng_name as pengname')
+        // ->select('cand.*','poi.name as poiname','nation.name as nationname','region.name as regionname','candcity.name as cancityname','plb.name as plbname','occupation.ar_name as prarname','occupation.eng_name as pengname')
+        ->whereIn('cand.id',$newIds)
+        ->get();
+
+
+
+        if($posts->count() > 0){
+            foreach($posts as $post){
+                // Car Know List
+                $carkns = Carnknown::wherein('id',explode(",",$post->carknown_id))->get();
+                $carlist = [];
+                if(isset($carkns)){
+                    foreach($carkns as $carkn){
+                        $carlist [] = $carkn->name;
+                    }
+                }else{
+                    $carlist [] = "";
+                }
+                // Expected Work place
+                // $expwps = City::wherein('id',explode(",",$post->expwp_id))->get();
+                $expwps = DB::table('expecworkcities')->wherein('id',explode(",",$post->expwp_id))->get();
+                $exp_wp = [];
+                if(isset($expwps)){
+                    foreach($expwps as $expwp){
+                        $exp_wp [] = $expwp->name;
+                    }
+                }else{
+                    $exp_wp [] = "";
+                }
+        
+                
+        
+                // Fetch details as per cv setting
+                $cand_name_cvsetting = Cvsetting::where('db_field_name','=','cand_name')->first();
+                $cand_name_ar_cvsetting = Cvsetting::where('db_field_name','=','cand_name_ar')->first();
+                $exp_sal_cvsetting = Cvsetting::where('db_field_name','=','exp_sal')->first();
+                $expwp_id_cvsetting = Cvsetting::where('db_field_name','=','expwp_id')->first();
+                $age_cvsetting = Cvsetting::where('db_field_name','=','age')->first();
+                $marital_status_cvsetting = Cvsetting::where('db_field_name','=','marital_status')->first();
+                $religion_cvsetting = Cvsetting::where('db_field_name','=','religion')->first();
+                $dob_cvsetting = Cvsetting::where('db_field_name','=','dob')->first();
+                $plb_id_cvsetting = Cvsetting::where('db_field_name','=','plb_id')->first();
+                $nation_id_cvsetting = Cvsetting::where('db_field_name','=','nation_id')->first();
+                $region_id_cvsetting = Cvsetting::where('db_field_name','=','region_id')->first();
+                $lang_known_cvsetting = Cvsetting::where('db_field_name','=','lang_known')->first();
+                $google_map_cvsetting = Cvsetting::where('db_field_name','=','google_map')->first();
+                $carknown_id_cvsetting = Cvsetting::where('db_field_name','=','carknown_id')->first();
+                $proff_id_cvsetting = Cvsetting::where('db_field_name','=','proff_id')->first();
+                $experience_cvsetting = Cvsetting::where('db_field_name','=','experience')->first();
+                $expcountry_id_cvsetting = Cvsetting::where('db_field_name','=','expcountry_id')->first();
+                $expcity_id_cvsetting = Cvsetting::where('db_field_name','=','expcity_id')->first();
+                $pass_no_cvsetting = Cvsetting::where('db_field_name','=','pass_no')->first();
+                $pass_type_cvsetting = Cvsetting::where('db_field_name','=','pass_type')->first();
+                $doi_cvsetting = Cvsetting::where('db_field_name','=','doi')->first();
+                $doe_cvsetting = Cvsetting::where('db_field_name','=','doe')->first();
+                $poi_cvsetting = Cvsetting::where('db_field_name','=','poi')->first();
+                $photo_cvsetting = Cvsetting::where('db_field_name','=','photo')->first();
+                $fullsize_cvsetting = Cvsetting::where('db_field_name','=','fullsize')->first();
+                $reference_no_cvsetting = Cvsetting::where('db_field_name','=','reference_no')->first();
+                $gulf_experience_cvsetting = Cvsetting::where('db_field_name','=','gulf_experience')->first();
+                $gulf_experience_arabic_cvsetting = Cvsetting::where('db_field_name','=','gulf_experience_arabic')->first();
+                $remark_cvsetting = Cvsetting::where('db_field_name','=','remark')->first();
+                $created_date_cvsetting = Cvsetting::where('db_field_name','=','created_date')->first();
+                $image1_cvsetting = Cvsetting::where('db_field_name','=','image1')->first();
+                $image2_cvsetting = Cvsetting::where('db_field_name','=','image2')->first();
+                $image3_cvsetting = Cvsetting::where('db_field_name','=','image3')->first();
+                $image4_cvsetting = Cvsetting::where('db_field_name','=','image4')->first();
+                $image5_cvsetting = Cvsetting::where('db_field_name','=','image5')->first();
+                $text1_cvsetting = Cvsetting::where('db_field_name','=','text1')->first();
+                $text2_cvsetting = Cvsetting::where('db_field_name','=','text2')->first();
+                $text3_cvsetting = Cvsetting::where('db_field_name','=','text3')->first();
+                $text4_cvsetting = Cvsetting::where('db_field_name','=','text4')->first();
+
+                $embassyreq_cvsetting =  Cvsetting::where('db_field_name','=','embassy_required')->first();
+                $embassyreq_ar_cvsetting =  Cvsetting::where('db_field_name','=','embassy_required_ar')->first();
+
+                // Partner CV setting
+                $partnerimage1 =  Partnercvsetting::where('partner_id','=',$partner)->where('db_field_name','=','image1')->first();
+                $partnerimage2 =  Partnercvsetting::where('partner_id','=',$partner)->where('db_field_name','=','image2')->first();
+
+                // Base Path Status
+                $basepathSt = Basepathstatus::first();
+
+                // $backfile = base_path().'/public/admin/assets/images/resume/SVG_ONE_FINE_L.svg';
+                // $backfile = base_path().'/public/admin/assets/images/resume/final_cv.pdf';
+                // $backfile = base_path().'/public/admin/assets/images/resume/resumes_format_svg.svg';
+                // $backfile = base_path().'/public/admin/assets/images/resume/SVG3.svg';
+                // $backfile = url('/admin/assets/images/resume/SVG3.svg');
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    // $backfile = base_path('public/admin/assets/images/resume/SVG3.svg');
+                    $backfile = base_path('public/admin/assets/images/resume/cv_back_15072023.svg');
+                }else{
+                    // $backfile = base_path('public_html/admin/assets/images/resume/SVG3.svg');
+                    $backfile = base_path('public_html/admin/assets/images/resume/cv_back_15072023.svg');
+                }
+
+                PDF::SetCreator('Qamr International');
+                PDF::SetAuthor('Qamr International');
+                PDF::SetTitle($post->cand_name.' CV');
+                PDF::SetSubject($post->cand_name.' CV');
+                PDF::SetKeywords('Qamr, PDF, visa, form, guide');
+
+                PDF::AddPage();
+                PDF::ImageSVG($backfile,'','',210,297,'','','',0,false);
+
+                // Candidate Name
+                if (isset($cand_name_cvsetting)) {
+                    if($cand_name_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($cand_name_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+                    }
+                    $candpopinsfont = TCPDF_FONTS::addTTFfont($candpopins,'','',32);
+
+                    if($cand_name_cvsetting->font_family == 'none'){
+                        $candfonttype = "";
+                    }else{
+                        $candfonttype = $cand_name_cvsetting->font_family;
+                    }
+
+                    if($cand_name_cvsetting->font_size != ''){
+                        $candfontsize = $cand_name_cvsetting->font_size;
+                    }else{
+                        $candfontsize = '11';
+                    }
+
+                    PDF::SetFont($candpopinsfont,$candfonttype, $candfontsize,'',false);
+                    if($cand_name_cvsetting->font_color != ''){
+                        $candfontcolor = explode(",",$cand_name_cvsetting->font_color);
+                        PDF::SetTextColor($candfontcolor[0],$candfontcolor[1],$candfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+                    PDF::SetXY($cand_name_cvsetting->x_axis,$cand_name_cvsetting->y_axis);
+                    PDF::Cell(0,0,$post->cand_name);
+
+                }
+
+                // Candidate Arabic Name
+            if (isset($cand_name_ar_cvsetting)) {
+                if($cand_name_ar_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+                }elseif($cand_name_ar_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+
+
+                }
+                $candarpopinsfont = TCPDF_FONTS::addTTFfont($candarpopins,'','',32);
+
+                if($cand_name_ar_cvsetting->font_family == 'none'){
+                    $candarfonttype = "";
+                }else{
+                    $candarfonttype = $cand_name_ar_cvsetting->font_family;
+                }
+
+                if($cand_name_ar_cvsetting->font_size != ''){
+                    $candarfontsize = $cand_name_ar_cvsetting->font_size;
+                }else{
+                    $candarfontsize = '11';
+                }
+
+                PDF::SetFont($candarpopinsfont,$candarfonttype, $candarfontsize,'',false);
+                if($cand_name_ar_cvsetting->font_color != ''){
+                    $candarfontcolor = explode(",",$cand_name_ar_cvsetting->font_color);
+                    PDF::SetTextColor($candarfontcolor[0],$candarfontcolor[1],$candarfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($cand_name_ar_cvsetting->x_axis,$cand_name_ar_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->arcand_name);
+
+            }
+
+                // Embassy Required
+
+                if (isset($embassyreq_cvsetting)) {
+                    if($embassyreq_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                        }
+                    }elseif($embassyreq_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                        }
+
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+
+
+                    }
+                    $embassypopinsfont = TCPDF_FONTS::addTTFfont($embassypopins,'','',32);
+
+                    if($embassyreq_cvsetting->font_family == 'none'){
+                        $embassyfonttype = "";
+                    }else{
+                        $embassyfonttype = $embassyreq_cvsetting->font_family;
+                    }
+
+                    if($embassyreq_cvsetting->font_size != ''){
+                        $embassyfontsize = $embassyreq_cvsetting->font_size;
+                    }else{
+                        $embassyfontsize = '11';
+                    }
+
+                    PDF::SetFont($embassypopinsfont,$embassyfonttype, $embassyfontsize,'',false);
+                    if($embassyreq_cvsetting->font_color != ''){
+                        $embassyfontcolor = explode(",",$embassyreq_cvsetting->font_color);
+                        PDF::SetTextColor($embassyfontcolor[0],$embassyfontcolor[1],$embassyfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+                    PDF::SetXY($embassyreq_cvsetting->x_axis,$embassyreq_cvsetting->y_axis);
+                    if($post->embname == 'MUMBAI VISA REQUIRED'){
+                        $visaEmbE = "Required visa under Saudi Embassy Mumbai";
+                    }elseif($post->embname == 'DELHI VISA REQUIRED'){
+                        $visaEmbE = "Required visa under Saudi Embassy New Delhi";
+                    }else{
+                        $visaEmbE = "";
+                    }
+    
+                    PDF::Cell(0,0,$visaEmbE);
+
+                }
+
+                // Embassy Required Arabic
+
+            if (isset($embassyreq_ar_cvsetting)) {
+                if($embassyreq_ar_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                         $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');
+                    }
+                }elseif($embassyreq_ar_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');
+                    }
+
+
+                }
+                $embassyarpopinsfont = TCPDF_FONTS::addTTFfont($embassyarpopins,'','',32);
+
+                if($embassyreq_ar_cvsetting->font_family == 'none'){
+                    $embassyarfonttype = "";
+                }else{
+                    $embassyarfonttype = $embassyreq_ar_cvsetting->font_family;
+                }
+
+                if($embassyreq_ar_cvsetting->font_size != ''){
+                    $embassyarfontsize = $embassyreq_ar_cvsetting->font_size;
+                }else{
+                    $embassyarfontsize = '11';
+                }
+
+                PDF::SetFont($embassyarpopinsfont,$embassyarfonttype, $embassyarfontsize,'',false);
+                if($embassyreq_ar_cvsetting->font_color != ''){
+                    $embassyarfontcolor = explode(",",$embassyreq_ar_cvsetting->font_color);
+                    PDF::SetTextColor($embassyarfontcolor[0],$embassyarfontcolor[1],$embassyarfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($embassyreq_ar_cvsetting->x_axis,$embassyreq_ar_cvsetting->y_axis);
+
+                
+                if($post->embname == 'MUMBAI VISA REQUIRED'){
+                    $visaEmb = "مطلوب تأشيرة تحت السفارة السعودية في مومباي";
+                }elseif($post->embname == 'DELHI VISA REQUIRED'){
+                    $visaEmb = "مطلوب تأشيرة تحت السفارة السعودية في نيودلهي";
+                }else{
+                    $visaEmb = "";
+                }
+
+                PDF::Cell(0,0,$visaEmb);
+
+            }
+
+
+
+
+                // Remark
+                if(isset($remark_cvsetting)){
+                    // Remark Text 
+                    $remark_text_desc = Cvsetting::where('db_field_name','=','remark_text')->where('status','=',1)->first();
+                    if(isset($remark_text_desc)){
+                        $remarkDisp = 'Remark: '.$remark_text_desc->text_desc;
+                    }else{
+                        $remarkDisp = 'Remark: ';
+                    }
+    
+                    if($remark_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($remark_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+        
+                    $remarkpopinsfont = TCPDF_FONTS::addTTFfont($remarkpopins,'','',32);
+    
+                    if($remark_cvsetting->font_family == 'none'){
+                        $remarkfonttype = "";
+                    }else{
+                        $remarkfonttype = $remark_cvsetting->font_family;
+                    }
+    
+                    if($remark_cvsetting->font_size != ''){
+                        $remarkfontsize = $remark_cvsetting->font_size;
+                    }else{
+                        $remarkfontsize = "11";
+                    }
+    
+                    PDF::SetFont($remarkpopinsfont, $remarkfonttype, $remarkfontsize,'',false);
+                    if($remark_cvsetting->font_color != ''){
+                        $remarkfontcolor = explode(",",$remark_cvsetting->font_color);
+                        PDF::SetTextColor($remarkfontcolor[0],$remarkfontcolor[1],$remarkfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($remark_cvsetting->x_axis,$remark_cvsetting->y_axis);
+                    PDF::Cell(0,0,$remarkDisp);
+                }
+
+                // CV Create Date
+
+                if(isset($created_date_cvsetting)){
+                    if($created_date_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($created_date_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+        
+                    $cvdatecreatepopinsfont = TCPDF_FONTS::addTTFfont($cvdatecreatepopins,'','',32);
+
+                    if($created_date_cvsetting->font_family == 'none'){
+                        $cvdatecreatefonttype = "";
+                    }else{
+                        $cvdatecreatefonttype = $created_date_cvsetting->font_family;
+                    }
+
+                    if($created_date_cvsetting->font_size != ''){
+                        $cvdatecreatefontsize = $created_date_cvsetting->font_size;
+                    }else{
+                        $cvdatecreatefontsize = "11";
+                    }
+
+                    PDF::SetFont($cvdatecreatepopinsfont, $cvdatecreatefonttype, $cvdatecreatefontsize,'',false);
+                    if($created_date_cvsetting->font_color != ''){
+                        $cvdatecreatefontcolor = explode(",",$created_date_cvsetting->font_color);
+                        PDF::SetTextColor($cvdatecreatefontcolor[0],$cvdatecreatefontcolor[1],$cvdatecreatefontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($created_date_cvsetting->x_axis,$created_date_cvsetting->y_axis);
+                    if($post->cv_executae_date != ''){
+                        $cvDate = date('d-m-Y',strtotime($post->cv_executae_date));
+                    }else{
+
+                        $cvDate = date('d-m-Y');
+                    }
+                    PDF::Cell(0,0,'Date: '.$cvDate);
+                }
+
+                // Image1 and Image2
+                if(isset($image1_cvsetting)){
+                    if($image1_cvsetting->status == 1 && $image1_cvsetting->filename != ''){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $image1_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image1_cvsetting->filename;
+                        }else{
+                            $image1_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image1_cvsetting->filename);                    
+                        }
+
+                        $image1_cvsettingext = pathinfo($image1_cvsetting->filename, PATHINFO_EXTENSION);
+            
+                        PDF::Image($image1_cvsettingpath,$image1_cvsetting->x_axis, $image1_cvsetting->y_axis, $image1_cvsetting->width, '',$image1_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                    }
+                }
+
+                if(isset($image2_cvsetting)){
+                    if($image2_cvsetting->status == 1 && $image2_cvsetting->filename != ''){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $image2_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image2_cvsetting->filename;
+                        }else{
+                            $image2_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image2_cvsetting->filename);                    
+                        }
+                        $image2_cvsettingext = pathinfo($image2_cvsetting->filename, PATHINFO_EXTENSION);
+            
+                        PDF::Image($image2_cvsettingpath,$image2_cvsetting->x_axis, $image2_cvsetting->y_axis, $image2_cvsetting->width, '',$image2_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                    }
+                }
+
+                if(isset($image3_cvsetting)){
+                    if($image3_cvsetting->status == 1 && $image3_cvsetting->filename != ''){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $image3_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image3_cvsetting->filename;
+                        }else{
+                            $image3_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image3_cvsetting->filename);                    
+                        }
+
+                        $image3_cvsettingext = pathinfo($image3_cvsetting->filename, PATHINFO_EXTENSION);
+            
+                        PDF::Image($image3_cvsettingpath,$image3_cvsetting->x_axis, $image3_cvsetting->y_axis, $image3_cvsetting->width, '',$image3_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                    }
+                }
+
+                if(isset($image4_cvsetting)){
+                    if($image4_cvsetting->status == 1 && $image4_cvsetting->filename != ''){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $image4_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image4_cvsetting->filename;
+                        }else{
+                            $image4_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image4_cvsetting->filename);                    
+                        }
+
+                        $image4_cvsettingext = pathinfo($image4_cvsetting->filename, PATHINFO_EXTENSION);
+            
+                        PDF::Image($image4_cvsettingpath,$image4_cvsetting->x_axis, $image4_cvsetting->y_axis, $image4_cvsetting->width, '',$image4_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                    }
+                }
+
+                if(isset($image5_cvsetting)){
+                    if($image5_cvsetting->status == 1 && $image5_cvsetting->filename != ''){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $image5_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image5_cvsetting->filename;
+                        }else{
+                            $image5_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image5_cvsetting->filename);                    
+                        }
+
+                        $image5_cvsettingext = pathinfo($image5_cvsetting->filename, PATHINFO_EXTENSION);
+            
+                        PDF::Image($image5_cvsettingpath,$image5_cvsetting->x_axis, $image5_cvsetting->y_axis, $image5_cvsetting->width, '',$image5_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                    }
+                }
+
+                // Text1, Text2, Text3, Text4,
+                if (isset($text1_cvsetting)) {
+                    if($text1_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                        }
+                    }elseif($text1_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                        }
+
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+                    }
+                    $text1popinsfont = TCPDF_FONTS::addTTFfont($text1popins,'','',32);
+
+                    if($text1_cvsetting->font_family == 'none'){
+                        $text1fonttype = "";
+                    }else{
+                        $text1fonttype = $text1_cvsetting->font_family;
+                    }
+
+                    if($text1_cvsetting->font_size != ''){
+                        $text1fontsize = $text1_cvsetting->font_size;
+                    }else{
+                        $text1fontsize = '11';
+                    }
+
+                    PDF::SetFont($text1popinsfont,$text1fonttype, $text1fontsize,'',false);
+                    if($text1_cvsetting->font_color != ''){
+                        $text1fontcolor = explode(",",$text1_cvsetting->font_color);
+                        PDF::SetTextColor($text1fontcolor[0],$text1fontcolor[1],$text1fontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+                    PDF::SetXY($text1_cvsetting->x_axis,$text1_cvsetting->y_axis);
+                    PDF::Cell(0,0,$text1_cvsetting->text_desc);
+
+                }
+
+                if (isset($text2_cvsetting)) {
+                    if($text2_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                        }
+                    }elseif($text2_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                        }
+
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+                    }
+                    $text2popinsfont = TCPDF_FONTS::addTTFfont($text2popins,'','',32);
+
+                    if($text2_cvsetting->font_family == 'none'){
+                        $text2fonttype = "";
+                    }else{
+                        $text2fonttype = $text2_cvsetting->font_family;
+                    }
+
+                    if($text2_cvsetting->font_size != ''){
+                        $text2fontsize = $text2_cvsetting->font_size;
+                    }else{
+                        $text2fontsize = '11';
+                    }
+
+                    PDF::SetFont($text2popinsfont,$text2fonttype, $text2fontsize,'',false);
+                    if($text2_cvsetting->font_color != ''){
+                        $text2fontcolor = explode(",",$text2_cvsetting->font_color);
+                        PDF::SetTextColor($text2fontcolor[0],$text2fontcolor[1],$text2fontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+                    PDF::SetXY($text2_cvsetting->x_axis,$text2_cvsetting->y_axis);
+                    PDF::Cell(0,0,$text2_cvsetting->text_desc);
+
+                }
+
+                if (isset($text3_cvsetting)) {
+                    if($text3_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                        }
+                    }elseif($text3_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                        }
+
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+                    }
+                    $text3popinsfont = TCPDF_FONTS::addTTFfont($text3popins,'','',32);
+
+                    if($text3_cvsetting->font_family == 'none'){
+                        $text3fonttype = "";
+                    }else{
+                        $text3fonttype = $text3_cvsetting->font_family;
+                    }
+
+                    if($text3_cvsetting->font_size != ''){
+                        $text3fontsize = $text3_cvsetting->font_size;
+                    }else{
+                        $text3fontsize = '11';
+                    }
+
+                    PDF::SetFont($text3popinsfont,$text3fonttype, $text3fontsize,'',false);
+                    if($text3_cvsetting->font_color != ''){
+                        $text3fontcolor = explode(",",$text3_cvsetting->font_color);
+                        PDF::SetTextColor($text3fontcolor[0],$text3fontcolor[1],$text3fontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+                    PDF::SetXY($text3_cvsetting->x_axis,$text3_cvsetting->y_axis);
+                    PDF::Cell(0,0,$text3_cvsetting->text_desc);
+
+                }
+
+                if (isset($text4_cvsetting)) {
+                    if($text4_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                        }
+                    }elseif($text4_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                        }
+
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+                    }
+                    $text4popinsfont = TCPDF_FONTS::addTTFfont($text4popins,'','',32);
+
+                    if($text4_cvsetting->font_family == 'none'){
+                        $text4fonttype = "";
+                    }else{
+                        $text4fonttype = $text4_cvsetting->font_family;
+                    }
+
+                    if($text4_cvsetting->font_size != ''){
+                        $text4fontsize = $text4_cvsetting->font_size;
+                    }else{
+                        $text4fontsize = '11';
+                    }
+
+                    PDF::SetFont($text4popinsfont,$text4fonttype, $text4fontsize,'',false);
+                    if($text4_cvsetting->font_color != ''){
+                        $text4fontcolor = explode(",",$text4_cvsetting->font_color);
+                        PDF::SetTextColor($text4fontcolor[0],$text4fontcolor[1],$text4fontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+                    PDF::SetXY($text4_cvsetting->x_axis,$text4_cvsetting->y_axis);
+                    PDF::Cell(0,0,$text4_cvsetting->text_desc);
+
+                }
+
+
+                // Partner Images display
+                if(isset($partnerimage1)){
+                    if($partnerimage1->status == 1 && $partnerimage1->filename != ''){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $image1_partnercvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$partnerimage1->filename;
+                        }else{
+                            $image1_partnercvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$partnerimage1->filename);
+                        }
+
+                        $image1_partnercvsettingext = pathinfo($partnerimage1->filename, PATHINFO_EXTENSION);
+                        PDF::Image($image1_partnercvsettingpath,$partnerimage1->x_axis, $partnerimage1->y_axis, $partnerimage1->width, '',$image1_partnercvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                    }
+                }
+
+                if(isset($partnerimage2)){
+                    if($partnerimage2->status == 1 && $partnerimage2->filename != ''){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $image2_partnercvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$partnerimage2->filename;
+                        }else{
+                            $image2_partnercvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$partnerimage2->filename);
+                        }
+
+                        $image1_partnercvsettingext = pathinfo($partnerimage2->filename, PATHINFO_EXTENSION);
+                        PDF::Image($image2_partnercvsettingpath,$partnerimage2->x_axis, $partnerimage2->y_axis, $partnerimage2->width, '',$image1_partnercvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                    }
+                }
+
+
+
+                // Profile and fullsize Photo
+                if ($post->photo_file != '') {
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $photfilepath = base_path().'/public/admin/assets/images/candidate/'.$post->photo_file;
+                    }else{
+                        $photfilepath = base_path('public_html/admin/assets/images/candidate/'.$post->photo_file);                
+                    }
+
+                    $photext = pathinfo($post->photo_file, PATHINFO_EXTENSION);
+
+                    if(isset($photo_cvsetting)){
+                        PDF::Image($photfilepath,$photo_cvsetting->x_axis,$photo_cvsetting->y_axis,'50','54',$photext,'','',false,'300','',false,false,0,false,false,false);
+                    }
+                }
+                if ($post->cv_file != '') {
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $fullsizepath = base_path().'/public/admin/assets/images/candidate/'.$post->cv_file;
+                    }else{
+                        $fullsizepath = base_path('public_html/admin/assets/images/candidate/'.$post->cv_file);                  
+                    }
+                    
+                    $fullsizeext = pathinfo($post->cv_file, PATHINFO_EXTENSION);
+
+                    if(isset($fullsize_cvsetting)){
+                        PDF::Image($fullsizepath,$fullsize_cvsetting->x_axis, $fullsize_cvsetting->y_axis, '', '',$fullsizeext,'','',false,'300','',false,false,0,false,false,false);
+                    }
+                }
+                // Reference No
+                if (isset($reference_no_cvsetting)) {
+                    // if($reference_no_cvsetting->font_family == 'B'){
+                    //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+
+                    //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    //     }else{
+                    //        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    //     }
+                    // }elseif($reference_no_cvsetting->font_family == 'I'){
+                    //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    //     }else{
+                    //         $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    //     }
+                    // }else{
+                    //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    //     }else{
+                    //         $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    //     }
+
+                    // }
+
+                    if($reference_no_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                        }else{
+                            $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                        }else{
+                            $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                        }
+                    }
+
+                    $refrenceNopopinsfont = TCPDF_FONTS::addTTFfont($refrenceNopopins,'','',32);
+
+                    if($reference_no_cvsetting->font_family == 'none'){
+                        $refereneceFont = "";
+                    }else{
+                        $refereneceFont = $reference_no_cvsetting->font_family;
+                    }
+
+                    if($reference_no_cvsetting->font_size != ''){
+                        $refrenceNoFontsize = $reference_no_cvsetting->font_size;
+                    }else{
+                        $refrenceNoFontsize = '11';
+                    }
+
+                    PDF::SetFont($refrenceNopopinsfont,$refereneceFont, $refrenceNoFontsize,'',false);
+                    if($reference_no_cvsetting->font_color != ''){
+                        $refnofontcolor = explode(",",$reference_no_cvsetting->font_color);
+                        PDF::SetTextColor($refnofontcolor[0],$refnofontcolor[1],$refnofontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+
+                    PDF::SetXY($reference_no_cvsetting->x_axis,$reference_no_cvsetting->y_axis);
+                    // $disrefno = 'Reference No: '.$post->id.' : رقم المرجع';
+                    $disrefno = 'رقم المرجع : '.$post->id.' :No Reference';
+                
+
+                    // dd($disrefno);
+                    PDF::Cell(0,0,$disrefno);
+                }
+
+                // Gulf experience and occupation
+                // if(isset($gulf_experience_cvsetting)){
+                //     if($gulf_experience_cvsetting->font_family == 'B'){
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                //         }else{
+                //             $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                    
+                //         }
+                //     }else{
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                //         }else{
+                //             $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                //         }
+                //     }
+                //     $gulf_experience_arabic_font = TCPDF_FONTS::addTTFfont($gulf_experience_arabic,'','',32);
+
+                //     if($gulf_experience_cvsetting->font_family == 'none'){
+                //         $gulfexpFont = "";
+                //     }else{
+                //         $gulfexpFont = $gulf_experience_cvsetting->font_family;
+                //     }
+
+                //     if($gulf_experience_cvsetting->font_size != ''){
+                    
+                //         $gulfexpFontsize = $gulf_experience_cvsetting->font_size;
+                //     }else{
+                //         $gulfexpFontsize = "11";
+                //     }
+                //     PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+
+                //     if($gulf_experience_cvsetting->font_color != ''){
+                //         $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+                //         PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+                //     }else{
+                //         PDF::SetTextColor(0,0,0);
+                //     }
+
+                //     PDF::SetXY($gulf_experience_cvsetting->x_axis,$gulf_experience_cvsetting->y_axis);
+                //     if($post->gulfexperience == 1){
+                //         $gulfexperience1 = $post->prarname.' قد اشتغل في الهند فقط';
+                //         PDF::Cell(0,0,$gulfexperience1);
+                //     }
+    
+                //     if($post->gulfexperience == 2){
+                //         $gulfexperience2 = $post->prarname.' سبق له العمل';
+                //         PDF::Cell(0,0,$gulfexperience2);
+                //     }
+
+                //     if($post->gulfexperience == 1){
+                //         PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+                //         if($gulf_experience_cvsetting->font_color != ''){
+                //             $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+                //             PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+                //         }else{
+                //             PDF::SetTextColor(0,0,0);
+                //         }
+                //         $gyaxis = $gulf_experience_cvsetting->y_axis + 4;
+                //         PDF::SetXY($gulf_experience_cvsetting->x_axis,$gyaxis);
+                //         PDF::Cell(0,0,'Indian Experience '.$post->pengname);
+                //     }
+
+                //     if($post->gulfexperience == 2){
+                //         PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+                //         if($gulf_experience_cvsetting->font_color != ''){
+                //             $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+                //             PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+                //         }else{
+                //             PDF::SetTextColor(0,0,0);
+                //         }
+                //         $gyaxis = $gulf_experience_cvsetting->y_axis + 4;
+                //         PDF::SetXY($gulf_experience_cvsetting->x_axis,$gyaxis);
+                //         PDF::Cell(0,0,'Ex-Abroad '.$post->pengname);
+                //     }
+                // }
+
+                if(isset($gulf_experience_cvsetting)){
+                    if($gulf_experience_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($gulf_experience_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+                    $gulf_experiencepopinsfont = TCPDF_FONTS::addTTFfont($gulf_experiencepopins,'','',32);
+
+                    if($gulf_experience_cvsetting->font_family == 'none'){
+                        $gulf_experiencefonttype = "";
+                    }else{
+                        $gulf_experiencefonttype = $gulf_experience_cvsetting->font_family;
+                    }
+
+                    if($gulf_experience_cvsetting->font_size != ''){
+                        $gulf_experiencefontsize = $gulf_experience_cvsetting->font_size;
+                    }else{
+                        $gulf_experiencefontsize = "11";
+                    }
+
+                    PDF::SetFont($gulf_experiencepopinsfont, $gulf_experiencefonttype, $gulf_experiencefontsize,'',false);
+
+                    if($gulf_experience_cvsetting->font_color != ''){
+                        $gulf_experiencefontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+                        PDF::SetTextColor($gulf_experiencefontcolor[0],$gulf_experiencefontcolor[1],$gulf_experiencefontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($gulf_experience_cvsetting->x_axis,$gulf_experience_cvsetting->y_axis);
+                    if($post->gulfexperience == 1){
+                        $expEng = 'Indian Experience '.$post->pengname;
+                    }elseif($post->gulfexperience == 2){
+                        $expEng = 'Ex-Abroad '.$post->pengname;
+                    }else{
+                        $expEng = '---';
+                    }
+                    PDF::Cell(0,0,$expEng);
+
+                }
+
+                if(isset($gulf_experience_arabic_cvsetting)){
+                    if($gulf_experience_arabic_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                        }else{
+                            $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                        }else{
+                            $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                        }
+                    }
+
+                    $gulf_experience_arabic_font = TCPDF_FONTS::addTTFfont($gulf_experience_arabic,'','',32);
+
+                    if($gulf_experience_arabic_cvsetting->font_family == 'none'){
+                        $gulfexpFont = "";
+                    }else{
+                        $gulfexpFont = $gulf_experience_arabic_cvsetting->font_family;
+                    }
+
+                    if($gulf_experience_arabic_cvsetting->font_size != ''){
+                    
+                        $gulfexpFontsize = $gulf_experience_arabic_cvsetting->font_size;
+                    }else{
+                        $gulfexpFontsize = "11";
+                    }
+
+                    PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+
+                    if($gulf_experience_arabic_cvsetting->font_color != ''){
+                        $gulfexpfontcolor = explode(",",$gulf_experience_arabic_cvsetting->font_color);
+                        PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+                    PDF::SetXY($gulf_experience_arabic_cvsetting->x_axis,$gulf_experience_arabic_cvsetting->y_axis);
+                    if($post->gulfexperience == 1){
+                        $arexp = $post->prarname.' قد اشتغل في الهند فقط';
+                    }elseif($post->gulfexperience == 2){
+                        $arexp = $post->prarname.' سبق له العمل';
+                    }else{
+                        $arexp = "---";
+                    }
+                    PDF::Cell(0,0,$arexp);
+                }
+
+
+                // Expected salary and location
+                if(isset($exp_sal_cvsetting)){
+                    if($exp_sal_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($exp_sal_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+        
+                    $expsalpopinsfont = TCPDF_FONTS::addTTFfont($expsalpopins,'','',32);
+
+                    if($exp_sal_cvsetting->font_family == 'none'){
+                        $expsalfonttype = "";
+                    }else{
+                        $expsalfonttype = $exp_sal_cvsetting->font_family;
+                    }
+
+                    if($exp_sal_cvsetting->font_size != ''){
+                        $expsalfontsize = $exp_sal_cvsetting->font_size;
+                    }else{
+                        $expsalfontsize = "11";
+                    }
+
+                    PDF::SetFont($expsalpopinsfont, $expsalfonttype, $expsalfontsize,'',false);
+                    if($exp_sal_cvsetting->font_color != ''){
+                        $expsalfontcolor = explode(",",$exp_sal_cvsetting->font_color);
+                        PDF::SetTextColor($expsalfontcolor[0],$expsalfontcolor[1],$expsalfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($exp_sal_cvsetting->x_axis,$exp_sal_cvsetting->y_axis);
+                    PDF::Cell(0,0,$post->exp_sal);
+                }
+
+                if(isset($expwp_id_cvsetting)){
+                    if($expwp_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $expwppopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($expwp_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $expwppopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $expwppopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+
+                    $expwppopinsfont = TCPDF_FONTS::addTTFfont($expwppopins,'','',32);
+
+                    if($expwp_id_cvsetting->font_family == 'none'){
+                        $expwpfonttype = "";
+                    }else{
+                        $expwpfonttype = $expwp_id_cvsetting->font_family;
+                    }
+
+                    if($expwp_id_cvsetting->font_size != ''){
+                        $expwpfontsize = $expwp_id_cvsetting->font_size;
+                    }else{
+                        $expwpfontsize = "11";
+                    }
+
+                    PDF::SetFont($expwppopinsfont, $expwpfonttype, $expwpfontsize,'',false);
+                    if($expwp_id_cvsetting->font_color != ''){
+                        $expwpfontcolor = explode(",",$expwp_id_cvsetting->font_color);
+                        PDF::SetTextColor($expwpfontcolor[0],$expwpfontcolor[1],$expwpfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($expwp_id_cvsetting->x_axis,$expwp_id_cvsetting->y_axis);
+                    PDF::Cell(0,0,implode(",",$exp_wp));
+                }
+
+                // Age
+                if(isset($age_cvsetting)){
+                    if($age_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $agepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+
+                    }elseif($age_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $agepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $agepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+
+                    $agepopinsfont = TCPDF_FONTS::addTTFfont($agepopins,'','',32);
+
+                    if($age_cvsetting->font_family == 'none'){
+                        $agefonttype = "";
+                    }else{
+                        $agefonttype = $age_cvsetting->font_family;
+                    }
+
+                    if($age_cvsetting->font_size != ''){
+                        $agefontsize = $age_cvsetting->font_size;
+                    }else{
+                        $agefontsize = "11";
+                    }
+
+                    PDF::SetFont($agepopinsfont, $agefonttype, $agefontsize,'',false);
+                    if($age_cvsetting->font_color != ''){
+                        $agefontcolor = explode(",",$age_cvsetting->font_color);
+                        PDF::SetTextColor($agefontcolor[0],$agefontcolor[1],$agefontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($age_cvsetting->x_axis,$age_cvsetting->y_axis);
+                    PDF::Cell(0,0,$post->age);
+
+                }
+                // Marital
+                if(isset($marital_status_cvsetting)){
+                    if($marital_status_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $maritalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($marital_status_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $maritalpopins = base_path('public_html/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $maritalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+        
+                    $maritalpopinsfont = TCPDF_FONTS::addTTFfont($maritalpopins,'','',32);
+
+
+                    if($marital_status_cvsetting->font_family == 'none'){
+                        $mariedfonttype = "";
+                    }else{
+                        $mariedfonttype = $marital_status_cvsetting->font_family;
+                    }
+
+                    if($marital_status_cvsetting->font_size != ''){
+                        $mariedfontsize = $marital_status_cvsetting->font_size;
+                    }else{
+                        $mariedfontsize = "11";                
+                    }
+
+                    PDF::SetFont($maritalpopinsfont, $mariedfonttype, $mariedfontsize,'',false);
+                    if($marital_status_cvsetting->font_color != ''){
+                        $marital_statusfontcolor = explode(",",$marital_status_cvsetting->font_color);
+                        PDF::SetTextColor($marital_statusfontcolor[0],$marital_statusfontcolor[1],$marital_statusfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($marital_status_cvsetting->x_axis,$marital_status_cvsetting->y_axis);
+                    PDF::Cell(0,0,$post->marital_status);
+                    
+                }
+                // Religion
+                if(isset($religion_cvsetting)){
+                    // if($religion_cvsetting->font_family == 'B'){
+                    //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    //     }else{
+                    //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    //     }
+                    // }elseif($religion_cvsetting->font_family == 'I'){
+                    //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    //     }else{
+                    //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    //     }
+                    // }else{
+                    //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    //     }else{
+                    //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    //     }
+                    // }
+        
+
+                    if($religion_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $religionpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                        }else{
+                            $religionpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $religionpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                        }else{
+                            $religionpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                        }
+                    }
+
+
+                    $religionpopinsfont = TCPDF_FONTS::addTTFfont($religionpopins,'','',32);
+
+                    if($religion_cvsetting->font_family == 'none'){
+                        $relfonttype = "";
+                    }else{
+                        $relfonttype = $religion_cvsetting->font_family;
+                    }
+
+                    if($religion_cvsetting->font_size != ''){
+                        $relfontsize = $religion_cvsetting->font_size;
+                    }else{
+                        $relfontsize = "11";
+                    }
+
+                    PDF::SetFont($religionpopinsfont, $relfonttype, $relfontsize,'',false);
+                    if($religion_cvsetting->font_color != ''){
+                        $religionfontcolor = explode(",",$religion_cvsetting->font_color);
+                        PDF::SetTextColor($religionfontcolor[0],$religionfontcolor[1],$religionfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($religion_cvsetting->x_axis,$religion_cvsetting->y_axis);
+                    if($post->religion != '' && $post->religion == 'Muslim'){
+                        PDF::Cell(0,0,$post->religion.' مسلم');
+                    }
+                    if($post->religion != '' && $post->religion != 'Muslim'){
+                        PDF::Cell(0,0,$post->religion.'  غير مسلم');
+                    }
+
+
+                }
+                // Date of Birth
+                if(isset($dob_cvsetting)){
+
+                    if($dob_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $dobpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($dob_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $dobpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $dobpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+        
+                    $dobpopinsfont = TCPDF_FONTS::addTTFfont($dobpopins,'','',32);
+
+                    if($dob_cvsetting->font_family == 'none'){
+                        $dobfonttype = "";
+                    }else{
+                        $dobfonttype = $dob_cvsetting->font_family;
+                    }
+
+                    if($dob_cvsetting->font_size != ''){
+                        $dobfontsize = $dob_cvsetting->font_size;
+                    }else{
+                        $dobfontsize = "11";
+                    }
+
+                    PDF::SetFont($dobpopinsfont, $dobfonttype, $dobfontsize,'',false);
+                    if($dob_cvsetting->font_color != ''){
+                        $dobfontcolor = explode(",",$dob_cvsetting->font_color);
+                        PDF::SetTextColor($dobfontcolor[0],$dobfontcolor[1],$dobfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($dob_cvsetting->x_axis,$dob_cvsetting->y_axis);
+                    PDF::Cell(0,0,date('d-m-Y',strtotime($post->dob)));
+
+                }
+                // Place of Birth
+                if(isset($plb_id_cvsetting)){
+                    if($plb_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $plb_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($plb_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $plb_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $plb_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                        }
+                    }
+                    $plb_idpopinsfont = TCPDF_FONTS::addTTFfont($plb_idpopins,'','',32);
+
+                    if($plb_id_cvsetting->font_family == 'none'){
+                        $plb_idfonttype = "";
+                    }else{
+                        $plb_idfonttype = $plb_id_cvsetting->font_family;
+                    }
+
+                    if($plb_id_cvsetting->font_size != ''){
+                        $plb_idfontsize = $plb_id_cvsetting->font_size;
+                    }else{
+                        $plb_idfontsize = "11";
+                    }
+
+                    PDF::SetFont($plb_idpopinsfont, $plb_idfonttype, $plb_idfontsize,'',false);
+                    if($plb_id_cvsetting->font_color != ''){
+                        $plb_idfontcolor = explode(",",$plb_id_cvsetting->font_color);
+                        PDF::SetTextColor($plb_idfontcolor[0],$plb_idfontcolor[1],$plb_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($plb_id_cvsetting->x_axis,$plb_id_cvsetting->y_axis);
+                    // PDF::Cell(0,0,$post->plbname);
+                    PDF::Cell(0,0,$post->plb_text);
+                }
+                // Nationality
+                if(isset($nation_id_cvsetting)){
+
+                    // if($nation_id_cvsetting->font_family == 'B'){
+                    //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    //     }else{
+                    //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    //     }
+                    // }elseif($nation_id_cvsetting->font_family == 'I'){
+                    //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    //     }else{
+                    //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    //     }
+                    // }else{
+                    //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    //     }else{
+                    //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    //     }
+                    
+                    // }
+                    
+                    if($nation_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                        }else{
+                            $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                        }else{
+                            $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                        }
+                    }
+
+                    $nation_idpopinsfont = TCPDF_FONTS::addTTFfont($nation_idpopins,'','',32);
+
+                    if($nation_id_cvsetting->font_family == 'none'){
+                        $nation_idfonttype = "";
+                    }else{
+                        $nation_idfonttype = $nation_id_cvsetting->font_family;
+                    }
+
+                    if($nation_id_cvsetting->font_size != ''){
+
+                        $nation_idfontsize = $nation_id_cvsetting->font_size;
+                    }else{
+                        $nation_idfontsize = "11";
+                    }
+
+                    PDF::SetFont($nation_idpopinsfont, $nation_idfonttype, $nation_idfontsize,'',false);
+                    if($nation_id_cvsetting->font_color != ''){
+                        $nation_idfontcolor = explode(",",$nation_id_cvsetting->font_color);
+                        PDF::SetTextColor($nation_idfontcolor[0],$nation_idfontcolor[1],$nation_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($nation_id_cvsetting->x_axis,$nation_id_cvsetting->y_axis);
+                    PDF::Cell(0,0,$post->nationname.'  '.$post->nationarname);
+
+                    
+                }
+                // Region
+                if(isset($region_id_cvsetting)){
+
+                    if($region_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $regionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($region_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $regionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $regionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+
+                    $regionpopinsfont = TCPDF_FONTS::addTTFfont($regionpopins,'','',32);
+
+                    if($region_id_cvsetting->font_family == 'none'){
+                        $region_idfonttype = "";
+                    }else{
+                        $region_idfonttype = $region_id_cvsetting->font_family;
+                    }
+
+                    if($region_id_cvsetting->font_size != ''){
+                        $region_idfonttype = $region_id_cvsetting->font_size;
+                    }else{
+                        $region_idfonttype = "11";
+                    }
+
+                    PDF::SetFont($regionpopinsfont, $region_idfonttype, $region_idfonttype,'',false);
+                    if($region_id_cvsetting->font_color != ''){
+                        $region_idfontcolor = explode(",",$region_id_cvsetting->font_color);
+                        PDF::SetTextColor($region_idfontcolor[0],$region_idfontcolor[1],$region_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($region_id_cvsetting->x_axis,$region_id_cvsetting->y_axis);
+                    PDF::Cell(0,0,$post->regionname);
+                    }
+
+                // Language
+                if(isset($lang_known_cvsetting)){
+
+                    if($lang_known_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $langknownpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($lang_known_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $langknownpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $langknownpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+        
+                    $langknownpopinsfont = TCPDF_FONTS::addTTFfont($langknownpopins,'','',32);
+
+                    if($lang_known_cvsetting->font_family == 'none'){
+                        $lang_knownfonttype = "";
+                    }else{
+                        $lang_knownfonttype = $lang_known_cvsetting->font_family;
+                    }
+
+                    if($lang_known_cvsetting->font_size != ''){
+                        $lang_knownfontsize = $lang_known_cvsetting->font_size;
+                    }else{
+                        $lang_knownfontsize = "11";
+                    }
+
+                    PDF::SetFont($langknownpopinsfont, $lang_knownfonttype, $lang_knownfontsize,'',false);
+                    if($lang_known_cvsetting->font_color != ''){
+                        $lang_knownfontcolor = explode(",",$lang_known_cvsetting->font_color);
+                        PDF::SetTextColor($lang_knownfontcolor[0],$lang_knownfontcolor[1],$lang_knownfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($lang_known_cvsetting->x_axis,$lang_known_cvsetting->y_axis);
+                    PDF::Cell(0,0,$post->lang_known);
+
+                }
+                // Google Map
+                if(isset($google_map_cvsetting)){
+
+                    if($google_map_cvsetting->font_family == 'none'){
+                        $google_mapfonttype = "";
+                    }else{
+                        $google_mapfonttype = $google_map_cvsetting->font_family;
+                    }
+
+                    if($google_map_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $google_map_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                        }else{
+                            $google_map_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $google_map_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                        }else{
+                            $google_map_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                        }    
+                    }
+
+                    $google_map_arabic_font = TCPDF_FONTS::addTTFfont($google_map_arabic,'','',32);
+
+                    if($google_map_cvsetting->font_size != ''){
+                        $google_mapfontsize = $google_map_cvsetting->font_size;
+                    }else{
+                        $google_mapfontsize = "11";
+                    }
+
+                    if($post->google_map == 1){
+                        $gmap = "Yes  نعم";
+                    }else{
+                        $gmap = "No  لا";
+                    }
+
+                    PDF::SetFont($google_map_arabic_font, $google_mapfonttype, $google_mapfontsize,'',false);
+                    if($google_map_cvsetting->font_color != ''){
+                        $google_mapfontcolor = explode(",",$google_map_cvsetting->font_color);
+                        PDF::SetTextColor($google_mapfontcolor[0],$google_mapfontcolor[1],$google_mapfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($google_map_cvsetting->x_axis,$google_map_cvsetting->y_axis);
+                    PDF::Cell(0,0,$gmap);
+
+                }
+                // Vehical
+                if(isset($carknown_id_cvsetting)){
+
+                    if($carknown_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $carknown_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($carknown_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $carknown_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $carknown_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }    
+                    }
+
+                    $carknown_idpopinsfont = TCPDF_FONTS::addTTFfont($carknown_idpopins,'','',32);
+
+                    if($carknown_id_cvsetting->font_family == 'none'){
+                        $carknown_idfonttype = "";
+                    }else{
+                        $carknown_idfonttype = $carknown_id_cvsetting->font_family;
+                    }
+
+                    if($carknown_id_cvsetting->font_size != ''){
+                        $carknown_idfontsize = $carknown_id_cvsetting->font_size;
+                    }else{
+                        $carknown_idfontsize = "11";
+                    }
+
+                    PDF::SetFont($carknown_idpopinsfont, $carknown_idfonttype, $carknown_idfontsize,'',false);
+                    if($carknown_id_cvsetting->font_color != ''){
+                        $carknown_idfontcolor = explode(",",$carknown_id_cvsetting->font_color);
+                        PDF::SetTextColor($carknown_idfontcolor[0],$carknown_idfontcolor[1],$carknown_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($carknown_id_cvsetting->x_axis,$carknown_id_cvsetting->y_axis);
+                    PDF::Cell(0,0,implode(",",$carlist));
+                }
+
+                // Work Experience
+                $cexperience = explode(",",$post->experience);
+                $cprofessions = explode(",",$post->proff_id);
+                $cexpcountry = explode(",",$post->expcountry_id);
+                // $cexpcity = explode(",",$post->expcity_id);
+                $cexpcitytext = explode(",",$post->expcity_id_text);
+
+                $iec = 0;
+                $iprof = 0;
+                $icont = 0;
+                // $icity = 0;
+                $icitytext = 0;
+                $icco = 0;
+
+                foreach($cexperience as $index => $value){
+
+                    // Job
+                    
+                    if(isset($proff_id_cvsetting)){
+                        $py_axis = $proff_id_cvsetting->y_axis + $iprof;
+
+                        if($proff_id_cvsetting->font_family == 'none'){
+                            $proff_idfonttype = "";
+                        }else{
+                            $proff_idfonttype = $proff_id_cvsetting->font_family;
+                        }
+                        
+                        if($proff_id_cvsetting->font_family == 'B'){
+                            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                                $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                            }else{
+                                $proff_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                            }
+
+                        }elseif($proff_id_cvsetting->font_family == 'I'){
+                            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                                $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                            }else{
+                                $proff_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                        
+                            }
+                        }else{
+                            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                                $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                            }else{
+                                $proff_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                            }
+                        }
+
+                        $proff_idpopinsfont = TCPDF_FONTS::addTTFfont($proff_idpopins,'','',32);
+
+                        if($proff_id_cvsetting->font_size != ''){
+                            $proff_idfontsize = $proff_id_cvsetting->font_size;
+                        }else{
+                            $proff_idfontsize = "11";
+                        }
+                        $professionF = Profession::find($cprofessions[$index]);
+                        PDF::SetFont($proff_idpopinsfont, $proff_idfonttype, $proff_idfontsize,'',false);
+
+                        if($proff_id_cvsetting->font_color != ''){
+                            $proff_idfontcolor = explode(",",$proff_id_cvsetting->font_color);
+                            PDF::SetTextColor($proff_idfontcolor[0],$proff_idfontcolor[1],$proff_idfontcolor[2]);
+                        }else{
+                            PDF::SetTextColor(0,0,0);
+                        }
+
+                        PDF::SetXY($proff_id_cvsetting->x_axis,$py_axis);
+                        if(isset($professionF)){
+                            PDF::Cell(0,0,$professionF->eng_name);
+                        }
+
+                        $iprof = $iprof + $proff_id_cvsetting->add_y_axis;
+                    }
+                    // Country
+                    if(isset($expcountry_id_cvsetting)){
+                        $cony_axis = $expcountry_id_cvsetting->y_axis + $icont;
+
+                        if($expcountry_id_cvsetting->font_family == 'none'){
+                            $expcountry_idfonttype = "";
+                        }else{
+                            $expcountry_idfonttype = $expcountry_id_cvsetting->font_family;
+                        }
+
+                        if($expcountry_id_cvsetting->font_family == 'B'){
+                            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                                $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                            }else{
+                                $expcountry_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                            }
+
+                        }elseif($expcountry_id_cvsetting->font_family == 'I'){
+                            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                                $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                            }else{
+                                $expcountry_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                        
+                            }
+
+                        }else{
+                            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                                $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                            }else{
+                                $expcountry_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                        
+                            }
+                        }
+
+                        $expcountry_idpopinsfont = TCPDF_FONTS::addTTFfont($expcountry_idpopins,'','',32);
+
+                        if($expcountry_id_cvsetting->font_size != ''){
+                            $expcountry_idfontsize = $expcountry_id_cvsetting->font_size;
+                        }else{
+                            $expcountry_idfontsize = "11";
+                        }
+
+                        $countryF = Country::find($cexpcountry[$index]);
+                        PDF::SetFont($expcountry_idpopinsfont, $expcountry_idfonttype, $expcountry_idfontsize,'',false);
+                        if($expcountry_id_cvsetting->font_color != ''){
+                            $expcountry_idfontcolor = explode(",",$expcountry_id_cvsetting->font_color);
+                            PDF::SetTextColor($expcountry_idfontcolor[0],$expcountry_idfontcolor[1],$expcountry_idfontcolor[2]);
+                        }else{
+                            PDF::SetTextColor(0,0,0);
+                        }
+                        PDF::SetXY($expcountry_id_cvsetting->x_axis,$cony_axis);
+                        if(isset($countryF)){
+                            PDF::Cell(0,0,$countryF->name);
+                        }
+
+
+                        $icont = $icont + $expcountry_id_cvsetting->add_y_axis;
+                    }
+                    // City
+                    // if(isset($expcity_id_cvsetting)){
+                    //     $cit_axis = $expcity_id_cvsetting->y_axis + $icity;
+
+                    //     if($expcity_id_cvsetting->font_family == 'none'){
+                    //         $expcity_idfonttype = "";
+                    //     }else{
+                    //         $expcity_idfonttype = $expcity_id_cvsetting->font_family;
+                    //     }
+
+                    //     if($expcity_id_cvsetting->font_family == 'B'){
+                    //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    //         }else{
+                    //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                    //         }
+                    //     }elseif($expcity_id_cvsetting->font_family == 'I'){
+                    //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    //         }else{
+                    //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                    //         }
+                    //     }else{
+                    //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    //         }else{
+                    //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    //         }
+                    //     }
+
+                    //     $expcity_idpopinsfont = TCPDF_FONTS::addTTFfont($expcity_idpopins,'','',32);
+
+                    //     if($expcity_id_cvsetting->font_size != ''){
+                    //         $expcity_idfontsize = $expcity_id_cvsetting->font_size;
+                    //     }else{
+                    //         $expcity_idfontsize = "11";
+                    //     }
+
+                    //     $cityF = City::find($cexpcity[$index]);
+                    //     PDF::SetFont($expcity_idpopinsfont, $expcity_idfonttype, $expcity_idfontsize,'',false);
+                    //     if($expcity_id_cvsetting->font_color != ''){
+                    //         $expcity_idfontcolor = explode(",",$expcity_id_cvsetting->font_color);
+                    //         PDF::SetTextColor($expcity_idfontcolor[0],$expcity_idfontcolor[1],$expcity_idfontcolor[2]);
+                    //     }else{
+                    //         PDF::SetTextColor(0,0,0);
+                    //     }
+                    //     PDF::SetXY($expcity_id_cvsetting->x_axis,$cit_axis);
+                    //     if(isset($cityF)){
+                    //         PDF::Cell(0,0,$cityF->name);
+                    //     }
+
+
+                    //     $icity = $icity + $expcity_id_cvsetting->add_y_axis;
+
+                    // }
+
+                    // City Text
+                    if(isset($expcity_id_cvsetting)){
+                        $cit_axis = $expcity_id_cvsetting->y_axis + $icitytext;
+
+                        if($expcity_id_cvsetting->font_family == 'none'){
+                            $expcity_idfonttype = "";
+                        }else{
+                            $expcity_idfonttype = $expcity_id_cvsetting->font_family;
+                        }
+
+                        if($expcity_id_cvsetting->font_family == 'B'){
+                            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                                $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                            }else{
+                                $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                            }
+                        }elseif($expcity_id_cvsetting->font_family == 'I'){
+                            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                                $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                            }else{
+                                $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                            }
+                        }else{
+                            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                                $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                            }else{
+                                $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                            }
+                        }
+
+                        $expcity_idpopinsfont = TCPDF_FONTS::addTTFfont($expcity_idpopins,'','',32);
+
+                        if($expcity_id_cvsetting->font_size != ''){
+                            $expcity_idfontsize = $expcity_id_cvsetting->font_size;
+                        }else{
+                            $expcity_idfontsize = "11";
+                        }
+
+                        
+                        PDF::SetFont($expcity_idpopinsfont, $expcity_idfonttype, $expcity_idfontsize,'',false);
+                        if($expcity_id_cvsetting->font_color != ''){
+                            $expcity_idfontcolor = explode(",",$expcity_id_cvsetting->font_color);
+                            PDF::SetTextColor($expcity_idfontcolor[0],$expcity_idfontcolor[1],$expcity_idfontcolor[2]);
+                        }else{
+                            PDF::SetTextColor(0,0,0);
+                        }
+                        PDF::SetXY($expcity_id_cvsetting->x_axis,$cit_axis);
+                        if(count($cexpcitytext) > $icco){
+                            PDF::Cell(0,0,$cexpcitytext[$index]);
+                        }
+
+
+                        $icitytext = $icitytext + $expcity_id_cvsetting->add_y_axis;
+
+                    }
+
+                    // Experience
+                    if(isset($experience_cvsetting)){
+                        $ey_axis = $experience_cvsetting->y_axis + $iec;
+
+                        if($experience_cvsetting->font_family == 'none'){
+                            $experiencefonttype = "";
+                        }else{
+                            $experiencefonttype = $experience_cvsetting->font_family;
+                        }
+
+                        if($experience_cvsetting->font_family == 'B'){
+                            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                                $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                            }else{
+                                $experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                            }
+                        }elseif($experience_cvsetting->font_family == 'I'){
+                            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                                $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                            }else{
+                                $experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                        
+                            }
+
+                        }else{
+                            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                                $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                            }else{
+                                $experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                        
+                            }
+                        }
+
+                        $experiencepopinsfont = TCPDF_FONTS::addTTFfont($experiencepopins,'','',32);
+
+                        if($experience_cvsetting->font_size != ''){
+                            $experiencefontsize = $experience_cvsetting->font_size;
+                        }else{
+                            $experiencefontsize = "11";
+                        }
+
+                        PDF::SetFont($experiencepopinsfont, $experiencefonttype, $experiencefontsize,'',false);
+                        if($experience_cvsetting->font_color != ''){
+                            $experiencefontcolor = explode(",",$experience_cvsetting->font_color);
+                            PDF::SetTextColor($experiencefontcolor[0],$experiencefontcolor[1],$experiencefontcolor[2]);
+                        }else{
+                            PDF::SetTextColor(0,0,0);
+                        }
+                        PDF::SetXY($experience_cvsetting->x_axis,$ey_axis);
+                        PDF::Cell(0,0,$value.' Years');
+
+                        $iec = $iec + $experience_cvsetting->add_y_axis;
+                    }
+
+                    $icco++;
+                }
+
+                // Passport No
+                if(isset($pass_no_cvsetting)){
+
+                    if($pass_no_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $pass_nopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($pass_no_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $pass_nopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $pass_nopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+        
+                    $pass_nopopinsfont = TCPDF_FONTS::addTTFfont($pass_nopopins,'','',32);
+
+                    if($pass_no_cvsetting->font_family == 'none'){
+                        $pass_nofonttype = "";
+                    }else{
+                        $pass_nofonttype = $pass_no_cvsetting->font_family;
+                    }
+
+                    if($pass_no_cvsetting->font_size != ''){
+                        $pass_nofontsize = $pass_no_cvsetting->font_size;
+        
+                    }else{
+                        $pass_nofontsize = "11";               
+                    }
+
+                    PDF::SetFont($pass_nopopinsfont, $pass_nofonttype, $pass_nofontsize,'',false);
+                    if($pass_no_cvsetting->font_color != ''){
+                        $pass_nofontcolor = explode(",",$pass_no_cvsetting->font_color);
+                        PDF::SetTextColor($pass_nofontcolor[0],$pass_nofontcolor[1],$pass_nofontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($pass_no_cvsetting->x_axis,$pass_no_cvsetting->y_axis);
+                    PDF::Cell(0,0,$post->pass_no);
+                }
+                // Passport Type
+                if(isset($pass_type_cvsetting)){
+                    if($pass_type_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $pass_typepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($pass_type_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $pass_typepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $pass_typepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+        
+                    $pass_typepopinsfont = TCPDF_FONTS::addTTFfont($pass_typepopins,'','',32);
+
+                    if($pass_type_cvsetting->font_family == 'none'){
+                        $pass_typefonttype = "";
+                    }else{
+                        $pass_typefonttype = $pass_type_cvsetting->font_family;
+                    }
+
+                    if($pass_type_cvsetting->font_size != ''){
+                        $pass_typefontsize = $pass_type_cvsetting->font_size;
+        
+                    }else{
+                        $pass_typefontsize = "11";                
+                    }
+
+                    PDF::SetFont($pass_typepopinsfont, $pass_typefonttype, $pass_typefontsize,'',false);
+                    if($pass_type_cvsetting->font_color != ''){
+                        $pass_typefontcolor = explode(",",$pass_type_cvsetting->font_color);
+                        PDF::SetTextColor($pass_typefontcolor[0],$pass_typefontcolor[1],$pass_typefontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($pass_type_cvsetting->x_axis,$pass_type_cvsetting->y_axis);
+                    PDF::Cell(0,0,$post->pass_type);
+                }
+                // Date of issue
+                if(isset($doi_cvsetting)){
+
+                    if($doi_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $doipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($doi_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $doipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $doipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+        
+                    $doipopinsfont = TCPDF_FONTS::addTTFfont($doipopins,'','',32);
+
+                    if($doi_cvsetting->font_family == 'none'){
+                        $doifonttype = "";
+                    }else{
+                        $doifonttype = $doi_cvsetting->font_family;
+                    }
+
+                    if($doi_cvsetting->font_size != ''){
+                        $doifontsize = $doi_cvsetting->font_size;
+        
+                    }else{
+                        $doifontsize = "11";
+                    }
+
+                    PDF::SetFont($doipopinsfont, $doifonttype, $doifontsize,'',false);
+                    if($doi_cvsetting->font_color != ''){
+                        $doifontcolor = explode(",",$doi_cvsetting->font_color);
+                        PDF::SetTextColor($doifontcolor[0],$doifontcolor[1],$doifontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($doi_cvsetting->x_axis,$doi_cvsetting->y_axis);
+                    PDF::Cell(0,0,date('d-m-Y',strtotime($post->doi)));
+                }
+                // Date of expiry
+                if(isset($doe_cvsetting)){
+                    if($doe_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $doepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($doe_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $doepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $doepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+        
+                    $doepopinsfont = TCPDF_FONTS::addTTFfont($doepopins,'','',32);
+
+                    if($doe_cvsetting->font_family == 'none'){
+                        $doefonttype = "";
+                    }else{
+                        $doefonttype = $doe_cvsetting->font_family;
+                    }
+
+                    if($doe_cvsetting->font_size != ''){
+                        $doefontsize = $doe_cvsetting->font_size;
+                    }else{
+                        $doefontsize = "11";
+                    }
+
+                    PDF::SetFont($doepopinsfont, $doefonttype, $doefontsize,'',false);
+                    if($doe_cvsetting->font_color != ''){
+                        $doefontcolor = explode(",",$doe_cvsetting->font_color);
+                        PDF::SetTextColor($doefontcolor[0],$doefontcolor[1],$doefontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($doe_cvsetting->x_axis,$doe_cvsetting->y_axis);
+                    PDF::Cell(0,0,date('d-m-Y',strtotime($post->doe)));
+                }
+                // Place of Issue
+                if(isset($poi_cvsetting)){
+                    if($poi_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $poipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                        }
+                    }elseif($poi_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $poipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $poipopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                        }
+                    }
+        
+                    $poipopinsfont = TCPDF_FONTS::addTTFfont($poipopins,'','',32);
+
+                    if($poi_cvsetting->font_family == 'none'){
+                        $poifonttype = "";
+                    }else{
+                        $poifonttype = $poi_cvsetting->font_family;
+                    }
+
+                    if($poi_cvsetting->font_size != ''){
+                        $poifontsize = $poi_cvsetting->font_size;
+        
+                    }else{
+                        $poifontsize = "11";
+                    }
+
+                    PDF::SetFont($poipopinsfont, $poifonttype, $poifontsize,'',false);
+                    if($poi_cvsetting->font_color != ''){
+                        $poifontcolor = explode(",",$poi_cvsetting->font_color);
+                        PDF::SetTextColor($poifontcolor[0],$poifontcolor[1],$poifontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($poi_cvsetting->x_axis,$poi_cvsetting->y_axis);
+                    // PDF::Cell(0,0,$post->poiname);
+                    PDF::Cell(0,0,$post->poi_text);
+                }
+
+                PDF::AddPage();
+                // Default fonts set
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $sansarabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    $filecand_pepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                }else{
+                    $filecand_pepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    $sansarabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');            
+                }
+
+                // $tajawalfont = TCPDF_FONTS::addTTFfont($tajawal,'','',32); 
+                $sansarabicfont = TCPDF_FONTS::addTTFfont($sansarabic,'','',32);
+                $filecand_pepopinsfont = TCPDF_FONTS::addTTFfont($filecand_pepopins,'','',32);
+
+                if($post->pass_file != ''){
+                    // Passport
+                    PDF::SetFont($filecand_pepopinsfont, '', 16);
+                    PDF::SetXY(10,10);
+                    PDF::Cell(0,0,"Passport Copy:");
+
+                    PDF::SetFont($sansarabicfont, '', 16);
+                    PDF::SetXY(160,10);
+                    PDF::Cell(0,0,"صورة جواز السفر:",0,0,'R');
+
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $passpath = base_path().'/public/admin/assets/images/candidate/'.$post->pass_file;
+                    }else{
+                        $passpath = base_path('public_html/admin/assets/images/candidate/'.$post->pass_file);                
+                    }
+
+
+
+                    $passext = pathinfo($post->pass_file, PATHINFO_EXTENSION);
+
+                    PDF::Image($passpath,30,30, '150', '',$passext,'','',false,'300','',false,false,0,false,false,false);
+                }
+
+                if($post->lic_file != ''){
+                    
+                    PDF::SetFont($filecand_pepopinsfont, '', 16);
+                    PDF::SetXY(10,140);
+                    PDF::Cell(0,0,"Driving Licence:");
+
+                    PDF::SetFont($sansarabicfont, '', 16);
+                    PDF::SetXY(160,140);
+                    PDF::Cell(0,0,"رخصة قيادة:",0,0,"R");
+
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $licpath = base_path().'/public/admin/assets/images/candidate/'.$post->lic_file;
+                    }else{
+                        $licpath = base_path('public_html/admin/assets/images/candidate/'.$post->lic_file);                
+                    }
+
+                    $licext = pathinfo($post->lic_file, PATHINFO_EXTENSION);
+        
+        
+                    PDF::Image($licpath,30,160, '150', '',$licext,'','',false,'300','',false,false,0,false,false,false);
+                }
+                ob_end_clean();
+                // PDF::Output($post->cand_name.'_cv.pdf');
+                $findcvex = Companycvexecute::where('cand_id','=',$post->id)->where('partner_id','=',$partner)->first();
+            
+                $filename = $post->id.'_'.$partner.'_'.$post->cand_name;
+                if(isset($findcvex)){
+                    // remove file from folder 
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $filepath = base_path('public/admin/assets/images/pdf/partner/'.$findcvex->cv_file);
+                    }else{
+                        $filepath = base_path('public_html/admin/assets/images/pdf/partner/'.$findcvex->cv_file);
+                    }
+
+                    if(file_exists($filepath)){
+                        File::delete($filepath);
+                        $findcvex->cv_file = $filename;
+                    }else{
+                        $findcvex->cv_file = $filename;
+                    }
+                    $findcvex->status = true;
+
+                    $findcvex->save();
+
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        PDF::Output(base_path('public/admin/assets/images/pdf/partner').'/'.$filename,'F');
+                    }else{
+                        PDF::Output(base_path('public_html/admin/assets/images/pdf/partner').'/'.$filename,'F');
+                    }
+
+                }else{
+                    // Create file in
+                    $postcvex = New Companycvexecute();
+                    $postcvex->cand_id = $post->id;
+                    $postcvex->partner_id = $partner;
+                    $postcvex->cv_file = $filename;
+                    $postcvex->save();
+                
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        PDF::Output(base_path('public/admin/assets/images/pdf/partner').'/'.$filename,'F');
+                    }else{
+                        PDF::Output(base_path('public_html/admin/assets/images/pdf/partner').'/'.$filename,'F');
+                    }
+                }
+            }
+
+            return redirect()->back()->with('success',count($newIds).' out of '.$countIds.' cv are execute. Executed CVs refrence numbers are '.implode(",",$newIds));
+        }else{
+            return redirect()->back()->with('pdfError','CV not execute due to incomplete candidate profile!');
+        }
+
+
+
+
+    }
+
+    public function multiplecvexecutepartner(Request $request){
+        
+    }
+
+    public function cvexecute($id){
+        $post = DB::table('candidates as cand')
+        ->leftJoin('placeofissues as poi','cand.poi','=','poi.id')
+        ->leftJoin('countries as nation','cand.nation_id','=','nation.id')
+        ->leftJoin('regions as region','cand.region_id','region.id')
+        ->leftJoin('cities as candcity','cand.candcity_id','=','candcity.id')
+        ->leftJoin('cities as plb','cand.plb_id','plb.id')
+        ->leftJoin('professions as occupation','cand.jobtype_id','=','occupation.id')
+        ->leftJoin('religions as religion','religion.id','=','cand.religion_id')
+        ->leftJoin('education as educ','cand.education_id','=','educ.id')
+        ->leftJoin('embassies as embassy','cand.embassy_for','=','embassy.id')
+        ->select('cand.*','embassy.embassy as embname','poi.name as poiname','educ.name as educname','nation.name as nationname','nation.arname as nationarname','region.name as regionname','candcity.name as cancityname','plb.name as plbname','occupation.ar_name as prarname','occupation.eng_name as pengname','religion.name as relname','religion.arbname as relarbname')
+        ->where('cand.id','=',$id)
+        ->first();
+
+        // Car Know List
+        $carkns = Carnknown::wherein('id',explode(",",$post->carknown_id))->get();
+        $carlist = [];
+        if(isset($carkns)){
+            foreach($carkns as $carkn){
+                $carlist [] = $carkn->name;
+            }
+        }else{
+            $carlist [] = "";
+        }
+        // Expected Work place
+        // $expwps = City::wherein('id',explode(",",$post->expwp_id))->get();
+        $expwps = DB::table('expecworkcities')->wherein('id',explode(",",$post->expwp_id))->get();
+        $exp_wp = [];
+        if(isset($expwps)){
+            foreach($expwps as $expwp){
+                $exp_wp [] = $expwp->name;
+            }
+        }else{
+            $exp_wp [] = "";
+        }
+
+        // Fetch details as per cv setting
+        $cand_name_cvsetting = Cvsetting::where('db_field_name','=','cand_name')->first();
+        $cand_name_ar_cvsetting = Cvsetting::where('db_field_name','=','cand_name_ar')->first();
+        $exp_sal_cvsetting = Cvsetting::where('db_field_name','=','exp_sal')->first();
+        $expwp_id_cvsetting = Cvsetting::where('db_field_name','=','expwp_id')->first();
+        $age_cvsetting = Cvsetting::where('db_field_name','=','age')->first();
+        $marital_status_cvsetting = Cvsetting::where('db_field_name','=','marital_status')->first();
+        $religion_cvsetting = Cvsetting::where('db_field_name','=','religion')->first();
+        $dob_cvsetting = Cvsetting::where('db_field_name','=','dob')->first();
+        $plb_id_cvsetting = Cvsetting::where('db_field_name','=','plb_id')->first();
+        $nation_id_cvsetting = Cvsetting::where('db_field_name','=','nation_id')->first();
+        $region_id_cvsetting = Cvsetting::where('db_field_name','=','region_id')->first();
+        $lang_known_cvsetting = Cvsetting::where('db_field_name','=','lang_known')->first();
+        $google_map_cvsetting = Cvsetting::where('db_field_name','=','google_map')->first();
+        $carknown_id_cvsetting = Cvsetting::where('db_field_name','=','carknown_id')->first();
+        $proff_id_cvsetting = Cvsetting::where('db_field_name','=','proff_id')->first();
+        $experience_cvsetting = Cvsetting::where('db_field_name','=','experience')->first();
+        $expcountry_id_cvsetting = Cvsetting::where('db_field_name','=','expcountry_id')->first();
+        $expcity_id_cvsetting = Cvsetting::where('db_field_name','=','expcity_id')->first();
+        $pass_no_cvsetting = Cvsetting::where('db_field_name','=','pass_no')->first();
+        $pass_type_cvsetting = Cvsetting::where('db_field_name','=','pass_type')->first();
+        $doi_cvsetting = Cvsetting::where('db_field_name','=','doi')->first();
+        $doe_cvsetting = Cvsetting::where('db_field_name','=','doe')->first();
+        $poi_cvsetting = Cvsetting::where('db_field_name','=','poi')->first();
+        $photo_cvsetting = Cvsetting::where('db_field_name','=','photo')->first();
+        $fullsize_cvsetting = Cvsetting::where('db_field_name','=','fullsize')->first();
+        $reference_no_cvsetting = Cvsetting::where('db_field_name','=','reference_no')->first();
+        $gulf_experience_cvsetting = Cvsetting::where('db_field_name','=','gulf_experience')->first();
+        $gulf_experience_arabic_cvsetting = Cvsetting::where('db_field_name','=','gulf_experience_arabic')->first();
+        $remark_cvsetting = Cvsetting::where('db_field_name','=','remark')->first();
+        $created_date_cvsetting = Cvsetting::where('db_field_name','=','created_date')->first();
+        $education_cvsetting = Cvsetting::where('db_field_name','=','education')->first();
+        $image1_cvsetting = Cvsetting::where('db_field_name','=','image1')->first();
+        $image2_cvsetting = Cvsetting::where('db_field_name','=','image2')->first();
+        $image3_cvsetting = Cvsetting::where('db_field_name','=','image3')->first();
+        $image4_cvsetting = Cvsetting::where('db_field_name','=','image4')->first();
+        $image5_cvsetting = Cvsetting::where('db_field_name','=','image5')->first();
+        $text1_cvsetting = Cvsetting::where('db_field_name','=','text1')->first();
+        $text2_cvsetting = Cvsetting::where('db_field_name','=','text2')->first();
+        $text3_cvsetting = Cvsetting::where('db_field_name','=','text3')->first();
+        $text4_cvsetting = Cvsetting::where('db_field_name','=','text4')->first();
+        $embassyreq_cvsetting =  Cvsetting::where('db_field_name','=','embassy_required')->first();
+        $embassyreq_ar_cvsetting =  Cvsetting::where('db_field_name','=','embassy_required_ar')->first();
+        // Base Path Status
+        $basepathSt = Basepathstatus::first();
+
+        // $base_path = base_path();
+        // $public_path = public_path();
+        // $url_path = url('/');
+        // dd($base_path);
+
+        try {
+            // $backfile = base_path().'/public/admin/assets/images/resume/SVG_ONE_FINE_L.svg';
+            // $backfile = base_path().'/public/admin/assets/images/resume/final_cv.pdf';
+            // $backfile = base_path().'/public/admin/assets/images/resume/resumes_format_svg.svg';
+            // $backfile = base_path().'/public/admin/assets/images/resume/SVG3.svg';
+
+            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                // $backfile = base_path('public/admin/assets/images/resume/SVG3.svg');
+                $backfile = base_path('public/admin/assets/images/resume/cv_back_15072023.svg');
+            }else{
+                // $backfile = base_path('public_html/admin/assets/images/resume/SVG3.svg');
+                $backfile = base_path('public_html/admin/assets/images/resume/cv_back_15072023.svg');
+            }
+
+
+            PDF::SetCreator('Qamr International');
+            PDF::SetAuthor('Qamr International');
+            PDF::SetTitle($post->cand_name.' CV');
+            PDF::SetSubject($post->cand_name.' CV');
+            PDF::SetKeywords('Qamr, PDF, visa, form, guide');
+
+            // set some language dependent data:
+            // $lg = Array();
+            // $lg['a_meta_charset'] = 'UTF-8';
+            // $lg['a_meta_dir'] = 'rtl';
+            // $lg['a_meta_language'] = 'fa';
+            // $lg['w_page'] = 'page';
+
+            // set some language-dependent strings (optional)
+            // PDF::setLanguageArray($lg);
+
+
+            PDF::AddPage();
+            PDF::ImageSVG($backfile,'','',210,297,'','','',0,false);
+
+
+            // Candidate Name
+            if (isset($cand_name_cvsetting)) {
+                if($cand_name_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($cand_name_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $candpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $candpopinsfont = TCPDF_FONTS::addTTFfont($candpopins,'','',32);
+
+                if($cand_name_cvsetting->font_family == 'none'){
+                    $candfonttype = "";
+                }else{
+                    $candfonttype = $cand_name_cvsetting->font_family;
+                }
+
+                if($cand_name_cvsetting->font_size != ''){
+                    $candfontsize = $cand_name_cvsetting->font_size;
+                }else{
+                    $candfontsize = '11';
+                }
+
+                PDF::SetFont($candpopinsfont,$candfonttype, $candfontsize,'',false);
+                if($cand_name_cvsetting->font_color != ''){
+                    $candfontcolor = explode(",",$cand_name_cvsetting->font_color);
+                    PDF::SetTextColor($candfontcolor[0],$candfontcolor[1],$candfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($cand_name_cvsetting->x_axis,$cand_name_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->cand_name);
+
+            }
+
+            // Candidate Arabic Name
+            if (isset($cand_name_ar_cvsetting)) {
+                if($cand_name_ar_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }
+                }elseif($cand_name_ar_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }
+
+
+                }
+                $candarpopinsfont = TCPDF_FONTS::addTTFfont($candarpopins,'','',32);
+
+                if($cand_name_ar_cvsetting->font_family == 'none'){
+                    $candarfonttype = "";
+                }else{
+                    $candarfonttype = $cand_name_ar_cvsetting->font_family;
+                }
+
+                if($cand_name_ar_cvsetting->font_size != ''){
+                    $candarfontsize = $cand_name_ar_cvsetting->font_size;
+                }else{
+                    $candarfontsize = '11';
+                }
+
+                PDF::SetFont($candarpopinsfont,$candarfonttype, $candarfontsize,'',false);
+                if($cand_name_ar_cvsetting->font_color != ''){
+                    $candarfontcolor = explode(",",$cand_name_ar_cvsetting->font_color);
+                    PDF::SetTextColor($candarfontcolor[0],$candarfontcolor[1],$candarfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($cand_name_ar_cvsetting->x_axis,$cand_name_ar_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->arcand_name);
+
+            }
+
+            // Embassy Required
+
+            if (isset($embassyreq_cvsetting)) {
+                if($embassyreq_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($embassyreq_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassypopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $embassypopins = url('/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+
+
+                }
+                $embassypopinsfont = TCPDF_FONTS::addTTFfont($embassypopins,'','',32);
+
+                if($embassyreq_cvsetting->font_family == 'none'){
+                    $embassyfonttype = "";
+                }else{
+                    $embassyfonttype = $embassyreq_cvsetting->font_family;
+                }
+
+                if($embassyreq_cvsetting->font_size != ''){
+                    $embassyfontsize = $embassyreq_cvsetting->font_size;
+                }else{
+                    $embassyfontsize = '11';
+                }
+
+                PDF::SetFont($embassypopinsfont,$embassyfonttype, $embassyfontsize,'',false);
+                PDF::SetFillColor(255, 255, 127);
+                if($embassyreq_cvsetting->font_color != ''){
+                    $embassyfontcolor = explode(",",$embassyreq_cvsetting->font_color);
+                    PDF::SetTextColor($embassyfontcolor[0],$embassyfontcolor[1],$embassyfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetFillColor(249,249,249);
+
+                PDF::SetXY($embassyreq_cvsetting->x_axis,$embassyreq_cvsetting->y_axis);
+                if($post->embname == 'MUMBAI VISA REQUIRED'){
+                    $visaEmbE = "Required visa under Saudi Embassy Mumbai";
+                }elseif($post->embname == 'DELHI VISA REQUIRED'){
+                    $visaEmbE = "Required visa under Saudi Embassy New Delhi";
+                }else{
+                    $visaEmbE = "";
+                }
+
+                PDF::Cell(0,0,$visaEmbE);
+
+
+            }
+
+            
+            // Embassy Required Arabic
+
+            if (isset($embassyreq_ar_cvsetting)) {
+                if($embassyreq_ar_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                         $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');
+                    }
+                }elseif($embassyreq_ar_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $embassyarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $embassyarpopins = url('/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');
+                    }
+
+
+                }
+                $embassyarpopinsfont = TCPDF_FONTS::addTTFfont($embassyarpopins,'','',32);
+
+                if($embassyreq_ar_cvsetting->font_family == 'none'){
+                    $embassyarfonttype = "";
+                }else{
+                    $embassyarfonttype = $embassyreq_ar_cvsetting->font_family;
+                }
+
+                if($embassyreq_ar_cvsetting->font_size != ''){
+                    $embassyarfontsize = $embassyreq_ar_cvsetting->font_size;
+                }else{
+                    $embassyarfontsize = '11';
+                }
+
+                PDF::SetFont($embassyarpopinsfont,$embassyarfonttype, $embassyarfontsize,'',false);
+                if($embassyreq_ar_cvsetting->font_color != ''){
+                    $embassyarfontcolor = explode(",",$embassyreq_ar_cvsetting->font_color);
+                    PDF::SetTextColor($embassyarfontcolor[0],$embassyarfontcolor[1],$embassyarfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($embassyreq_ar_cvsetting->x_axis,$embassyreq_ar_cvsetting->y_axis);
+
+                
+                if($post->embname == 'MUMBAI VISA REQUIRED'){
+                    $visaEmb = "مطلوب تأشيرة تحت السفارة السعودية في مومباي";
+                }elseif($post->embname == 'DELHI VISA REQUIRED'){
+                    $visaEmb = "مطلوب تأشيرة تحت السفارة السعودية في نيودلهي";
+                }else{
+                    $visaEmb = "";
+                }
+
+                PDF::Cell(0,0,$visaEmb);
+
+            }
+            
+
+            // Remark
+            if(isset($remark_cvsetting)){
+                // Remark Text 
+                $remark_text_desc = Cvsetting::where('db_field_name','=','remark_text')->where('status','=',1)->first();
+                if(isset($remark_text_desc)){
+                    $remarkDisp = 'Remark: '.$remark_text_desc->text_desc;
+                }else{
+                    $remarkDisp = 'Remark: ';
+                }
+
+                if($remark_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($remark_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $remarkpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $remarkpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $remarkpopinsfont = TCPDF_FONTS::addTTFfont($remarkpopins,'','',32);
+
+                if($remark_cvsetting->font_family == 'none'){
+                    $remarkfonttype = "";
+                }else{
+                    $remarkfonttype = $remark_cvsetting->font_family;
+                }
+
+                if($remark_cvsetting->font_size != ''){
+                    $remarkfontsize = $remark_cvsetting->font_size;
+                }else{
+                    $remarkfontsize = "11";
+                }
+
+                PDF::SetFont($remarkpopinsfont, $remarkfonttype, $remarkfontsize,'',false);
+                if($remark_cvsetting->font_color != ''){
+                    $remarkfontcolor = explode(",",$remark_cvsetting->font_color);
+                    PDF::SetTextColor($remarkfontcolor[0],$remarkfontcolor[1],$remarkfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($remark_cvsetting->x_axis,$remark_cvsetting->y_axis);
+                PDF::Cell(0,0,$remarkDisp);
+            }
+
+            // CV Create Date
+
+            if(isset($created_date_cvsetting)){
+                if($created_date_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($created_date_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $cvdatecreatepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $cvdatecreatepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $cvdatecreatepopinsfont = TCPDF_FONTS::addTTFfont($cvdatecreatepopins,'','',32);
+
+                if($created_date_cvsetting->font_family == 'none'){
+                    $cvdatecreatefonttype = "";
+                }else{
+                    $cvdatecreatefonttype = $created_date_cvsetting->font_family;
+                }
+
+                if($created_date_cvsetting->font_size != ''){
+                    $cvdatecreatefontsize = $created_date_cvsetting->font_size;
+                }else{
+                    $cvdatecreatefontsize = "11";
+                }
+
+                PDF::SetFont($cvdatecreatepopinsfont, $cvdatecreatefonttype, $cvdatecreatefontsize,'',false);
+                if($created_date_cvsetting->font_color != ''){
+                    $cvdatecreatefontcolor = explode(",",$created_date_cvsetting->font_color);
+                    PDF::SetTextColor($cvdatecreatefontcolor[0],$cvdatecreatefontcolor[1],$cvdatecreatefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($created_date_cvsetting->x_axis,$created_date_cvsetting->y_axis);
+                if($post->cv_executae_date != ''){
+                    $cvDate = date('d-m-Y',strtotime($post->cv_executae_date));
+                }else{
+
+                    $cvDate = date('d-m-Y');
+                }
+                PDF::Cell(0,0,'Date: '.$cvDate);
+            }
+
+            // Image1 and Image2
+            if(isset($image1_cvsetting)){
+                if($image1_cvsetting->status == 1 && $image1_cvsetting->filename != ''){
+
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image1_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image1_cvsetting->filename;
+                    }else{
+                        $image1_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image1_cvsetting->filename);
+                    }
+                    $image1_cvsettingext = pathinfo($image1_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image1_cvsettingpath,$image1_cvsetting->x_axis, $image1_cvsetting->y_axis, $image1_cvsetting->width, '',$image1_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image2_cvsetting)){
+                if($image2_cvsetting->status == 1 && $image2_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image2_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image2_cvsetting->filename;
+                    }else{
+                        $image2_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image2_cvsetting->filename);                    
+                    }
+
+                    $image2_cvsettingext = pathinfo($image2_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image2_cvsettingpath,$image2_cvsetting->x_axis, $image2_cvsetting->y_axis, $image2_cvsetting->width, '',$image2_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image3_cvsetting)){
+                if($image3_cvsetting->status == 1 && $image3_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image3_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image3_cvsetting->filename;
+                    }else{
+                        $image3_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image3_cvsetting->filename);                    
+                    }
+
+                    $image3_cvsettingext = pathinfo($image3_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image3_cvsettingpath,$image3_cvsetting->x_axis, $image3_cvsetting->y_axis, $image3_cvsetting->width, '',$image3_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image4_cvsetting)){
+                if($image4_cvsetting->status == 1 && $image4_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image4_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image4_cvsetting->filename;
+                    }else{
+                        $image4_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image4_cvsetting->filename);                    
+                    }
+
+                    $image4_cvsettingext = pathinfo($image4_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image4_cvsettingpath,$image4_cvsetting->x_axis, $image4_cvsetting->y_axis, $image4_cvsetting->width, '',$image4_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            if(isset($image5_cvsetting)){
+                if($image5_cvsetting->status == 1 && $image5_cvsetting->filename != ''){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $image5_cvsettingpath = base_path().'/public/admin/assets/images/cv_setting/'.$image5_cvsetting->filename;
+                    }else{
+                        $image5_cvsettingpath = base_path('public_html/admin/assets/images/cv_setting/'.$image5_cvsetting->filename);                    
+                    }
+
+                    $image5_cvsettingext = pathinfo($image5_cvsetting->filename, PATHINFO_EXTENSION);
+        
+                    PDF::Image($image5_cvsettingpath,$image5_cvsetting->x_axis, $image5_cvsetting->y_axis, $image5_cvsetting->width, '',$image5_cvsettingext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+
+            // Text1, Text2, Text3, Text4,
+            if (isset($text1_cvsetting)) {
+                if($text1_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text1_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text1popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text1popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text1popinsfont = TCPDF_FONTS::addTTFfont($text1popins,'','',32);
+
+                if($text1_cvsetting->font_family == 'none'){
+                    $text1fonttype = "";
+                }else{
+                    $text1fonttype = $text1_cvsetting->font_family;
+                }
+
+                if($text1_cvsetting->font_size != ''){
+                    $text1fontsize = $text1_cvsetting->font_size;
+                }else{
+                    $text1fontsize = '11';
+                }
+
+                PDF::SetFont($text1popinsfont,$text1fonttype, $text1fontsize,'',false);
+                if($text1_cvsetting->font_color != ''){
+                    $text1fontcolor = explode(",",$text1_cvsetting->font_color);
+                    PDF::SetTextColor($text1fontcolor[0],$text1fontcolor[1],$text1fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text1_cvsetting->x_axis,$text1_cvsetting->y_axis);
+                PDF::Cell(0,0,$text1_cvsetting->text_desc);
+
+            }
+
+            if (isset($text2_cvsetting)) {
+                if($text2_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text2_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text2popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text2popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text2popinsfont = TCPDF_FONTS::addTTFfont($text2popins,'','',32);
+
+                if($text2_cvsetting->font_family == 'none'){
+                    $text2fonttype = "";
+                }else{
+                    $text2fonttype = $text2_cvsetting->font_family;
+                }
+
+                if($text2_cvsetting->font_size != ''){
+                    $text2fontsize = $text2_cvsetting->font_size;
+                }else{
+                    $text2fontsize = '11';
+                }
+
+                PDF::SetFont($text2popinsfont,$text2fonttype, $text2fontsize,'',false);
+                if($text2_cvsetting->font_color != ''){
+                    $text2fontcolor = explode(",",$text2_cvsetting->font_color);
+                    PDF::SetTextColor($text2fontcolor[0],$text2fontcolor[1],$text2fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text2_cvsetting->x_axis,$text2_cvsetting->y_axis);
+                PDF::Cell(0,0,$text2_cvsetting->text_desc);
+
+            }
+
+            if (isset($text3_cvsetting)) {
+                if($text3_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text3_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text3popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text3popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text3popinsfont = TCPDF_FONTS::addTTFfont($text3popins,'','',32);
+
+                if($text3_cvsetting->font_family == 'none'){
+                    $text3fonttype = "";
+                }else{
+                    $text3fonttype = $text3_cvsetting->font_family;
+                }
+
+                if($text3_cvsetting->font_size != ''){
+                    $text3fontsize = $text3_cvsetting->font_size;
+                }else{
+                    $text3fontsize = '11';
+                }
+
+                PDF::SetFont($text3popinsfont,$text3fonttype, $text3fontsize,'',false);
+                if($text3_cvsetting->font_color != ''){
+                    $text3fontcolor = explode(",",$text3_cvsetting->font_color);
+                    PDF::SetTextColor($text3fontcolor[0],$text3fontcolor[1],$text3fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text3_cvsetting->x_axis,$text3_cvsetting->y_axis);
+                PDF::Cell(0,0,$text3_cvsetting->text_desc);
+
+            }
+
+            if (isset($text4_cvsetting)) {
+                if($text4_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                         $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                    }
+                }elseif($text4_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $text4popins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $text4popins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                    }
+                }
+                $text4popinsfont = TCPDF_FONTS::addTTFfont($text4popins,'','',32);
+
+                if($text4_cvsetting->font_family == 'none'){
+                    $text4fonttype = "";
+                }else{
+                    $text4fonttype = $text4_cvsetting->font_family;
+                }
+
+                if($text4_cvsetting->font_size != ''){
+                    $text4fontsize = $text4_cvsetting->font_size;
+                }else{
+                    $text4fontsize = '11';
+                }
+
+                PDF::SetFont($text4popinsfont,$text4fonttype, $text4fontsize,'',false);
+                if($text4_cvsetting->font_color != ''){
+                    $text4fontcolor = explode(",",$text4_cvsetting->font_color);
+                    PDF::SetTextColor($text4fontcolor[0],$text4fontcolor[1],$text4fontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($text4_cvsetting->x_axis,$text4_cvsetting->y_axis);
+                PDF::Cell(0,0,$text4_cvsetting->text_desc);
+
+            }
+
+
+            // Profile and fullsize Photo
+            if ($post->photo_file != '') {
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $photfilepath = base_path().'/public/admin/assets/images/candidate/'.$post->photo_file;
+                }else{
+                    $photfilepath = base_path('public_html/admin/assets/images/candidate/'.$post->photo_file);                
+                }
+
+                $photext = pathinfo($post->photo_file, PATHINFO_EXTENSION);
+
+                if(isset($photo_cvsetting)){
+                    PDF::Image($photfilepath,$photo_cvsetting->x_axis,$photo_cvsetting->y_axis,'50','54',$photext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+            if ($post->cv_file != '') {
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $fullsizepath = base_path().'/public/admin/assets/images/candidate/'.$post->cv_file;
+                }else{
+                    $fullsizepath = base_path('public_html/admin/assets/images/candidate/'.$post->cv_file);               
+                }
+                $fullsizeext = pathinfo($post->cv_file, PATHINFO_EXTENSION);
+
+                if(isset($fullsize_cvsetting)){
+                    // PDF::Image($fullsizepath,$fullsize_cvsetting->x_axis, $fullsize_cvsetting->y_axis, '60', '128',$fullsizeext,'','',false,'300','',false,false,0,false,false,false);
+                    PDF::Image($fullsizepath,$fullsize_cvsetting->x_axis, $fullsize_cvsetting->y_axis, '', '',$fullsizeext,'','',false,'300','',false,false,0,false,false,false);
+                }
+            }
+        
+            // Reference No
+            if (isset($reference_no_cvsetting)) {
+                // if($reference_no_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                //     }
+                // }elseif($reference_no_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                //     }
+
+                // }
+
+                if($reference_no_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $refrenceNopopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $refrenceNopopins = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+                $refrenceNopopinsfont = TCPDF_FONTS::addTTFfont($refrenceNopopins,'','',32);
+
+                if($reference_no_cvsetting->font_family == 'none'){
+                    $refereneceFont = "";
+                }else{
+                    $refereneceFont = $reference_no_cvsetting->font_family;
+                }
+
+                if($reference_no_cvsetting->font_size != ''){
+                    $refrenceNoFontsize = $reference_no_cvsetting->font_size;
+                }else{
+                    $refrenceNoFontsize = '11';
+                }
+
+                PDF::SetFont($refrenceNopopinsfont,$refereneceFont, $refrenceNoFontsize,'',false);
+                if($reference_no_cvsetting->font_color != ''){
+                    $refnofontcolor = explode(",",$reference_no_cvsetting->font_color);
+                    PDF::SetTextColor($refnofontcolor[0],$refnofontcolor[1],$refnofontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+
+                PDF::SetXY($reference_no_cvsetting->x_axis,$reference_no_cvsetting->y_axis);
+                // $disrefno = 'Reference No: '.$post->id.' : رقم المرجع';
+                $disrefno = 'رقم المرجع : '.$post->id.' :No Reference';
+            
+
+                // dd($disrefno);
+                PDF::Cell(0,0,$disrefno);
+            }
+            // Gulf experience and occupation
+            // if(isset($gulf_experience_cvsetting)){
+            //     if($gulf_experience_cvsetting->font_family == 'B'){
+            //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+            //             $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+            //         }else{
+            //             $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+            //         }
+
+            //     }else{
+            //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+            //             $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+            //         }else{
+            //             $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+            //         }
+            //     }
+            //     $gulf_experience_arabic_font = TCPDF_FONTS::addTTFfont($gulf_experience_arabic,'','',32);
+
+            //     if($gulf_experience_cvsetting->font_family == 'none'){
+            //         $gulfexpFont = "";
+            //     }else{
+            //         $gulfexpFont = $gulf_experience_cvsetting->font_family;
+            //     }
+
+            //     if($gulf_experience_cvsetting->font_size != ''){
+                
+            //         $gulfexpFontsize = $gulf_experience_cvsetting->font_size;
+            //     }else{
+            //         $gulfexpFontsize = "11";
+            //     }
+            //     PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+
+            //     if($gulf_experience_cvsetting->font_color != ''){
+            //         $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+            //         PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+            //     }else{
+            //         PDF::SetTextColor(0,0,0);
+            //     }
+
+            //     PDF::SetXY($gulf_experience_cvsetting->x_axis,$gulf_experience_cvsetting->y_axis);
+            //     if($post->gulfexperience == 1){
+            //         $gulfexperience1 = $post->prarname.' قد اشتغل في الهند فقط';
+            //         PDF::Cell(0,0,$gulfexperience1);
+            //     }
+    
+            //     if($post->gulfexperience == 2){
+            //         $gulfexperience2 = $post->prarname.' سبق له العمل';
+            //         PDF::Cell(0,0,$gulfexperience2);
+            //     }
+
+            //     if($post->gulfexperience == 1){
+            //         PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+            //         if($gulf_experience_cvsetting->font_color != ''){
+            //             $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+            //             PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+            //         }else{
+            //             PDF::SetTextColor(0,0,0);
+            //         }
+            //         $gyaxis = $gulf_experience_cvsetting->y_axis + 4;
+            //         PDF::SetXY($gulf_experience_cvsetting->x_axis,$gyaxis);
+            //         PDF::Cell(0,0,'Indian Experience '.$post->pengname);
+            //     }
+
+            //     if($post->gulfexperience == 2){
+            //         PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+            //         if($gulf_experience_cvsetting->font_color != ''){
+            //             $gulfexpfontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+            //             PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+            //         }else{
+            //             PDF::SetTextColor(0,0,0);
+            //         }
+            //         $gyaxis = $gulf_experience_cvsetting->y_axis + 4;
+            //         PDF::SetXY($gulf_experience_cvsetting->x_axis,$gyaxis);
+            //         PDF::Cell(0,0,'Ex-Abroad '.$post->pengname);
+            //     }
+
+
+            // }
+
+            if(isset($gulf_experience_cvsetting)){
+                if($gulf_experience_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($gulf_experience_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $gulf_experiencepopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+                $gulf_experiencepopinsfont = TCPDF_FONTS::addTTFfont($gulf_experiencepopins,'','',32);
+
+                if($gulf_experience_cvsetting->font_family == 'none'){
+                    $gulf_experiencefonttype = "";
+                }else{
+                    $gulf_experiencefonttype = $gulf_experience_cvsetting->font_family;
+                }
+
+                if($gulf_experience_cvsetting->font_size != ''){
+                    $gulf_experiencefontsize = $gulf_experience_cvsetting->font_size;
+                }else{
+                    $gulf_experiencefontsize = "11";
+                }
+
+                PDF::SetFont($gulf_experiencepopinsfont, $gulf_experiencefonttype, $gulf_experiencefontsize,'',false);
+
+                if($gulf_experience_cvsetting->font_color != ''){
+                    $gulf_experiencefontcolor = explode(",",$gulf_experience_cvsetting->font_color);
+                    PDF::SetTextColor($gulf_experiencefontcolor[0],$gulf_experiencefontcolor[1],$gulf_experiencefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($gulf_experience_cvsetting->x_axis,$gulf_experience_cvsetting->y_axis);
+                if($post->gulfexperience == 1){
+                    $expEng = 'Indian Experience '.$post->pengname;
+                }elseif($post->gulfexperience == 2){
+                    $expEng = 'Ex-Abroad '.$post->pengname;
+                }else{
+                    $expEng = '---';
+                }
+                PDF::Cell(0,0,$expEng);
+
+            }
+
+            if(isset($gulf_experience_arabic_cvsetting)){
+                if($gulf_experience_arabic_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf');                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $gulf_experience_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $gulf_experience_arabic = base_path('public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf');                    
+                    }
+                }
+
+                $gulf_experience_arabic_font = TCPDF_FONTS::addTTFfont($gulf_experience_arabic,'','',32);
+
+                if($gulf_experience_arabic_cvsetting->font_family == 'none'){
+                    $gulfexpFont = "";
+                }else{
+                    $gulfexpFont = $gulf_experience_arabic_cvsetting->font_family;
+                }
+
+                if($gulf_experience_arabic_cvsetting->font_size != ''){
+                
+                    $gulfexpFontsize = $gulf_experience_arabic_cvsetting->font_size;
+                }else{
+                    $gulfexpFontsize = "11";
+                }
+
+                PDF::SetFont($gulf_experience_arabic_font, $gulfexpFont, $gulfexpFontsize,'',false);
+
+                if($gulf_experience_arabic_cvsetting->font_color != ''){
+                    $gulfexpfontcolor = explode(",",$gulf_experience_arabic_cvsetting->font_color);
+                    PDF::SetTextColor($gulfexpfontcolor[0],$gulfexpfontcolor[1],$gulfexpfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+
+                PDF::SetXY($gulf_experience_arabic_cvsetting->x_axis,$gulf_experience_arabic_cvsetting->y_axis);
+                if($post->gulfexperience == 1){
+                    $arexp = $post->prarname.' قد اشتغل في الهند فقط';
+                }elseif($post->gulfexperience == 2){
+                    $arexp = $post->prarname.' سبق له العمل';
+                }else{
+                    $arexp = "---";
+                }
+
+                // dd($arexp);
+                PDF::Cell(0,0,$arexp);
+            }
+            
+
+            // Expected salary and location
+            if(isset($exp_sal_cvsetting)){
+                if($exp_sal_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                    }
+                }elseif($exp_sal_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expsalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $expsalpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $expsalpopinsfont = TCPDF_FONTS::addTTFfont($expsalpopins,'','',32);
+
+                if($exp_sal_cvsetting->font_family == 'none'){
+                    $expsalfonttype = "";
+                }else{
+                    $expsalfonttype = $exp_sal_cvsetting->font_family;
+                }
+
+                if($exp_sal_cvsetting->font_size != ''){
+                    $expsalfontsize = $exp_sal_cvsetting->font_size;
+                }else{
+                    $expsalfontsize = "11";
+                }
+
+                PDF::SetFont($expsalpopinsfont, $expsalfonttype, $expsalfontsize,'',false);
+                if($exp_sal_cvsetting->font_color != ''){
+                    $expsalfontcolor = explode(",",$exp_sal_cvsetting->font_color);
+                    PDF::SetTextColor($expsalfontcolor[0],$expsalfontcolor[1],$expsalfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($exp_sal_cvsetting->x_axis,$exp_sal_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->exp_sal);
+            }
+
+            if(isset($expwp_id_cvsetting)){
+                if($expwp_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+
+                }elseif($expwp_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $expwppopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $expwppopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+                }
+
+                $expwppopinsfont = TCPDF_FONTS::addTTFfont($expwppopins,'','',32);
+
+                if($expwp_id_cvsetting->font_family == 'none'){
+                    $expwpfonttype = "";
+                }else{
+                    $expwpfonttype = $expwp_id_cvsetting->font_family;
+                }
+
+                if($expwp_id_cvsetting->font_size != ''){
+                    $expwpfontsize = $expwp_id_cvsetting->font_size;
+                }else{
+                    $expwpfontsize = "11";
+                }
+
+                PDF::SetFont($expwppopinsfont, $expwpfonttype, $expwpfontsize,'',false);
+                if($expwp_id_cvsetting->font_color != ''){
+                    $expwpfontcolor = explode(",",$expwp_id_cvsetting->font_color);
+                    PDF::SetTextColor($expwpfontcolor[0],$expwpfontcolor[1],$expwpfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($expwp_id_cvsetting->x_axis,$expwp_id_cvsetting->y_axis);
+                PDF::Cell(0,0,implode(",",$exp_wp));
+            }
+
+            // Age
+            if(isset($age_cvsetting)){
+                if($age_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $agepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($age_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $agepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $agepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $agepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+                }
+
+                $agepopinsfont = TCPDF_FONTS::addTTFfont($agepopins,'','',32);
+
+                if($age_cvsetting->font_family == 'none'){
+                    $agefonttype = "";
+                }else{
+                    $agefonttype = $age_cvsetting->font_family;
+                }
+
+                if($age_cvsetting->font_size != ''){
+                    $agefontsize = $age_cvsetting->font_size;
+                }else{
+                    $agefontsize = "11";
+                }
+
+                PDF::SetFont($agepopinsfont, $agefonttype, $agefontsize,'',false);
+                if($age_cvsetting->font_color != ''){
+                    $agefontcolor = explode(",",$age_cvsetting->font_color);
+                    PDF::SetTextColor($agefontcolor[0],$agefontcolor[1],$agefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($age_cvsetting->x_axis,$age_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->age);
+
+            }
+            // Marital
+            if(isset($marital_status_cvsetting)){
+                if($marital_status_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $maritalpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($marital_status_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $maritalpopins = base_path('/public_html/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $maritalpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $maritalpopins = base_path('/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                    }
+                }
+    
+                $maritalpopinsfont = TCPDF_FONTS::addTTFfont($maritalpopins,'','',32);
+
+
+                if($marital_status_cvsetting->font_family == 'none'){
+                    $mariedfonttype = "";
+                }else{
+                    $mariedfonttype = $marital_status_cvsetting->font_family;
+                }
+
+                if($marital_status_cvsetting->font_size != ''){
+                    $mariedfontsize = $marital_status_cvsetting->font_size;
+                }else{
+                    $mariedfontsize = "11";                
+                }
+
+                PDF::SetFont($maritalpopinsfont, $mariedfonttype, $mariedfontsize,'',false);
+                if($marital_status_cvsetting->font_color != ''){
+                    $marital_statusfontcolor = explode(",",$marital_status_cvsetting->font_color);
+                    PDF::SetTextColor($marital_statusfontcolor[0],$marital_statusfontcolor[1],$marital_statusfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($marital_status_cvsetting->x_axis,$marital_status_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->marital_status);
+                
+            }
+            // Religion
+            if(isset($religion_cvsetting)){
+                // if($religion_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                    
+                //     }
+                // }elseif($religion_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $religionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $religionpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');                    
+                //     }
+                // }
+    
+
+                if($religion_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $religionpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $religionpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $religionpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $religionpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';                    
+                    }
+                }
+
+
+                $religionpopinsfont = TCPDF_FONTS::addTTFfont($religionpopins,'','',32);
+
+                if($religion_cvsetting->font_family == 'none'){
+                    $relfonttype = "";
+                }else{
+                    $relfonttype = $religion_cvsetting->font_family;
+                }
+
+                if($religion_cvsetting->font_size != ''){
+                    $relfontsize = $religion_cvsetting->font_size;
+                }else{
+                    $relfontsize = "11";
+                }
+
+                PDF::SetFont($religionpopinsfont, $relfonttype, $relfontsize,'',false);
+                if($religion_cvsetting->font_color != ''){
+                    $religionfontcolor = explode(",",$religion_cvsetting->font_color);
+                    PDF::SetTextColor($religionfontcolor[0],$religionfontcolor[1],$religionfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($religion_cvsetting->x_axis,$religion_cvsetting->y_axis);
+                $relname = $post->relarbname.'  '.$post->relname;
+                // dd($relname);
+                PDF::Cell(0,0,$relname);
+                // PDF::Cell(0,0,$post->relname.'  '.$post->relarbname);
+                // if($post->religion != '' && $post->religion == 'Muslim'){
+                //     PDF::Cell(0,0,$post->religion.' مسلم');
+                // }
+                // if($post->religion != '' && $post->religion != 'Muslim'){
+                //     PDF::Cell(0,0,$post->religion.' غير مسلم');
+                // }
+
+
+
+
+            }
+            // Date of Birth
+            if(isset($dob_cvsetting)){
+
+                if($dob_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $dobpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($dob_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $dobpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $dobpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $dobpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+
+                }
+    
+                $dobpopinsfont = TCPDF_FONTS::addTTFfont($dobpopins,'','',32);
+
+                if($dob_cvsetting->font_family == 'none'){
+                    $dobfonttype = "";
+                }else{
+                    $dobfonttype = $dob_cvsetting->font_family;
+                }
+
+                if($dob_cvsetting->font_size != ''){
+                    $dobfontsize = $dob_cvsetting->font_size;
+                }else{
+                    $dobfontsize = "11";
+                }
+
+                PDF::SetFont($dobpopinsfont, $dobfonttype, $dobfontsize,'',false);
+                if($dob_cvsetting->font_color != ''){
+                    $dobfontcolor = explode(",",$dob_cvsetting->font_color);
+                    PDF::SetTextColor($dobfontcolor[0],$dobfontcolor[1],$dobfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($dob_cvsetting->x_axis,$dob_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->dob)));
+
+            }
+            // Place of Birth
+            if(isset($plb_id_cvsetting)){
+                if($plb_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $plb_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }
+                }elseif($plb_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $plb_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $plb_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $plb_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }
+                }
+                $plb_idpopinsfont = TCPDF_FONTS::addTTFfont($plb_idpopins,'','',32);
+
+                if($plb_id_cvsetting->font_family == 'none'){
+                    $plb_idfonttype = "";
+                }else{
+                    $plb_idfonttype = $plb_id_cvsetting->font_family;
+                }
+
+                if($plb_id_cvsetting->font_size != ''){
+                    $plb_idfontsize = $plb_id_cvsetting->font_size;
+                }else{
+                    $plb_idfontsize = "11";
+                }
+
+                PDF::SetFont($plb_idpopinsfont, $plb_idfonttype, $plb_idfontsize,'',false);
+                if($plb_id_cvsetting->font_color != ''){
+                    $plb_idfontcolor = explode(",",$plb_id_cvsetting->font_color);
+                    PDF::SetTextColor($plb_idfontcolor[0],$plb_idfontcolor[1],$plb_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($plb_id_cvsetting->x_axis,$plb_id_cvsetting->y_axis);
+                // PDF::Cell(0,0,$post->plbname);
+                PDF::Cell(0,0,$post->plb_text);
+            }
+            // Nationality
+            if(isset($nation_id_cvsetting)){
+
+                // if($nation_id_cvsetting->font_family == 'B'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');
+                //     }
+                // }elseif($nation_id_cvsetting->font_family == 'I'){
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');
+                //     }
+                // }else{
+                //     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //         $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //     }else{
+                //         $nation_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                //     }
+                
+                // }
+                
+                if($nation_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $nation_idpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';                        
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $nation_idpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $nation_idpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';                    
+                    }
+                }
+
+                $nation_idpopinsfont = TCPDF_FONTS::addTTFfont($nation_idpopins,'','',32);
+
+                if($nation_id_cvsetting->font_family == 'none'){
+                    $nation_idfonttype = "";
+                }else{
+                    $nation_idfonttype = $nation_id_cvsetting->font_family;
+                }
+
+                if($nation_id_cvsetting->font_size != ''){
+
+                    $nation_idfontsize = $nation_id_cvsetting->font_size;
+                }else{
+                    $nation_idfontsize = "11";
+                }
+
+                PDF::SetFont($nation_idpopinsfont, $nation_idfonttype, $nation_idfontsize,'',false);
+                if($nation_id_cvsetting->font_color != ''){
+                    $nation_idfontcolor = explode(",",$nation_id_cvsetting->font_color);
+                    PDF::SetTextColor($nation_idfontcolor[0],$nation_idfontcolor[1],$nation_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($nation_id_cvsetting->x_axis,$nation_id_cvsetting->y_axis);
+                $wordExtr = explode(" ",$post->nationname);
+                $revWordN = array_reverse($wordExtr);
+
+                // dd($revWord);
+                $nationIDname = $post->nationarname.'  '.implode(" ",$revWordN);
+                // PDF::Cell(0,0,$post->nationname.'  '.$post->nationarname);
+                PDF::Cell(0,0,$nationIDname);
+                
+            }
+            // Region
+            if(isset($region_id_cvsetting)){
+
+                if($region_id_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $regionpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($region_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $regionpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $regionpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $regionpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }   
+                }
+
+                $regionpopinsfont = TCPDF_FONTS::addTTFfont($regionpopins,'','',32);
+
+                if($region_id_cvsetting->font_family == 'none'){
+                    $region_idfonttype = "";
+                }else{
+                    $region_idfonttype = $region_id_cvsetting->font_family;
+                }
+
+                if($region_id_cvsetting->font_size != ''){
+                    $region_idfonttype = $region_id_cvsetting->font_size;
+                }else{
+                    $region_idfonttype = "11";
+                }
+
+                PDF::SetFont($regionpopinsfont, $region_idfonttype, $region_idfonttype,'',false);
+                if($region_id_cvsetting->font_color != ''){
+                    $region_idfontcolor = explode(",",$region_id_cvsetting->font_color);
+                    PDF::SetTextColor($region_idfontcolor[0],$region_idfontcolor[1],$region_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($region_id_cvsetting->x_axis,$region_id_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->regionname);
+            }
+
+            // Education
+            if(isset($education_cvsetting)){
+
+                if($education_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $educationpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($education_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $educationpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $educationpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $educationpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $educationpopinsfont = TCPDF_FONTS::addTTFfont($educationpopins,'','',32);
+
+                if($education_cvsetting->font_family == 'none'){
+                    $educationfonttype = "";
+                }else{
+                    $educationfonttype = $education_cvsetting->font_family;
+                }
+
+                if($education_cvsetting->font_size != ''){
+                    $educationfontsize = $education_cvsetting->font_size;
+                }else{
+                    $educationfontsize = "11";
+                }
+
+                PDF::SetFont($educationpopinsfont, $educationfonttype, $educationfontsize,'',false);
+                if($education_cvsetting->font_color != ''){
+                    $educationfontcolor = explode(",",$education_cvsetting->font_color);
+                    PDF::SetTextColor($educationfontcolor[0],$educationfontcolor[1],$educationfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($education_cvsetting->x_axis,$education_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->educname);
+
+            }
+            
+            // Language
+            if(isset($lang_known_cvsetting)){
+
+                if($lang_known_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $langknownpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($lang_known_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $langknownpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $langknownpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $langknownpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $langknownpopinsfont = TCPDF_FONTS::addTTFfont($langknownpopins,'','',32);
+
+                if($lang_known_cvsetting->font_family == 'none'){
+                    $lang_knownfonttype = "";
+                }else{
+                    $lang_knownfonttype = $lang_known_cvsetting->font_family;
+                }
+
+                if($lang_known_cvsetting->font_size != ''){
+                    $lang_knownfontsize = $lang_known_cvsetting->font_size;
+                }else{
+                    $lang_knownfontsize = "11";
+                }
+
+                PDF::SetFont($langknownpopinsfont, $lang_knownfonttype, $lang_knownfontsize,'',false);
+                if($lang_known_cvsetting->font_color != ''){
+                    $lang_knownfontcolor = explode(",",$lang_known_cvsetting->font_color);
+                    PDF::SetTextColor($lang_knownfontcolor[0],$lang_knownfontcolor[1],$lang_knownfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($lang_known_cvsetting->x_axis,$lang_known_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->lang_known);
+
+            }
+            // Google Map
+            if(isset($google_map_cvsetting)){
+
+                if($google_map_cvsetting->font_family == 'none'){
+                    $google_mapfonttype = "";
+                }else{
+                    $google_mapfonttype = $google_map_cvsetting->font_family;
+                }
+
+                if($google_map_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $google_map_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }else{
+                        $google_map_arabic = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $google_map_arabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }else{
+                        $google_map_arabic = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Regular.ttf';
+                    }    
+                }
+
+                $google_map_arabic_font = TCPDF_FONTS::addTTFfont($google_map_arabic,'','',32);
+
+                if($google_map_cvsetting->font_size != ''){
+                    $google_mapfontsize = $google_map_cvsetting->font_size;
+                }else{
+                    $google_mapfontsize = "11";
+                }
+
+                if($post->google_map == 1){
+                    $gmap = "Yes  نعم";
+                }else{
+                    $gmap = "No  لا";
+                }
+
+                PDF::SetFont($google_map_arabic_font, $google_mapfonttype, $google_mapfontsize,'',false);
+                if($google_map_cvsetting->font_color != ''){
+                    $google_mapfontcolor = explode(",",$google_map_cvsetting->font_color);
+                    PDF::SetTextColor($google_mapfontcolor[0],$google_mapfontcolor[1],$google_mapfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($google_map_cvsetting->x_axis,$google_map_cvsetting->y_axis);
+                PDF::Cell(0,0,$gmap);
+
+            }
+            // Vehical
+            if(isset($carknown_id_cvsetting)){
+
+                if($carknown_id_cvsetting->font_family == 'B'){
+
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $carknown_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+
+
+                }elseif($carknown_id_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $carknown_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $carknown_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $carknown_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+
+                $carknown_idpopinsfont = TCPDF_FONTS::addTTFfont($carknown_idpopins,'','',32);
+
+                if($carknown_id_cvsetting->font_family == 'none'){
+                    $carknown_idfonttype = "";
+                }else{
+                    $carknown_idfonttype = $carknown_id_cvsetting->font_family;
+                }
+
+                if($carknown_id_cvsetting->font_size != ''){
+                    $carknown_idfontsize = $carknown_id_cvsetting->font_size;
+                }else{
+                    $carknown_idfontsize = "11";
+                }
+
+                PDF::SetFont($carknown_idpopinsfont, $carknown_idfonttype, $carknown_idfontsize,'',false);
+                if($carknown_id_cvsetting->font_color != ''){
+                    $carknown_idfontcolor = explode(",",$carknown_id_cvsetting->font_color);
+                    PDF::SetTextColor($carknown_idfontcolor[0],$carknown_idfontcolor[1],$carknown_idfontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($carknown_id_cvsetting->x_axis,$carknown_id_cvsetting->y_axis);
+                PDF::Cell(0,0,implode(",",$carlist));
+            }
+
+            // Work Experience
+            $cexperience = explode(",",$post->experience);
+            $cprofessions = explode(",",$post->proff_id);
+            $cexpcountry = explode(",",$post->expcountry_id);
+            // $cexpcity = explode(",",$post->expcity_id);
+            $cexpcitytext = explode(",",$post->expcity_id_text);
+
+            $iec = 0;
+            $iprof = 0;
+            $icont = 0;
+            // $icity = 0;
+            $icitytext = 0;
+            $icco = 0;
+
+            foreach($cexperience as $index => $value){
+
+                // Job
+                
+                if(isset($proff_id_cvsetting)){
+                    $py_axis = $proff_id_cvsetting->y_axis + $iprof;
+
+                    if($proff_id_cvsetting->font_family == 'none'){
+                        $proff_idfonttype = "";
+                    }else{
+                        $proff_idfonttype = $proff_id_cvsetting->font_family;
+                    }
+                    
+                    if($proff_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $proff_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                        
+                        }
+
+                    }elseif($proff_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $proff_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                        
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $proff_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $proff_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }
+                    }
+
+                    $proff_idpopinsfont = TCPDF_FONTS::addTTFfont($proff_idpopins,'','',32);
+
+                    if($proff_id_cvsetting->font_size != ''){
+                        $proff_idfontsize = $proff_id_cvsetting->font_size;
+                    }else{
+                        $proff_idfontsize = "11";
+                    }
+                    $professionF = Profession::find($cprofessions[$index]);
+                    PDF::SetFont($proff_idpopinsfont, $proff_idfonttype, $proff_idfontsize,'',false);
+
+                    if($proff_id_cvsetting->font_color != ''){
+                        $proff_idfontcolor = explode(",",$proff_id_cvsetting->font_color);
+                        PDF::SetTextColor($proff_idfontcolor[0],$proff_idfontcolor[1],$proff_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+
+                    PDF::SetXY($proff_id_cvsetting->x_axis,$py_axis);
+                    if(isset($professionF)){
+                        PDF::Cell(0,0,$professionF->eng_name);
+                    }
+
+                    $iprof = $iprof + $proff_id_cvsetting->add_y_axis;
+                }
+                // Country
+                if(isset($expcountry_id_cvsetting)){
+                    $cony_axis = $expcountry_id_cvsetting->y_axis + $icont;
+
+                    if($expcountry_id_cvsetting->font_family == 'none'){
+                        $expcountry_idfonttype = "";
+                    }else{
+                        $expcountry_idfonttype = $expcountry_id_cvsetting->font_family;
+                    }
+
+                    if($expcountry_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                        
+                        }
+
+                    }elseif($expcountry_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcountry_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $expcountry_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                        
+                        }
+                    }
+
+                    $expcountry_idpopinsfont = TCPDF_FONTS::addTTFfont($expcountry_idpopins,'','',32);
+
+                    if($expcountry_id_cvsetting->font_size != ''){
+                        $expcountry_idfontsize = $expcountry_id_cvsetting->font_size;
+                    }else{
+                        $expcountry_idfontsize = "11";
+                    }
+
+                    $countryF = Country::find($cexpcountry[$index]);
+                    PDF::SetFont($expcountry_idpopinsfont, $expcountry_idfonttype, $expcountry_idfontsize,'',false);
+                    if($expcountry_id_cvsetting->font_color != ''){
+                        $expcountry_idfontcolor = explode(",",$expcountry_id_cvsetting->font_color);
+                        PDF::SetTextColor($expcountry_idfontcolor[0],$expcountry_idfontcolor[1],$expcountry_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($expcountry_id_cvsetting->x_axis,$cony_axis);
+                    if(isset($countryF)){
+                        PDF::Cell(0,0,$countryF->name);
+                    }
+
+
+                    $icont = $icont + $expcountry_id_cvsetting->add_y_axis;
+                }
+                // City
+                // if(isset($expcity_id_cvsetting)){
+                //     $cit_axis = $expcity_id_cvsetting->y_axis + $icity;
+
+                //     if($expcity_id_cvsetting->font_family == 'none'){
+                //         $expcity_idfonttype = "";
+                //     }else{
+                //         $expcity_idfonttype = $expcity_id_cvsetting->font_family;
+                //     }
+
+                //     if($expcity_id_cvsetting->font_family == 'B'){
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf');                        
+                //         }
+                //     }elseif($expcity_id_cvsetting->font_family == 'I'){
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf');                    
+                //         }
+                //     }else{
+                //         if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                //             $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                //         }else{
+                //             $expcity_idpopins = base_path('public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf');
+                //         }
+                //     }
+
+                //     $expcity_idpopinsfont = TCPDF_FONTS::addTTFfont($expcity_idpopins,'','',32);
+
+                //     if($expcity_id_cvsetting->font_size != ''){
+                //         $expcity_idfontsize = $expcity_id_cvsetting->font_size;
+                //     }else{
+                //         $expcity_idfontsize = "11";
+                //     }
+
+                //     $cityF = City::find($cexpcity[$index]);
+                //     PDF::SetFont($expcity_idpopinsfont, $expcity_idfonttype, $expcity_idfontsize,'',false);
+                //     if($expcity_id_cvsetting->font_color != ''){
+                //         $expcity_idfontcolor = explode(",",$expcity_id_cvsetting->font_color);
+                //         PDF::SetTextColor($expcity_idfontcolor[0],$expcity_idfontcolor[1],$expcity_idfontcolor[2]);
+                //     }else{
+                //         PDF::SetTextColor(0,0,0);
+                //     }
+                //     PDF::SetXY($expcity_id_cvsetting->x_axis,$cit_axis);
+                //     if(isset($cityF)){
+                //         PDF::Cell(0,0,$cityF->name);
+                //     }
+
+
+                //     $icity = $icity + $expcity_id_cvsetting->add_y_axis;
+
+                // }
+
+                // City Text
+                if(isset($expcity_id_cvsetting)){
+                    $cit_axis = $expcity_id_cvsetting->y_axis + $icitytext;
+
+                    if($expcity_id_cvsetting->font_family == 'none'){
+                        $expcity_idfonttype = "";
+                    }else{
+                        $expcity_idfonttype = $expcity_id_cvsetting->font_family;
+                    }
+
+                    if($expcity_id_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $expcity_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                        
+                        }
+                    }elseif($expcity_id_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $expcity_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                        }
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $expcity_idpopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $expcity_idpopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }
+                    }
+
+                    $expcity_idpopinsfont = TCPDF_FONTS::addTTFfont($expcity_idpopins,'','',32);
+
+                    if($expcity_id_cvsetting->font_size != ''){
+                        $expcity_idfontsize = $expcity_id_cvsetting->font_size;
+                    }else{
+                        $expcity_idfontsize = "11";
+                    }
+
+                    
+                    PDF::SetFont($expcity_idpopinsfont, $expcity_idfonttype, $expcity_idfontsize,'',false);
+                    if($expcity_id_cvsetting->font_color != ''){
+                        $expcity_idfontcolor = explode(",",$expcity_id_cvsetting->font_color);
+                        PDF::SetTextColor($expcity_idfontcolor[0],$expcity_idfontcolor[1],$expcity_idfontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($expcity_id_cvsetting->x_axis,$cit_axis);
+                    if(count($cexpcitytext) > $icco){
+                        PDF::Cell(0,0,$cexpcitytext[$index]);
+                    }
+
+
+                    $icitytext = $icitytext + $expcity_id_cvsetting->add_y_axis;
+
+                }
+
+
+                // Experience
+                if(isset($experience_cvsetting)){
+                    $ey_axis = $experience_cvsetting->y_axis + $iec;
+
+                    if($experience_cvsetting->font_family == 'none'){
+                        $experiencefonttype = "";
+                    }else{
+                        $experiencefonttype = $experience_cvsetting->font_family;
+                    }
+
+                    if($experience_cvsetting->font_family == 'B'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }else{
+                            $experiencepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                        }
+                    }elseif($experience_cvsetting->font_family == 'I'){
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                        }else{
+                            $experiencepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                        
+                        }
+
+                    }else{
+                        if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                            $experiencepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                        }else{
+                            $experiencepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                        
+                        }
+                    }
+
+                    $experiencepopinsfont = TCPDF_FONTS::addTTFfont($experiencepopins,'','',32);
+
+                    if($experience_cvsetting->font_size != ''){
+                        $experiencefontsize = $experience_cvsetting->font_size;
+                    }else{
+                        $experiencefontsize = "11";
+                    }
+
+                    PDF::SetFont($experiencepopinsfont, $experiencefonttype, $experiencefontsize,'',false);
+                    if($experience_cvsetting->font_color != ''){
+                        $experiencefontcolor = explode(",",$experience_cvsetting->font_color);
+                        PDF::SetTextColor($experiencefontcolor[0],$experiencefontcolor[1],$experiencefontcolor[2]);
+                    }else{
+                        PDF::SetTextColor(0,0,0);
+                    }
+                    PDF::SetXY($experience_cvsetting->x_axis,$ey_axis);
+                    PDF::Cell(0,0,$value.' Years');
+
+                    $iec = $iec + $experience_cvsetting->add_y_axis;
+                }
+
+                $icco++;
+            }
+
+            // Passport No
+            if(isset($pass_no_cvsetting)){
+
+                if($pass_no_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $pass_nopopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($pass_no_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $pass_nopopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_nopopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $pass_nopopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $pass_nopopinsfont = TCPDF_FONTS::addTTFfont($pass_nopopins,'','',32);
+
+                if($pass_no_cvsetting->font_family == 'none'){
+                    $pass_nofonttype = "";
+                }else{
+                    $pass_nofonttype = $pass_no_cvsetting->font_family;
+                }
+
+                if($pass_no_cvsetting->font_size != ''){
+                    $pass_nofontsize = $pass_no_cvsetting->font_size;
+    
+                }else{
+                    $pass_nofontsize = "11";               
+                }
+
+                PDF::SetFont($pass_nopopinsfont, $pass_nofonttype, $pass_nofontsize,'',false);
+                if($pass_no_cvsetting->font_color != ''){
+                    $pass_nofontcolor = explode(",",$pass_no_cvsetting->font_color);
+                    PDF::SetTextColor($pass_nofontcolor[0],$pass_nofontcolor[1],$pass_nofontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($pass_no_cvsetting->x_axis,$pass_no_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->pass_no);
+            }
+            // Passport Type
+            if(isset($pass_type_cvsetting)){
+                if($pass_type_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $pass_typepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($pass_type_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $pass_typepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $pass_typepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $pass_typepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $pass_typepopinsfont = TCPDF_FONTS::addTTFfont($pass_typepopins,'','',32);
+
+                if($pass_type_cvsetting->font_family == 'none'){
+                    $pass_typefonttype = "";
+                }else{
+                    $pass_typefonttype = $pass_type_cvsetting->font_family;
+                }
+
+                if($pass_type_cvsetting->font_size != ''){
+                    $pass_typefontsize = $pass_type_cvsetting->font_size;
+    
+                }else{
+                    $pass_typefontsize = "11";                
+                }
+
+                PDF::SetFont($pass_typepopinsfont, $pass_typefonttype, $pass_typefontsize,'',false);
+                if($pass_type_cvsetting->font_color != ''){
+                    $pass_typefontcolor = explode(",",$pass_type_cvsetting->font_color);
+                    PDF::SetTextColor($pass_typefontcolor[0],$pass_typefontcolor[1],$pass_typefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($pass_type_cvsetting->x_axis,$pass_type_cvsetting->y_axis);
+                PDF::Cell(0,0,$post->pass_type);
+            }
+            // Date of issue
+            if(isset($doi_cvsetting)){
+
+                if($doi_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $doipopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($doi_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $doipopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $doipopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+
+                }
+    
+                $doipopinsfont = TCPDF_FONTS::addTTFfont($doipopins,'','',32);
+
+                if($doi_cvsetting->font_family == 'none'){
+                    $doifonttype = "";
+                }else{
+                    $doifonttype = $doi_cvsetting->font_family;
+                }
+
+                if($doi_cvsetting->font_size != ''){
+                    $doifontsize = $doi_cvsetting->font_size;
+    
+                }else{
+                    $doifontsize = "11";
+                }
+
+                PDF::SetFont($doipopinsfont, $doifonttype, $doifontsize,'',false);
+                if($doi_cvsetting->font_color != ''){
+                    $doifontcolor = explode(",",$doi_cvsetting->font_color);
+                    PDF::SetTextColor($doifontcolor[0],$doifontcolor[1],$doifontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($doi_cvsetting->x_axis,$doi_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->doi)));
+            }
+            // Date of expiry
+            if(isset($doe_cvsetting)){
+                if($doe_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $doepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+
+                }elseif($doe_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $doepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $doepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $doepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $doepopinsfont = TCPDF_FONTS::addTTFfont($doepopins,'','',32);
+
+                if($doe_cvsetting->font_family == 'none'){
+                    $doefonttype = "";
+                }else{
+                    $doefonttype = $doe_cvsetting->font_family;
+                }
+
+                if($doe_cvsetting->font_size != ''){
+                    $doefontsize = $doe_cvsetting->font_size;
+                }else{
+                    $doefontsize = "11";
+                }
+
+                PDF::SetFont($doepopinsfont, $doefonttype, $doefontsize,'',false);
+                if($doe_cvsetting->font_color != ''){
+                    $doefontcolor = explode(",",$doe_cvsetting->font_color);
+                    PDF::SetTextColor($doefontcolor[0],$doefontcolor[1],$doefontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($doe_cvsetting->x_axis,$doe_cvsetting->y_axis);
+                PDF::Cell(0,0,date('d-m-Y',strtotime($post->doe)));
+            }
+            // Place of Issue
+            if(isset($poi_cvsetting)){
+                if($poi_cvsetting->font_family == 'B'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';
+                    }else{
+                        $poipopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Medium.ttf';                    
+                    }
+                }elseif($poi_cvsetting->font_family == 'I'){
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';
+                    }else{
+                        $poipopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Italic.ttf';                    
+                    }
+                }else{
+                    if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                        $poipopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                    }else{
+                        $poipopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';                    
+                    }
+                }
+    
+                $poipopinsfont = TCPDF_FONTS::addTTFfont($poipopins,'','',32);
+
+                if($poi_cvsetting->font_family == 'none'){
+                    $poifonttype = "";
+                }else{
+                    $poifonttype = $poi_cvsetting->font_family;
+                }
+
+                if($poi_cvsetting->font_size != ''){
+                    $poifontsize = $poi_cvsetting->font_size;
+    
+                }else{
+                    $poifontsize = "11";
+                }
+
+                PDF::SetFont($poipopinsfont, $poifonttype, $poifontsize,'',false);
+                if($poi_cvsetting->font_color != ''){
+                    $poifontcolor = explode(",",$poi_cvsetting->font_color);
+                    PDF::SetTextColor($poifontcolor[0],$poifontcolor[1],$poifontcolor[2]);
+                }else{
+                    PDF::SetTextColor(0,0,0);
+                }
+                PDF::SetXY($poi_cvsetting->x_axis,$poi_cvsetting->y_axis);
+                // PDF::Cell(0,0,$post->poiname);
+                PDF::Cell(0,0,$post->poi_text);
+            }
+
+            PDF::AddPage();
+            // Default fonts set
+
+            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                $sansarabic = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                $filecand_pepopins = base_path().'/public/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+            }else{
+                $filecand_pepopins = base_path().'/public_html/admin/assets/custom_fonts/poppins/Poppins-Regular.ttf';
+                $sansarabic = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+            }
+            // $tajawalfont = TCPDF_FONTS::addTTFfont($tajawal,'','',32); 
+            $sansarabicfont = TCPDF_FONTS::addTTFfont($sansarabic,'','',32);
+            $filecand_pepopinsfont = TCPDF_FONTS::addTTFfont($filecand_pepopins,'','',32);
+
+            if($post->pass_file != ''){
+                // Passport
+                PDF::SetFont($filecand_pepopinsfont, '', 16);
+                PDF::SetXY(10,10);
+                PDF::Cell(0,0,"Passport Copy:");
+
+                PDF::SetFont($sansarabicfont, '', 16);
+                PDF::SetXY(160,10);
+                PDF::Cell(0,0,"صورة جواز السفر:",0,0,'R');
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $passpath = base_path().'/public/admin/assets/images/candidate/'.$post->pass_file;
+                }else{
+                    $passpath = base_path().'/public_html/admin/assets/images/candidate/'.$post->pass_file;                
+                }
+
+                $passext = pathinfo($post->pass_file, PATHINFO_EXTENSION);
+
+                PDF::Image($passpath,30,30, '150', '',$passext,'','',false,'300','',false,false,0,false,false,false);
+            }
+
+            if($post->lic_file != ''){
+                
+                PDF::SetFont($filecand_pepopinsfont, '', 16);
+                PDF::SetXY(10,140);
+                PDF::Cell(0,0,"Driving Licence:");
+
+                PDF::SetFont($sansarabicfont, '', 16);
+                PDF::SetXY(160,140);
+                PDF::Cell(0,0,"رخصة قيادة:",0,0,"R");
+
+                if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                    $licpath = base_path().'/public/admin/assets/images/candidate/'.$post->lic_file;
+                }else{
+                    $licpath = base_path().'/public_html/admin/assets/images/candidate/'.$post->lic_file;
+                }                
+                $licext = pathinfo($post->lic_file, PATHINFO_EXTENSION);
+    
+    
+                PDF::Image($licpath,30,160, '150', '',$licext,'','',false,'300','',false,false,0,false,false,false);
+            }
+            ob_end_clean();
+            // PDF::Output($post->cand_name.'_cv.pdf');
+            $filename = $post->id.'_'.$post->cand_name.'.pdf';
+            // update file in db
+            $updFile = Candidate::find($post->id);
+            $updFile->cv_execute_file = $filename;
+            $updFile->cv_executae_date = Date('Y-m-d');
+            $updFile->save();
+            if(isset($basepathSt) && $basepathSt->base_path_status == 1){
+                PDF::Output(base_path('public/admin/assets/images/pdf').'/'.$filename,'F');
+            }else{
+                $urlPath = url('/');
+                // PDF::Output($urlPath.'/admin/assets/images/pdfzzzzz'.'/'.$filename,'F');
+                PDF::Output(base_path('public_html/admin/assets/images/pdf').'/'.$filename,'F');
+            }
+
+
+            return redirect()->back()->with('success','CV ready for download!');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('pdfError',$e->getMessage());
+        }
+    }
+}

@@ -1,0 +1,792 @@
+@extends('layout.user.layout')
+
+@section('title', $website['company_name'] ?? 'Qamr International')
+
+@section('page-style')
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.9/dist/sweetalert2.min.css">
+    <link rel="stylesheet" href="{{ asset('user/intl-tel-input-master/build/css/intlTelInput.css') }}">
+
+    <style>
+        .box-slide{
+            width: 460px;
+            height: 259px;
+            background-color: rgb(218, 218, 218);
+        }
+        .box-slide img{
+            object-fit: contain;
+            width: 100%;
+            height: 100%;
+        }
+        .box-thumb{
+            /* width: 460px; */
+            height: 250px;
+            background-color: rgb(218, 218, 218);
+        }
+        .box-thumb img{
+            object-fit: contain;
+            width: 100%;
+            height: 100%;
+        }
+        .explsal{
+            list-style: none
+        }
+        .expmar{
+            margin-left: 10px;
+        }
+        .swal2-icon {
+            margin: 0 auto 0!important;
+        }
+        .swal2-icon .swal2-icon-content {
+        display: ruby-text!important;
+        }
+    </style>
+@endsection
+
+@section('content')
+    @php
+        if (Auth::check()) {
+            $userbkc = App\Models\Booking::where('user_id','=',Auth::user()->id)->where('booking_status','!=',2)->count();
+        }
+
+        if ($post->gulfexperience == 1) {
+            $jobtype = "Indian Experience ";
+        }elseif ($post->gulfexperience == 2) {
+            $jobtype = "Ex-Abroad ";
+        }else{
+            $jobtype = "";
+        }
+    @endphp
+    <section class="container mt-5 mb-lg-5 mb-4 pt-5 pb-lg-5">  
+        <!-- Breadcrumb-->
+        <div class="row">
+            <div class="col-md-6">
+                <nav class="mb-3 pt-md-3" aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{{ route('welcome') }}">Home</a></li>
+                        <li class="breadcrumb-item"><a href="{{ route('resumes') }}">Resumes</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Candidate Details</li>                
+                    </ol>
+                </nav>
+            </div>
+            <div class="col-md-6">
+                <p class="mb-3 pt-md-3 fw-bold float-end">CV</p>
+            </div>
+        </div>
+
+        
+        <div class="row gy-5 pt-lg-2">
+            <div class="col-lg-5">
+                <div class="d-flex flex-column">
+                    <!-- Carousel with slides count-->
+                    @if ($post->photo_file !='' || $post->pass_file !='' || $post->lic_file !='' || $post->video_file != ''|| $post->video_link != ''|| $post->trade_test_video_link != '')
+                    <div class="order-lg-1 order-2">
+                        <div class="tns-carousel-wrapper">
+                            <div class="tns-slides-count text-light"><i class="fi-image fs-lg me-2"></i>
+                                <div class="ps-1">
+                                    <span class="tns-current-slide fs-5 fw-bold"></span>
+                                    <span class="fs-5 fw-bold">/</span>
+                                    <span class="tns-total-slides fs-5 fw-bold"></span>
+                                </div>
+                            </div>
+                            <div class="tns-carousel-inner" data-carousel-options="{&quot;navAsThumbnails&quot;: true, &quot;navContainer&quot;: &quot;#thumbnails&quot;, &quot;gutter&quot;: 12, &quot;responsive&quot;: {&quot;0&quot;:{&quot;controls&quot;: false},&quot;500&quot;:{&quot;controls&quot;: true}}}">
+                                @if ($post->video_file != '')
+                                  <div class="box-slide">
+                                        <div class="ratio ratio-16x9">
+                                            <video width="640" height="360" controls>
+                                            <source src="{{ asset('videos/' . $post->video_file) }}" type="video/mp4">
+                                            Your browser does not support the video tag.
+                                            </video>
+                                        </div>
+                                    </div>
+                                @endif
+                                @if ($post->video_link != '')
+                                  <div class="box-slide">
+                                        <div class="ratio ratio-16x9">
+                                            <iframe width="200" height="50" src="{{ $post->video_link }}" frameborder="0" allowfullscreen></iframe>
+                                        </div>
+                                    </div>
+                                @endif
+                                @if ($post->trade_test_video_link != '')
+                                  <div class="box-slide">
+                                        <div class="ratio ratio-16x9">
+                                            <iframe width="200" height="50" src="{{ $post->trade_test_video_link }}" frameborder="0" allowfullscreen></iframe>
+                                        </div>
+                                    </div>
+                                @endif
+                                @if ($post->photo_file !='')
+                                    <div class="box-slide">
+                                        <img class="rounded-3" src="{{ asset('admin/assets/images/candidate/'.$post->photo_file) }}" alt="Image">
+                                    </div>
+                                @endif
+                                @if ($post->pass_file !='')
+                                    <div class="box-slide">
+                                        <img class="rounded-3" src="{{ asset('admin/assets/images/candidate/'.$post->pass_file) }}" alt="Image">
+                                    </div>
+                                @endif
+                                @if ($post->lic_file !='')
+                                    <div class="box-slide">
+                                        <img class="rounded-3" src="{{ asset('admin/assets/images/candidate/'.$post->lic_file) }}" alt="Image">
+                                    </div>                
+                                @endif                                
+                                
+                            </div>
+                        </div>
+                        <!-- Thumbnails nav-->
+                        <ul class="tns-thumbnails mb-4" id="thumbnails">
+                            @if ($post->video_file != '')
+                                <li class="tns-thumbnail">
+                                    <video width="100" height="100" controls>
+                                    <source src="{{ asset('videos/' . $post->video_file) }}" type="video/mp4">
+                                    Your browser does not support the video tag.
+                                    </video>
+                                </li>    
+                            @endif
+                            @if ($post->video_link != '')
+                                <li class="tns-thumbnail">
+                                    <img src="https://img.youtube.com/vi/{{ $video_id[4]}}/default.jpg" alt="Video Thumbnail" width="100">
+                                </li>    
+                            @endif
+                            @if ($post->trade_test_video_link != '')
+                                <li class="tns-thumbnail">
+                                    <img src="https://img.youtube.com/vi/{{ $test_video_id[4]}}/default.jpg" alt="Video Thumbnail" width="100">
+                                </li>    
+                            @endif
+                            @if ($post->photo_file != '')
+                                <li class="tns-thumbnail">
+                                    <img src="{{ asset('admin/assets/images/candidate/'.$post->photo_file) }}" alt="Thumbnail">
+                                </li>                                
+                            @endif
+                            @if ($post->pass_file != '')
+                                <li class="tns-thumbnail">
+                                    <img src="{{ asset('admin/assets/images/candidate/'.$post->pass_file) }}" alt="Thumbnail">
+                                </li>    
+                            @endif
+                            @if ($post->lic_file != '')
+                                <li class="tns-thumbnail">
+                                    <img src="{{ asset('admin/assets/images/candidate/'.$post->lic_file) }}" alt="Thumbnail">
+                                </li>
+                            @endif   
+                        </ul>
+                    </div>
+                    @endif
+                    {{-- <div class="order-lg-2 order-1">
+                        <h1 class="h2 mb-2">{{ $post->cand_name }}</h1>
+                        <ul class="d-flex mb-4 pb-lg-2 list-unstyled">
+                            <li class="me-3 pe-3 border-end">
+                                <b class="me-1"></b><i class="fi-briefcase mt-n1 lead align-middle text-muted"></i> @if($total_exp != 0) {{ $total_exp }} Years Exp  @else Fresher @endif
+                            </li>
+                            <li class="me-3 pe-3 border-end">
+                                <b class="me-1"></b><i class="fi-car mt-n1 lead align-middle text-muted"></i> @if($post->jobtype_id != '') {{ $proffesion2->eng_name }} @else {{ '---' }} @endif
+                            </li>
+                        </ul>
+                    </div> --}}
+                </div>
+
+                {{-- @if (isset($overtext) && $overtext->status == 1)
+                <h2 class="h5">Overview</h2>
+                <div class="text-justice">
+                    <p class="mb-4 pb-2">{{ $overtext->text_desc }}</p>
+                </div>                    
+                @endif --}}
+
+                <!-- Changes on 22-08-2023 Start -->
+                @php
+                    $expected_location = implode(",",$myexpwp);
+                @endphp
+                 <!-----================= Exprience ============--------->
+                 <div class="card border-0 mb-4">
+                    <div class="card-body">
+                        <h5 class="mb-0 pb-3"><i class="fi-briefcase opacity-75"></i> Employment Experience</h5>
+                        @if ($post->experience != 0)
+                        @php
+                            $exps = explode(',',$post->experience);
+                            $exprof = explode(',',$post->proff_id);
+                            $expcont = explode(',',$post->expcountry_id);
+                            $expcity = explode(',',$post->expcity_id);
+                            $expcitytext = explode(",",$post->expcity_id_text);
+                            $iexcp = 0;
+                        @endphp
+                        @foreach ($exps as $key => $exp)
+                            <div class="row mb-3">
+                                <div class="col-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Job</li>
+                                        <li class="mt-2 mb-0"><b>@if(isset($proffesion2)) {{ $proffesion2->eng_name }} @else {{ '---' }} @endif </b></li>
+                                    </ul>
+                                </div>
+
+                                <div class="col-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Period</li>
+                                        <li class="mt-2 mb-0"><b>{{ $exp.' Years' }}</b></li>
+                                    </ul>
+                                </div>
+
+
+                                <div class="col-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Country</li>
+                                        <li class="mt-2 mb-0"><b>@if(isset($nation)) {{ $nation->name }} @else {{ '---' }} @endif </b></li>
+                                    </ul>
+                                </div>
+                                <div class="col-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">City</li>
+                                        {{-- <li class="mt-2 mb-0"><b>@if(isset($cityn)){{ $cityn->name }} @else {{ '---' }} @endif</b></li> --}}
+                                        <li class="mt-2 mb-0"><b>@if(count($expcitytext) > $iexcp) {{ $expcitytext[$key] }} @else {{ '---' }} @endif</b></li>
+                                    </ul>
+                                </div>
+                            </div>
+                            @php
+                                $iexcp++;
+                            @endphp
+                        @endforeach
+                        
+                        @else
+                        <div class="row">
+                            <div class="col-3">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Job</li>
+                                    <li class="mt-2 mb-0"><b>{{ '---' }} </b></li>
+                                </ul>
+                            </div>
+
+                            <div class="col-3">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Period</li>
+                                    <li class="mt-2 mb-0"><b>Fresher</b></li>
+                                </ul>
+                            </div>
+
+
+                            <div class="col-3">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Country</li>
+                                    <li class="mt-2 mb-0"><b>{{ '---' }}</b></li>
+                                </ul>
+                            </div>
+                            <div class="col-3">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">City</li>
+                                    <li class="mt-2 mb-0"><b>{{ '---' }}</b></li>
+                                </ul>
+                            </div>
+
+
+
+                        </div>
+                        @endif
+                        <h5 class="mb-0 pb-3"  style="margin-top: 20px"><i class="fi-file opacity-75"></i> Passport Details</h5>
+                        @php
+                            $newPass = substr_replace($post->pass_no,'**',-2);
+                        @endphp
+                        <div class="row">
+                            <div class="col-4">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Passport Number</li>
+                                    <li class="mt-2 mb-0"><b>{{ $newPass }} </b></li>
+                                </ul>
+                            </div>
+                            <div class="col-4">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Passport Type</li>
+                                    <li class="mt-2 mb-0"><b>{{ $post->pass_type }} </b></li>
+                                </ul>
+                            </div>
+                            <div class="col-4">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Date Of Issue</li>
+                                    <li class="mt-2 mb-0"><b>@if($post->doi != '') {{ date('d/m/Y',strtotime($post->doi)) }} @else {{ '---' }} @endif</b></li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="row mt-4">
+                            <div class="col-4">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Date of Expiry</li>
+                                    <li class="mt-2 mb-0"><b>@if($post->doe != '') {{ date('d/m/Y',strtotime($post->doe)) }} @else {{ '---' }} @endif </b></li>
+                                </ul>
+                            </div>
+                            <div class="col-4">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Place of Issue</li>
+                                    <li class="mt-2 mb-0"><b>@if($post->poi_text != '') {{ $post->poi_text }} @else {{ '---' }} @endif </b></li>
+                                </ul>
+                            </div>
+                            <div class="col-4">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Date of Birth</li>
+                                    <li class="mt-2 mb-0"><b>@if($post->dob != '') {{ date('d/m/Y',strtotime($post->dob)) }} @else {{ '---' }} @endif</b></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- <div class="card border-0 bg-secondary my-4">
+                    <div class="card-body">
+                        <h5 class="mb-0 pb-3"><i class="fi-file opacity-75"></i> Passport Details</h5>
+                        @php
+                            $newPass = substr_replace($post->pass_no,'**',-2);
+                        @endphp
+                        <div class="row">
+                            <div class="col-4">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Passport Number</li>
+                                    <li class="mt-2 mb-0"><b>{{ $newPass }} </b></li>
+                                </ul>
+                            </div>
+                            <div class="col-4">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Passport Type</li>
+                                    <li class="mt-2 mb-0"><b>{{ $post->pass_type }} </b></li>
+                                </ul>
+                            </div>
+                            <div class="col-4">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Date Of Issue</li>
+                                    <li class="mt-2 mb-0"><b>@if($post->doi != '') {{ date('d/m/Y',strtotime($post->doi)) }} @else {{ '---' }} @endif</b></li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="row mt-4">
+                            <div class="col-4">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Date of Expiry</li>
+                                    <li class="mt-2 mb-0"><b>@if($post->doe != '') {{ date('d/m/Y',strtotime($post->doe)) }} @else {{ '---' }} @endif </b></li>
+                                </ul>
+                            </div>
+                            <div class="col-4">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Place of Issue</li>
+                                    <li class="mt-2 mb-0"><b>@if($post->poi_text != '') {{ $post->poi_text }} @else {{ '---' }} @endif </b></li>
+                                </ul>
+                            </div>
+                            <div class="col-4">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Date of Birth</li>
+                                    <li class="mt-2 mb-0"><b>@if($post->dob != '') {{ date('d/m/Y',strtotime($post->dob)) }} @else {{ '---' }} @endif</b></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div> --}}
+
+            </div>
+            <!-- Sidebar with details-->
+            <aside class="col-lg-7">
+                <div class="ps-lg-5">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div>
+                            <span class="badge bg-success me-2 mb-2">Verified</span><span class="badge bg-info me-2 mb-2">New</span>
+                        </div>
+                        <div class="text-nowrap">
+                            <button class="btn btn-icon btn-light-primary btn-xs shadow-sm rounded-circle ms-2 mb-2" type="button" data-bs-toggle="tooltip" title="Add to Wishlist"><i class="fi-heart"></i></button>
+                            <div class="dropdown d-inline-block" data-bs-toggle="tooltip" title="Share">
+                                <button class="btn btn-icon btn-light-primary btn-xs shadow-sm rounded-circle ms-2 mb-2" type="button" data-bs-toggle="dropdown"><i class="fi-share"></i></button>
+                                <div class="dropdown-menu dropdown-menu-end my-1">
+                                    <button class="dropdown-item" type="button"><i class="fi-facebook fs-base opacity-75 me-2"></i>Facebook</button>
+                                    <button class="dropdown-item" type="button"><i class="fi-twitter fs-base opacity-75 me-2"></i>Twitter</button>
+                                    <button class="dropdown-item" type="button"><i class="fi-instagram fs-base opacity-75 me-2"></i>Instagram</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {{-- <h2 class="h3 mb-4 pb-2">@if($total_exp != 0) Experienced {{ $post->job_type }} @else Fresher {{ $post->job_type }} @endif</h2> --}}
+                    {{-- @php
+                        $expected_location = implode(",",$myexpwp);
+                    @endphp --}}
+
+                    {{-- <div class="row mb-2 expmar">
+                        <div class="col-md-12">
+                            <h1 class="h2">{{ $post->cand_name }}</h1>
+                        </div>
+                    </div>
+
+                    <div class="row mb-2 expmar">
+                        <div class="col-md-6">
+                            <li class="explsal"><i class="fi-briefcase"></i> Experience</li>
+                            <li class="explsal"><b>@if($total_exp != 0) {{ $total_exp }} Years Exp  @else Fresher @endif</b></li>
+                        </div>
+                        <div class="col-md-6">
+                            <li class="explsal"><i class="fi-car"></i> Applied For</li>
+                            <li class="explsal"><b>@if($post->jobtype_id != '') {{ $jobtype.''.$proffesion2->eng_name }} @else {{ '---' }} @endif</b></li>
+                        </div>
+                    </div>
+
+                    <div class="row mb-2 expmar">
+                        <div class="col-md-6">
+                            <li class="explsal"><i class="fi-briefcase"></i> Expected Work place</li>
+                            <li class="explsal"><b>{{ $expected_location }}</b></li>
+                        </div>
+                        <div class="col-md-6">
+                            <li class="explsal"><i class="fi-cash"></i> Expected Salary</li>
+                            <li class="explsal"><b>{{ $post->exp_sal }}</b></li>
+                        </div>
+                    </div> --}}
+                    <!---=============== Personal Details ==========---------->
+                    <div class="card-body" style="padding: 10px 0; margin-bottom:10px;">
+                        <div class="row mb-2 expmar">
+                            <div class="col-md-12">
+                                <h1 class="h2">{{ $post->cand_name }}</h1>
+                            </div>
+                        </div>
+                        <div class="row mb-2 expmar">
+                            <div class="col-md-6">
+                                <li class="explsal"><i class="fi-briefcase"></i> Experience</li>
+                                <li class="explsal new"><b>@if($total_exp != 0) {{ $total_exp }} Years Exp  @else Fresher @endif</b></li>
+                            </div>
+                            <div class="col-md-6">
+                                <li class="explsal"><i class="fi-car"></i> Applied For</li>
+                                <li class="explsal"><b>@if($post->jobtype_id != '') {{ $jobtype.''.$proffesion2->eng_name }} @else {{ '---' }} @endif</b></li>
+                            </div>
+                        </div>
+        
+                        <div class="row mb-2 expmar">
+                            <div class="col-md-6">
+                                <li class="explsal"><i class="fi-briefcase"></i> Expected Work place</li>
+                                <li class="explsal"><b>{{ $expected_location }}</b></li>
+                            </div>
+                            <div class="col-md-6">
+                                <li class="explsal"><i class="fi-cash"></i> Expected Salary</li>
+                                <li class="explsal"><b>{{ $post->exp_sal }}</b></li>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card border-0 mb-4">
+                        <div class="card-body">
+                            <h5 class="mb-0 pb-3"><i class="fi-user opacity-75"></i> Personal Details</h5>
+                            <div class="row">
+                                <div class="col-md-3 col-xs-4 mb-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Full Name</li>
+                                        <li class="mt-2 mb-0"><b>{{ $post->cand_name }} </b></li>
+                                    </ul>
+                                </div>
+
+                                <div class="col-md-3 col-xs-4 mb-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Age</li>
+                                        <li class="mt-2 mb-0"><b>{{ $post->age }} Years</b></li>
+                                    </ul>
+                                </div>
+
+                                <div class="col-md-3 col-xs-4 mb-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Religion</li>
+                                        <li class="mt-2 mb-0"><b>@if(isset($religionN)) {{ $religionN->name }} @else {{ '---' }} @endif </b></li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-3 col-xs-4 mb-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Marital Status</li>
+                                        <li class="mt-2 mb-0"><b>{{ $post->marital_status }} </b></li>
+                                    </ul>
+                                </div>
+
+                                
+                                <div class="col-md-3 col-xs-4 mb-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Natinality</li>
+                                        <li class="mt-2 mb-0"><b>@if(isset($nation)) {{ $nation->name }} @else {{ '---' }} @endif </b></li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-3 col-xs-4 mb-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Region</li>
+                                        <li class="mt-2 mb-0"><b>@if(isset($region)) {{ $region->name }} @else {{ '---' }} @endif</b></li>
+                                    </ul>
+                                </div>
+
+                                <div class="col-md-3 col-xs-4 mb-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Place of Birth</li>
+                                        {{-- <li class="mt-2 mb-0"><b>@if(isset($plob)) {{ $plob->name }} @else {{ '---' }} @endif</b></li> --}}
+                                        <li class="mt-2 mb-0"><b>@if($post->plb_text != '') {{ $post->plb_text }} @else {{ '---' }} @endif</b></li>
+                                    </ul>
+                                </div>
+
+                                <div class="col-md-3 col-xs-4 mb-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Language</li>
+                                        <li class="mt-2 mb-0"><b>{{ $post->lang_known }}</b></li>
+                                    </ul>
+                                </div>
+                                <h5 class="mb-0 pb-3 mt-3">Education and Skills</h5>
+                        <div class="row">
+                            <div class="col-3">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Education</li>
+                                    <li class="mt-2 mb-0"><b>@if(isset($education)) {{ $education->name }} @else {{ '---' }} @endif </b></li>
+                                </ul>
+                            </div>
+                            <div class="col-3">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Google Map</li>
+                                    <li class="mt-2 mb-0"><b>@if($post->google_map == 1) {{ 'Yes' }} @else {{ 'No' }} @endif </b></li>
+                                </ul>
+                            </div>
+
+                            {{-- <div class="col-3">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Period</li>
+                                    <li class="mt-2 mb-0"><b>@if($total_exp != 0) {{ $total_exp }} Years @else Fresher @endif</b></li>
+                                </ul>
+                            </div> --}}
+
+
+                            {{-- <div class="col-3">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Country</li>
+                                    <li class="mt-2 mb-0"><b>@if($post->expcountry_id) {{ implode(',',$mycont) }} @else {{ '---' }} @endif </b></li>
+                                </ul>
+                            </div> --}}
+                            {{-- <div class="col-3">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">City</li>
+                                    <li class="mt-2 mb-0"><b>Taif</b></li>
+                                </ul>
+                            </div> --}}
+                            @php
+                                $carlist = implode(",",$mycarknwon);
+                            @endphp
+                            <div class="col-6">
+                                <ul class="list-unstyled mt-n2 mb-0">
+                                    <li class="mt-2 mb-0">Vehicle Known</li>
+                                    <li class="mt-2 mb-0"><b>{{ $carlist }}</b></li>
+                                </ul>
+                            </div>
+
+
+                        </div>
+
+                            </div>
+                            {{-- <div class="row mt-4">
+                                <div class="col-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Natinality</li>
+                                        <li class="mt-2 mb-0"><b>@if(isset($nation)) {{ $nation->name }} @else {{ '---' }} @endif </b></li>
+                                    </ul>
+                                </div>
+                                <div class="col-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Region</li>
+                                        <li class="mt-2 mb-0"><b>@if(isset($region)) {{ $region->name }} @else {{ '---' }} @endif</b></li>
+                                    </ul>
+                                </div>
+
+                                <div class="col-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Place of Birth</li>
+                                        <li class="mt-2 mb-0"><b>@if(isset($plob)) {{ $plob->name }} @else {{ '---' }} @endif</b></li>
+                                    </ul>
+                                </div>
+
+                                <div class="col-3">
+                                    <ul class="list-unstyled mt-n2 mb-0">
+                                        <li class="mt-2 mb-0">Language</li>
+                                        <li class="mt-2 mb-0"><b>{{ $post->lang_known }}</b></li>
+                                    </ul>
+                                </div>
+                            </div> --}}
+                            <div class="row mt-4">
+                                
+                                
+                            </div>
+                        </div>
+                    </div>
+                   
+
+                    <div class="col-md-9">
+                        
+                    </div>
+                    
+                    @php
+                        $ref_no = $booking + 1;
+                    @endphp
+
+                    <div id="modalthank" class="modal fade" tabindex="-1" role="dialog">
+                        <div class="modal-dialog modal-dialog-centered" role="document">
+                            <div class="modal-content">
+                                <div class="modal-body py-0">
+                                    <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                                        <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" />
+                                        <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+                                    </svg>
+                                    <div class="text-center">
+                                        <p><b>Reference Number :</b> <span id="#refNo">{{ $ref_no }}</span></p>
+                                        <p class="my-2"><b>Thank You ! You will be contacted soon...</b></p>
+                                    </div>
+                                    <div class="text-center py-2">
+                                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="bkerror" class="modal fade" tabindex="-1" role="dialog">
+                        <div class="modal-dialog modal-dialog-centered" role="document">
+                            <div class="modal-content">
+                                <div class="modal-body py-0">
+                                    <div class="text-center">
+                                        <p class="my-2 text-danger"><b>You have reached the maximum limit of booking.</b></p>
+                                    </div>
+                                    <div class="text-center py-2">
+                                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="errorProfile" class="modal fade" tabindex="-1" role="dialog">
+                        <div class="modal-dialog modal-dialog-centered" role="document">
+                            <div class="modal-content">
+                                <div class="modal-body py-0">
+                                    <div class="text-center">
+                                        <p class="my-2"><b>Please complete your profile.</b></p>
+                                        {{-- <a href="{{ route('myprofile') }}">Click here...</a> --}}
+                                    </div>
+                                    <form action="{{ route('booking.profile.update') }}" id="profileDetailID" method="POST">
+                                        @csrf
+                                        @php
+                                            $countries = DB::table('countries')->orderBy('name','ASC')->get();
+                                            $cities = DB::table('cities')->orderBy('name','ASC')->get();
+                                        @endphp
+                                        <div class="row">
+                                            <div class="col-md-12">
+                                                <div class="mb-3">
+                                                    <input type="hidden" name="phone_code" class="phone_code">
+                                                    <label for="mobile_no" class="form-label">Mobile Number <span class="text-danger">*</span></label><br>
+                                                    <input type="text" name="mobile_no" id="mobile_no" class="form-control telephone" placeholder="Enter Mobile Number...">
+                                                    <span class="output"></span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-12">
+                                                <input type="checkbox" class="form-check-input" value="1" name="whatsapp_notification" id="agree-for-notification" checked>
+                                                <label for="agree-for-notification" class="form-check-label">I agree to receive whatsapp messages on my number</label>
+                                                
+                                            </div>
+                                            {{-- <div class="col-md-12">
+                                                <div class="mb-3">
+                                                    <label for="">Mobile Number <span class="text-danger">*</span></label>
+                                                    <input type="text" name="mobile_no" id="mobile_no" class="form-control" placeholder="Enter Mobile Number...">
+                                                </div>
+                                            </div> --}}
+                                            {{-- <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="">Country <span class="text-danger">*</span></label>
+                                                    <select name="country_id" id="country_id" class="form-control">
+                                                        <option value="">Select</option>
+                                                        @foreach ($countries as $country)
+                                                            <option value="{{ $country->id }}">{{ $country->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                            </div> 
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="">City <span class="text-danger">*</span></label>
+                                                    <select name="city_id" id="city_id" class="form-control">
+                                                        <option value="">Select</option>
+                                                        @foreach ($cities as $city)
+                                                            <option value="{{ $city->id }}">{{ $city->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                            </div> --}}
+                                        </div>
+                                        <div class="text-center py-2">
+                                            <button type="submit" class="btn btn-primary btn-sm">Save and Next</button>
+                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="errorProfile2" class="modal fade" tabindex="-1" role="dialog">
+                        <div class="modal-dialog modal-dialog-centered" role="document">
+                            <div class="modal-content">
+                                <div class="modal-body py-0">
+                                    <div class="text-center">
+                                        <p class="my-2"><b>Please complete your profile.</b></p>
+                                        {{-- <a href="{{ route('myprofile') }}">Click here...</a> --}}
+                                    </div>
+                                    <form action="{{ route('booking.profile.update') }}" id="profileDetailID2" method="POST">
+                                        @csrf
+                                        @php
+                                            $countries = DB::table('countries')->orderBy('name','ASC')->get();
+                                            $cities = DB::table('cities')->orderBy('name','ASC')->get();
+                                        @endphp
+                                        <div class="row">
+                                            <div class="col-md-12">
+                                                <div class="mb-3">
+                                                    <input type="hidden" name="phone_code" class="phone_code">
+                                                    <label for="mobile_no" class="form-label">Mobile Number <span class="text-danger">*</span></label><br>
+                                                    <input type="text" name="mobile_no" id="mobile_no" class="form-control telephone" placeholder="Enter Mobile Number...">
+                                                    <span class="output"></span>
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <input type="checkbox" class="form-check-input" value="1" name="whatsapp_notification" id="agree-for-notification" checked>
+                                                    <label for="agree-for-notification" class="form-check-label">I agree to receive whatsapp messages on my number</label>
+                                                </div>
+                                            </div>
+                                            {{-- <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="">Country <span class="text-danger">*</span></label>
+                                                    <select name="country_id" id="country_id" class="form-control">
+                                                        <option value="">Select</option>
+                                                        @foreach ($countries as $country)
+                                                            <option value="{{ $country->id }}">{{ $country->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                            </div> 
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="">City <span class="text-danger">*</span></label>
+                                                    <select name="city_id" id="city_id" class="form-control">
+                                                        <option value="">Select</option>
+                                                        @foreach ($cities as $city)
+                                                            <option value="{{ $city->id }}">{{ $city->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                            </div> --}}
+                                        </div>
+                                        <div class="text-center py-2">
+                                            <button type="submit" class="btn btn-primary btn-sm">Save and Next</button>
+                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    @php
+                        $cities1 = DB::table('cities')->get();
+                    @endphp
+                   
+                    <div id="modalpad" class="modal fade" tabindex="-1" role="dialog">
+                        <div class="modal-dialog modal-lg" role="document">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">You have selected the following candidate: </h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <form action="{{ url('resumes/details/booking/2') }}" method="POST" id="bookingsubForm2">
+                                    @csrf
+                                    <div class="modal-body text-dark">
+                                        <input type="hidden" name="cand_id2" id="cand_id2" value="{{ $post->id }}">
+                                        <input type="hidden" name="user_id2" id="user_id2" value="@if(Auth::check()){{ Auth::user()->id }} @endif">
+                                        <input type="hidden" name="partner_id2" id="partner_id2">
+                                        <p><b>Candidate Name :</b> {{ $post->cand_name }}</p>
+                                        {{-- <p><b>Reference Number :</b> <span id="#refNo">{{ $ref_no }}</span></p> --}}
+          

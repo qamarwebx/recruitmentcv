@@ -1,0 +1,49 @@
+/.fleet
+/.idea
+/.vscode
+
+/bootstrap/cache/*
+!bootstrap/cache/.htaccess
+
+crm_bk/*
+
+D:\aman\wtp\storage\logs
+https:/*
+
+/node_modules
+
+# Public assets (runtime / uploads)
+public_back/*
+public/*
+public_old
+public_html
+
+qamarhire17/*
+QHBK/*
+
+/vendor
+
+# Environment & Config
+.env
+.env.*
+
+*.zip
+QAMARHIRE.zip
+qamarhireapp.zip
+qhbk.zip
+qamarehire11nove2025.zip
+
+# Storage (logs, cache, framework files)
+storage/*.key
+/storage/logs
+/storage/framework
+/storage/app/public
+
+# Logs
+*.log
+
+
+qamarehire11nove2025.zip
+
+
+.git_old_corrupt/
