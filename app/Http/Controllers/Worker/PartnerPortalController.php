@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Worker;
 
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
+use App\Models\Basepathstatus;
 use App\Models\Booking;
 use App\Models\Candidate;
 use App\Models\City;
 use App\Models\Country;
+use App\Models\Domain;
 use App\Models\Employercandidate;
 use App\Models\Employerplus;
 use App\Models\Expecworkcity;
@@ -18,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 /**
  * Worker-hosted Partner Portal, reachable only after partner login (see
@@ -911,7 +914,17 @@ class PartnerPortalController extends Controller
         $countries = Country::orderBy('name')->get();
         $cities = City::orderBy('name')->get();
 
-        return view('worker.partner.profile', compact('partner', 'countries', 'cities'));
+        // The Company Profile/Branding/Domain settings tabs below all read
+        // this SAME Domain row (App\Models\Partner::domain(), partner_id-
+        // scoped) that the CRM's "Website" tab manages - not persisted
+        // here on a bare page view (only settingsCompanyUpdate/
+        // settingsLogoUpdate/settingsDomainUpdate actually create the row,
+        // on first real save), just built in-memory so the form fields
+        // below have something to bind to for a partner who hasn't saved
+        // anything there yet.
+        $domain = $partner->domain ?: $partner->domain()->make();
+
+        return view('worker.partner.profile', compact('partner', 'countries', 'cities', 'domain'));
     }
 
     public function profileUpdate(Request $request)
@@ -940,5 +953,179 @@ class PartnerPortalController extends Controller
         $partner->save();
 
         return redirect()->route('worker.partner.profile')->with('success', 'Profile updated successfully.');
+    }
+
+    /**
+     * Company Profile settings tab - the SAME Domain row (by partner_id)
+     * the CRM's "Website" tab -> Address sub-tab manages
+     * (DomainController::updateAddress()), so a change either side shows
+     * up on both. Deliberately not calling that method directly - it
+     * trusts $request->id for which partner to update, which is correct
+     * there (only an authenticated admin can reach it) but would be an
+     * IDOR here; $domain is always resolved from the logged-in partner's
+     * own domain() relationship instead, never from request input.
+     */
+    public function settingsCompanyUpdate(Request $request)
+    {
+        $partner = Auth::guard('partner')->user();
+
+        $validator = Validator::make($request->all(), [
+            'company_name' => 'nullable|string|max:255',
+            'company_name_ar' => 'nullable|string|max:255',
+            'company_address' => 'nullable|string',
+            'company_address_ar' => 'nullable|string',
+            'company_mobile' => 'nullable|string|max:20',
+            'company_email' => 'nullable|email|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $domain = $partner->domain()->firstOrCreate([]);
+
+        $domain->update([
+            'company_name' => $request->company_name,
+            'company_name_ar' => $request->company_name_ar,
+            'company_address' => $request->company_address,
+            'company_address_ar' => $request->company_address_ar,
+            'company_mobile' => $request->company_mobile,
+            'company_email' => $request->company_email,
+        ]);
+
+        return response()->json(['status' => 'success', 'message' => __('locale.Company profile updated successfully.')]);
+    }
+
+    /**
+     * Branding settings tab - same website_logo/website_logo_ar columns
+     * and admin/assets/images/partner/ upload folder as the CRM's
+     * "Website" tab -> Logo sub-tab (DomainController::websitelogoupdt()),
+     * whose base64/MIME/size validation this mirrors, scoped to the
+     * logged-in partner's own Domain row instead of a request-supplied id.
+     */
+    public function settingsLogoUpdate(Request $request)
+    {
+        $partner = Auth::guard('partner')->user();
+
+        $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+        $maxBytes = 2048 * 1024;
+
+        $decoded = [];
+
+        foreach (['english_logo' => 'website_logo', 'arabic_logo' => 'website_logo_ar'] as $input => $column) {
+            $value = $request->input($input);
+
+            if (!$value) {
+                continue;
+            }
+
+            if (!preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/', $value, $matches)) {
+                return response()->json([
+                    'status' => 'error',
+                    'errors' => [$input => ['Invalid image data.']],
+                ], 422);
+            }
+
+            if (!in_array(strtolower($matches[1]), $allowedMimes, true)) {
+                return response()->json([
+                    'status' => 'error',
+                    'errors' => [$input => ['Only JPG, PNG or WEBP images are allowed.']],
+                ], 422);
+            }
+
+            $binary = base64_decode($matches[2]);
+
+            if ($binary === false || strlen($binary) > $maxBytes) {
+                return response()->json([
+                    'status' => 'error',
+                    'errors' => [$input => ['Image must not be larger than 2MB.']],
+                ], 422);
+            }
+
+            $decoded[$column] = $binary;
+        }
+
+        if (empty($decoded)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Choose at least one logo to upload.')], 422);
+        }
+
+        $domain = $partner->domain()->firstOrCreate([]);
+
+        $basepathstatus = Basepathstatus::first();
+        $uploadPath = ($basepathstatus && $basepathstatus->base_path_status == 1)
+            ? base_path('public/admin/assets/images/partner')
+            : base_path('public_html/admin/assets/images/partner');
+
+        if (!is_dir($uploadPath)) {
+            mkdir($uploadPath, 0755, true);
+        }
+
+        foreach ($decoded as $column => $binary) {
+            $suffix = $column === 'website_logo' ? 'en' : 'ar';
+
+            if ($domain->{$column} && file_exists($uploadPath . '/' . $domain->{$column})) {
+                unlink($uploadPath . '/' . $domain->{$column});
+            }
+
+            $name = time() . '_' . $suffix . '.png';
+            file_put_contents($uploadPath . '/' . $name, $binary);
+            $domain->{$column} = $name;
+        }
+
+        $domain->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => __('locale.Logos updated successfully.'),
+            'data' => [
+                'english_logo' => $domain->website_logo ? asset('admin/assets/images/partner/' . $domain->website_logo) : null,
+                'arabic_logo' => $domain->website_logo_ar ? asset('admin/assets/images/partner/' . $domain->website_logo_ar) : null,
+            ],
+        ]);
+    }
+
+    /**
+     * Domain settings tab - the SAME `sub_domain` column on the Domain row
+     * (App\Models\Partner::domain()) that ResolvePartnerWebsiteDomain
+     * middleware reads on recruitmentcv.com subdomain requests, and that
+     * the CRM's "Website" tab also writes. Validation mirrors
+     * DomainController::websitelogoupdt()'s sub_domain handling; $domain
+     * is always the logged-in partner's own row, never request-supplied.
+     */
+    public function settingsDomainUpdate(Request $request)
+    {
+        $partner = Auth::guard('partner')->user();
+
+        $domain = $partner->domain()->firstOrCreate([]);
+
+        $subDomain = strtolower(trim((string) $request->sub_domain));
+
+        $validator = Validator::make(
+            ['sub_domain' => $subDomain],
+            [
+                'sub_domain' => [
+                    'nullable',
+                    'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/',
+                    Rule::unique('domains', 'sub_domain')->ignore($domain->id),
+                ],
+            ],
+            [
+                'sub_domain.regex' => __('locale.Subdomain may only contain lowercase letters, numbers and hyphens (no spaces, dots or slashes).'),
+                'sub_domain.unique' => __('locale.This subdomain is already taken.'),
+            ]
+        );
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $domain->sub_domain = $subDomain;
+        $domain->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => __('locale.Domain updated successfully.'),
+            'data' => ['sub_domain' => $domain->sub_domain],
+        ]);
     }
 }

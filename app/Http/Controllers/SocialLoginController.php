@@ -127,28 +127,42 @@ class SocialLoginController extends Controller
 
     private function configDriver()
     {
-        $authData = Socialmediaauth::where('type', 'google')->first();
-
+        // RecruitmentCV's OWN Google OAuth Client (config/services.php ->
+        // .env GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_CALLBACK_URL) -
+        // deliberately NOT the Socialmediaauth DB row the source qamarhire.com
+        // codebase's copy of this same method reads, since that table is
+        // shared across both projects' database and its Google row is
+        // Worker's own client. Using it here would mean every Google login
+        // on this domain - partner or general - authenticates against
+        // Worker's OAuth Client instead of this project's own, which is
+        // exactly the coupling this project needs to NOT have.
+        //
+        // GOOGLE_CALLBACK_URL is built in .env from "${APP_URL}auth/google/
+        // callback" (string substitution at parse time, not route()), so
+        // it's already a single fixed value regardless of which host
+        // (recruitmentcv.com vs www.recruitmentcv.com) started the flow.
         return Socialite::buildProvider(
             \Laravel\Socialite\Two\GoogleProvider::class,
             [
-                'client_id'     => $authData->client_id,
-                'client_secret' => $authData->client_secret,
-                'redirect'      => route('google.callback'), // Dynamic & Safe
+                'client_id'     => config('services.google.client_id'),
+                'client_secret' => config('services.google.client_secret'),
+                'redirect'      => config('services.google.redirect'),
             ]
         );
     }
 
     /**
-     * Entry point for "Continue with Google" on the Worker Partner login modal.
-     * Reuses the exact same Socialite/Google provider config as redirectToGoogle()
-     * above - only the redirect target differs, via a session flag the shared
-     * callback (handleGoogleCallback) checks. This lives on qamarhire.com (not
-     * worker.qamarhire.com) because Google's OAuth app only whitelists
-     * https://qamarhire.com/auth/google/callback as a redirect URI; the
-     * handoff back to a real session on worker.qamarhire.com happens via a
-     * short-lived signed token (see handlePartnerGoogleCallback() and
-     * Worker\PartnerAuthController::completeGoogleLogin()).
+     * Entry point for "Continue with Google" on the RecruitmentCV Partner
+     * login modal. This project's own install (recruitmentcv.com) runs the
+     * ENTIRE OAuth round trip on its own domain - start, Google's redirect
+     * back, and the callback below are all recruitmentcv.com requests, so
+     * configDriver()'s route('google.callback') naturally generates
+     * https://recruitmentcv.com/auth/google/callback and there is no
+     * cross-domain handoff to design around (contrast with the source
+     * qamarhire.com codebase, where this same method has to bounce through
+     * a different domain because Google's OAuth app there only whitelists
+     * the qamarhire.com apex callback - not relevant here since this
+     * project's callback IS the domain the modal lives on).
      */
     public function redirectToGooglePartner(Request $request)
     {
@@ -164,7 +178,7 @@ class SocialLoginController extends Controller
             $googleUser = $this->configDriver()->stateless()->user();
 
             if ($request->session()->pull('partner_google_intent')) {
-                return $this->handlePartnerGoogleCallback($googleUser);
+                return $this->handlePartnerGoogleCallback($googleUser, $request);
             }
             // Find existing user
             // Get stored redirect URL
@@ -215,28 +229,29 @@ class SocialLoginController extends Controller
 
     /**
      * Applies the same Pending/Approved/Rejected rules as the phone+OTP
-     * partner flow (Worker\PartnerAuthController). Runs on qamarhire.com
-     * (where the OAuth callback lands), so it can't call
-     * Auth::guard('partner')->login() directly - that session wouldn't be
-     * visible on worker.qamarhire.com. Instead it issues a short-lived,
-     * single-use handoff token that Worker\PartnerAuthController::
-     * completeGoogleLogin() exchanges for a real session on that domain.
+     * partner flow (Worker\PartnerAuthController). Unlike the source
+     * qamarhire.com codebase (where this same method has to hand off to a
+     * *different* domain via a short-lived token, because that install's
+     * OAuth callback runs on qamarhire.com but the Partner Portal lives on
+     * worker.qamarhire.com), this project's callback and Partner Portal are
+     * the SAME domain (recruitmentcv.com) - so an approved partner is
+     * logged in directly, right here, no cross-domain handoff token needed.
      *
      * A first-time email (no existing Partner row) does NOT create a
      * Partner here - it used to, which skipped Company Name/Mobile Number
      * entirely and left a bare, never-completable Pending row behind
      * (registration_status was already correctly 0/Pending, but nothing
      * ever collected a real mobile number or ran it through OTP). Instead
-     * this mints a short-lived, server-verified handoff token carrying the
-     * Google identity and sends the browser back to the Register as
-     * Partner modal, pre-filled+locked from that token. The Partner row
-     * itself is only created once Company Name + Mobile Number are
-     * supplied and the mobile OTP is verified, through the exact same
-     * Worker\PartnerAuthController::register() the existing mobile+OTP
+     * this mints a short-lived, server-verified token carrying the Google
+     * identity and sends the browser back to the Register as Partner modal,
+     * pre-filled+locked from that token. The Partner row itself is only
+     * created once Company Name + Mobile Number are supplied and the
+     * mobile OTP is verified, through the exact same Worker\
+     * PartnerAuthController::register() the existing mobile+OTP
      * registration flow already uses (see the `google_token` handling
      * there) - not a second, parallel creation path.
      */
-    private function handlePartnerGoogleCallback($googleUser)
+    private function handlePartnerGoogleCallback($googleUser, Request $request)
     {
         $partner = Partner::where('email', $googleUser->email)->first();
 
@@ -248,7 +263,7 @@ class SocialLoginController extends Controller
                 'google_id' => $googleUser->id,
             ], now()->addMinutes(15));
 
-            return redirect('https://worker.qamarhire.com?register=1&google_token=' . $token);
+            return redirect(url('/') . '?register=1&google_token=' . $token);
         }
 
         if (!$partner->google_id) {
@@ -257,17 +272,22 @@ class SocialLoginController extends Controller
         }
 
         if ((int) $partner->registration_status === 0) {
-            return redirect('https://worker.qamarhire.com?login=1&auth_message=' . urlencode('Your registration is pending approval.'));
+            return redirect(url('/') . '?login=1&auth_message=' . urlencode('Your registration is pending approval.'));
         }
 
         if ((int) $partner->registration_status === 2) {
-            return redirect('https://worker.qamarhire.com?login=1&auth_message=' . urlencode('Your registration has been rejected.'));
+            return redirect(url('/') . '?login=1&auth_message=' . urlencode('Your registration has been rejected.'));
         }
 
-        $token = \Illuminate\Support\Str::random(48);
-        \Illuminate\Support\Facades\Cache::put('partner_google_handoff:' . $token, $partner->id, now()->addSeconds(60));
+        Auth::guard('partner')->login($partner);
 
-        return redirect('https://worker.qamarhire.com/partner/google/complete?token=' . $token);
+        // Google's OAuth callback always lands on the apex (see
+        // configDriver()'s note above on why), so without this a partner
+        // who started "Continue with Google" from their own subdomain
+        // would otherwise end up back on the apex after completing it.
+        // Partner::portalBaseUrl() sends them to their own configured
+        // subdomain instead, same as the OTP login path.
+        return redirect($partner->portalBaseUrl() . route('worker.partner.candidates', [], false));
     }
 
 }

@@ -7,6 +7,7 @@ use App\Models\Domain;
 use App\Models\Basepathstatus;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Log;
 class DomainController extends Controller
 {
@@ -225,73 +226,131 @@ class DomainController extends Controller
 
         $domain = Domain::where('partner_id', $id)->firstOrFail();
 
-       
+        // =========================
+        // 🔹 Sub Domain (Website tab, *.recruitmentcv.com)
+        // =========================
+        if ($request->has('sub_domain')) {
+
+            $subDomain = strtolower(trim((string) $request->sub_domain));
+
+            $validator = Validator::make(
+                ['sub_domain' => $subDomain],
+                [
+                    'sub_domain' => [
+                        'nullable',
+                        'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/',
+                        Rule::unique('domains', 'sub_domain')->ignore($domain->id),
+                    ],
+                ],
+                [
+                    'sub_domain.regex' => 'Subdomain may only contain lowercase letters, numbers and hyphens (no spaces, dots or slashes).',
+                    'sub_domain.unique' => 'This subdomain is already taken by another partner.',
+                ]
+            );
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed.',
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            $domain->sub_domain = $subDomain;
+        }
+
         // ✅ Base path handling (safe)
         $basepathstatus = Basepathstatus::first();
-    
+
         $uploadPath = ($basepathstatus && $basepathstatus->base_path_status == 1)
             ? base_path('public/admin/assets/images/partner')
             : base_path('public_html/admin/assets/images/partner');
-    
+
         // ✅ Ensure folder exists
         if (!is_dir($uploadPath)) {
             mkdir($uploadPath, 0755, true);
         }
-    
+
+        // Same image rules used elsewhere in the project (e.g. TeamMemberPageController)
+        $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+        $maxBytes = 2048 * 1024; // 2048 KB
+
+        $decoded = [];
+
+        foreach (['website_logo', 'website_logo_ar'] as $field) {
+
+            $value = $request->input($field);
+
+            if (!$value) {
+                continue;
+            }
+
+            if (!preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/', $value, $matches)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed.',
+                    'errors' => [$field => ['Invalid image data.']],
+                ], 422);
+            }
+
+            if (!in_array(strtolower($matches[1]), $allowedMimes, true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed.',
+                    'errors' => [$field => ['Only JPG, PNG or WEBP images are allowed.']],
+                ], 422);
+            }
+
+            $binary = base64_decode($matches[2]);
+
+            if ($binary === false || strlen($binary) > $maxBytes) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed.',
+                    'errors' => [$field => ['Image must not be larger than 2MB.']],
+                ], 422);
+            }
+
+            $decoded[$field] = $binary;
+        }
+
         // =========================
         // 🔹 English Logo Upload
         // =========================
-        if ($request->website_logo) {
-    
+        if (isset($decoded['website_logo'])) {
+
             // delete old file
             if ($domain->website_logo && file_exists($uploadPath.'/'.$domain->website_logo)) {
                 unlink($uploadPath.'/'.$domain->website_logo);
             }
-    
-            $image = $request->website_logo;
-    
-            // remove base64 prefix
-            if (strpos($image, ',') !== false) {
-                $image = explode(',', $image)[1];
-            }
-    
-            $image = base64_decode($image);
-    
+
             // unique name
             $name = time().'_en.png';
-    
-            file_put_contents($uploadPath.'/'.$name, $image);
-    
+
+            file_put_contents($uploadPath.'/'.$name, $decoded['website_logo']);
+
             $domain->website_logo = $name;
         }
-    
+
         // =========================
         // 🔹 Arabic Logo Upload
         // =========================
-        if ($request->website_logo_ar) {
-    
+        if (isset($decoded['website_logo_ar'])) {
+
             // delete old file
             if ($domain->website_logo_ar && file_exists($uploadPath.'/'.$domain->website_logo_ar)) {
                 unlink($uploadPath.'/'.$domain->website_logo_ar);
             }
-    
-            $image = $request->website_logo_ar;
-    
-            if (strpos($image, ',') !== false) {
-                $image = explode(',', $image)[1];
-            }
-    
-            $image = base64_decode($image);
-    
+
             $name = time().'_ar.png';
-    
-            file_put_contents($uploadPath.'/'.$name, $image);
-    
+
+            file_put_contents($uploadPath.'/'.$name, $decoded['website_logo_ar']);
+
             $domain->website_logo_ar = $name;
         }
-    
+
         $domain->save();
-    
+
         return response()->json([
             'success' => true,
             'message' => 'Logos updated successfully',

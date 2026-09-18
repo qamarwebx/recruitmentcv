@@ -104,12 +104,31 @@ class Partner extends Authenticatable
     }
 
     /**
-     * The RecruitmentCV subdomain-branding record (CRM's "RecruitmentCV
-     * Domain" tab, PartnerWebsiteDomainController) - unrelated to domain()
-     * above. One partner has at most one *.recruitmentcv.com subdomain.
+     * Where THIS partner's Portal pages should live after login - their
+     * own active *.recruitmentcv.com subdomain (same domain()/sub_domain
+     * the Settings "Domain" tab and CRM's Website tab both write - see
+     * ResolvePartnerWebsiteDomain, which resolves the other direction:
+     * subdomain -> Partner) if one is configured and admin-approved,
+     * otherwise the app's own default URL.
+     *
+     * Deliberately computed ONLY from this Partner's own domain() row -
+     * never from the current request's Host header, a query/POST
+     * parameter, or any other partner's data - so it can't be spoofed by
+     * a manipulated Host header or by authenticating while browsing a
+     * DIFFERENT partner's subdomain (that page's "Login as Partner"
+     * modal is the same shared modal every subdomain shows). Both
+     * PartnerAuthController::login() (OTP) and SocialLoginController::
+     * handlePartnerGoogleCallback() (Google) call this same method
+     * rather than each re-deriving the redirect host their own way.
      */
-    public function websiteDomain()
+    public function portalBaseUrl(): string
     {
-        return $this->hasOne(PartnerWebsiteDomain::class);
+        $domain = $this->domain;
+
+        if ($domain && $domain->status === 'active' && !empty($domain->sub_domain)) {
+            return 'https://' . $domain->sub_domain . '.recruitmentcv.com';
+        }
+
+        return rtrim(config('app.url'), '/');
     }
 }

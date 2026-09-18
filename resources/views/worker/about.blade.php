@@ -1,7 +1,7 @@
 @extends('worker.layouts.app')
 
 @section('title', __('locale.About Us') . ' — Qamr Worker Portal')
-@section('meta_description', 'Learn about Qamr International\'s mission, vision and values behind the Worker Portal at worker.qamarhire.com.')
+@section('meta_description', 'Learn about Qamr International\'s mission, vision and values behind the Worker Portal at recruitmentcv.com.')
 
 @section('content')
 

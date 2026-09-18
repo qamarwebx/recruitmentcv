@@ -113,7 +113,6 @@ use App\Http\Controllers\PartnerCustomerController;
 use App\Http\Controllers\PartnerInvoiceController;
 use App\Http\Controllers\PartnerPaymentController;
 use App\Http\Controllers\DomainController;
-use App\Http\Controllers\PartnerWebsiteDomainController;
 use App\Http\Controllers\TeamMemberPageController;
 use App\Http\Controllers\ImageUrlController;
 use Illuminate\Support\Facades\Mail;
@@ -662,14 +661,6 @@ Route::group(['middleware' => ['auth:admin','blockURL'],'prefix' => 'admin','as'
         Route::post('address-update', [DomainController::class, 'updateAddress'])->name('domains.address.update');
         Route::post('generate-dns', [DomainController::class, 'generateDns'])->name('domains.generate.dns');
         Route::post('/delete', [DomainController::class, 'delete'])->name('domains.delete');
-    });
-
-    // RecruitmentCV partner-subdomain branding - separate table/model/controller
-    // from the "domains" group above, see PartnerWebsiteDomain migration doc comment.
-    Route::prefix('partnerwebsite')->group(function () {
-        Route::post('/store', [PartnerWebsiteDomainController::class, 'store'])->name('partnerwebsite.store');
-        Route::post('logo/update/{partnerId}', [PartnerWebsiteDomainController::class, 'logoUpdate'])->name('partnerwebsite.logo.update');
-        Route::post('/delete', [PartnerWebsiteDomainController::class, 'delete'])->name('partnerwebsite.delete');
     });
 
     // Candidate Status

@@ -21,7 +21,6 @@ use App\Models\Admin;
 use App\Models\Profession;
 use App\Models\Partnerservicecharge;
 use App\Models\Domain;
-use App\Models\PartnerWebsiteDomain;
 
 
 
@@ -208,9 +207,7 @@ class PartnerController extends Controller
 
         $partnerDomain = Domain::where('partner_id','=',$id)->first();
 
-        $partnerWebsiteDomain = PartnerWebsiteDomain::where('partner_id','=',$id)->first();
-
-        return view('admin.partner.show',['post' => $post,'partnerId' => $id,'partnerDomain' => $partnerDomain,'partnerWebsiteDomain' => $partnerWebsiteDomain,'partnerScs' => $partnerScs,'professions' =>  $profession,'users' => $users,'countries' => $countries,'cities' => $cities,'image1' => $image1,'image2' => $image2]);
+        return view('admin.partner.show',['post' => $post,'partnerId' => $id,'partnerDomain' => $partnerDomain,'partnerScs' => $partnerScs,'professions' =>  $profession,'users' => $users,'countries' => $countries,'cities' => $cities,'image1' => $image1,'image2' => $image2]);
     }
 
     public function addsercharge(Request $request){

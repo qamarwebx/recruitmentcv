@@ -68,6 +68,15 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
     Route::get('/profile', [PartnerPortalController::class, 'profile'])->name('profile');
     Route::post('/profile', [PartnerPortalController::class, 'profileUpdate'])->name('profile.update');
 
+    // Settings page tabs (Company Profile / Branding / Domain) - all three
+    // read/write the logged-in partner's own Domain row (see
+    // PartnerPortalController::settingsCompanyUpdate/settingsLogoUpdate/
+    // settingsDomainUpdate for why these aren't the admin-guarded
+    // DomainController routes).
+    Route::post('/settings/company', [PartnerPortalController::class, 'settingsCompanyUpdate'])->name('settings.company');
+    Route::post('/settings/logo', [PartnerPortalController::class, 'settingsLogoUpdate'])->name('settings.logo');
+    Route::post('/settings/domain', [PartnerPortalController::class, 'settingsDomainUpdate'])->name('settings.domain');
+
     // Attaches+verifies a mobile number for the already-logged-in partner
     // (Hire Now gate, Profile page "Add/Change Number") - reuses the same
     // generate-otp2/validate-otp2 endpoints as login/register, just with a

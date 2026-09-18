@@ -24,6 +24,7 @@ class Domain extends Model
 
         // Domain
         'domain_name',
+        'sub_domain',
 
         // Branding
         'company_name',
@@ -100,6 +101,19 @@ class Domain extends Model
         $value = rtrim($value, '/');
 
         $this->attributes['domain_name'] = $value;
+    }
+
+    /**
+     * Stores only the subdomain label itself (e.g. "raha"), never the
+     * ".recruitmentcv.com" suffix shown next to it in the Website tab -
+     * normalized the same way domain_name is, so lookups/uniqueness checks
+     * are consistent regardless of how it was typed.
+     */
+    public function setSubDomainAttribute($value)
+    {
+        $value = strtolower(trim((string) $value));
+
+        $this->attributes['sub_domain'] = $value === '' ? null : $value;
     }
 
     /*

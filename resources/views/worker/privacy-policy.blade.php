@@ -1,7 +1,7 @@
 @extends('worker.layouts.app')
 
 @section('title', 'Privacy Policy — Qamr Worker Portal')
-@section('meta_description', 'Learn how Qamr International collects, uses and protects your information on the Worker Portal at worker.qamarhire.com.')
+@section('meta_description', 'Learn how Qamr International collects, uses and protects your information on the Worker Portal at recruitmentcv.com.')
 
 @section('content')
 

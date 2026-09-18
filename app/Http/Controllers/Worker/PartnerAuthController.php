@@ -54,7 +54,15 @@ class PartnerAuthController extends Controller
         Auth::guard('partner')->login($partner);
         $request->session()->forget('Mobile');
 
-        return response()->json(['status' => 'success', 'redirect' => route('worker.partner.candidates')]);
+        // Partner::portalBaseUrl() sends them to their OWN configured
+        // subdomain if they have one (regardless of which host - base
+        // domain or another partner's subdomain - they logged in from),
+        // otherwise the app's default host. route(..., [], false) keeps
+        // the actual URI in sync with the route definition instead of
+        // hardcoding '/partner/candidates' a second time here.
+        $redirect = $partner->portalBaseUrl() . route('worker.partner.candidates', [], false);
+
+        return response()->json(['status' => 'success', 'redirect' => $redirect]);
     }
 
     /**

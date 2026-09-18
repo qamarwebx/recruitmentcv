@@ -82,7 +82,7 @@
 
         <div class="w-footer-bottom">
             <span>&copy; {{ date('Y') }} Qamr International. {{ __('locale.All rights reserved.') }}</span>
-            <span>{{ __('locale.Worker Portal') }} &middot; worker.qamarhire.com</span>
+            <span>{{ __('locale.Worker Portal') }} &middot; recruitmentcv.com</span>
         </div>
     </div>
 </footer>

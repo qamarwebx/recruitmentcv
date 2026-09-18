@@ -1,7 +1,7 @@
 @extends('worker.layouts.app')
 
 @section('title', 'Terms of Service — Qamr Worker Portal')
-@section('meta_description', 'Read the Terms of Service governing use of the Qamr International Worker Portal at worker.qamarhire.com.')
+@section('meta_description', 'Read the Terms of Service governing use of the Qamr International Worker Portal at recruitmentcv.com.')
 
 @section('content')
 

@@ -81,11 +81,6 @@
                         </button>
                       </li>
 
-                      <li class="nav-item">
-                        <button type="button" class="nav-link" role="tab" data-bs-toggle="tab" data-bs-target="#navs-pills-partnerwebsite" aria-controls="navs-pills-partnerwebsite" aria-selected="false">
-                            <i class="ti-xs ti ti-world-www me-1"></i> RecruitmentCV Domain
-                        </button>
-                      </li>
                     </ul>
                     <div class="tab-content">
                         <div class="tab-pane fade show active" id="navs-pills-top-home" role="tabpanel">
@@ -847,81 +842,6 @@
                                 </div>
                                 <div class="mt-2">
                                     <button type="submit" class="btn btn-primary btn-sm me-2 float-end waves-effect waves-light">Save Changes</button>
-                                </div>
-                            </form>
-                        </div>
-
-                        <!-- RecruitmentCV Domain - separate table/model/controller from the
-                             "Domain"/"Website" tabs above (App\Models\PartnerWebsiteDomain,
-                             not App\Models\Domain). Do not merge these. -->
-                        <div class="tab-pane fade" id="navs-pills-partnerwebsite" role="tabpanel">
-                            <form id="partnerWebsiteForm">
-                                @csrf
-                                <input type="hidden" name="id" id="pw_id" value="{{ $partnerWebsiteDomain->id ?? '' }}">
-                                <input type="hidden" name="partner_id" value="{{ $post->id }}">
-
-                                <div class="row">
-                                    <div class="mb-3 col-md-6">
-                                        <label for="pw_domain" class="form-label">Subdomain</label>
-                                        <div class="input-group">
-                                            <input
-                                                type="text"
-                                                name="domain"
-                                                id="pw_domain"
-                                                class="form-control"
-                                                placeholder="raha.recruitmentcv.com"
-                                                value="{{ $partnerWebsiteDomain->domain ?? '' }}">
-                                        </div>
-                                        <div class="form-text">Must be a *.recruitmentcv.com subdomain, e.g. raha.recruitmentcv.com</div>
-                                    </div>
-
-                                    <div class="mb-3 col-md-3">
-                                        <label for="pw_status" class="form-label">Status</label>
-                                        <select name="status" id="pw_status" class="form-select">
-                                            <option value="active" @if(($partnerWebsiteDomain->status ?? '') == 'active') selected @endif>Active</option>
-                                            <option value="inactive" @if(($partnerWebsiteDomain->status ?? 'inactive') == 'inactive') selected @endif>Inactive</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div class="mt-2">
-                                    <button type="submit" class="btn btn-primary btn-sm waves-effect waves-light" id="pwSubmitBtn">
-                                        {{ isset($partnerWebsiteDomain) ? 'Update Domain' : 'Add Domain' }}
-                                    </button>
-                                </div>
-                            </form>
-
-                            <hr class="my-4">
-
-                            <form id="partnerWebsiteLogoForm">
-                                @csrf
-                                <div class="row">
-                                    <div class="mb-3 col-md-6">
-                                        <label class="form-label">English Logo</label>
-                                        <div class="d-flex align-items-center gap-3">
-                                            <img
-                                                src="{{ !empty($partnerWebsiteDomain->english_logo) ? asset('admin/assets/images/partnerwebsite/'.$partnerWebsiteDomain->english_logo) : asset('admin/assets/img/avatars/blank.jpeg') }}"
-                                                class="pw-preview-en rounded" width="80" height="80" alt="English logo preview">
-                                            <input type="file" class="form-control pw-input-en" accept="image/*">
-                                        </div>
-                                    </div>
-                                    <div class="mb-3 col-md-6">
-                                        <label class="form-label">Arabic Logo</label>
-                                        <div class="d-flex align-items-center gap-3">
-                                            <img
-                                                src="{{ !empty($partnerWebsiteDomain->arabic_logo) ? asset('admin/assets/images/partnerwebsite/'.$partnerWebsiteDomain->arabic_logo) : asset('admin/assets/img/avatars/blank.jpeg') }}"
-                                                class="pw-preview-ar rounded" width="80" height="80" alt="Arabic logo preview">
-                                            <input type="file" class="form-control pw-input-ar" accept="image/*">
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="mt-2">
-                                    <button type="submit" class="btn btn-primary btn-sm waves-effect waves-light" id="pwLogoSubmitBtn" @if(empty($partnerWebsiteDomain)) disabled @endif>
-                                        Save Logos
-                                    </button>
-                                    @if(empty($partnerWebsiteDomain))
-                                        <div class="form-text">Save the subdomain above first.</div>
-                                    @endif
                                 </div>
                             </form>
                         </div>
@@ -1696,98 +1616,5 @@
             });
 
         }
-    </script>
-
-    <script>
-        // RecruitmentCV Domain tab - deliberately isolated jQuery below (pw*
-        // ids/classes only) so it can't collide with the existing Domain/
-        // Website tab scripts elsewhere on this page.
-        $('#partnerWebsiteForm').on('submit', function (e) {
-            e.preventDefault();
-
-            var $btn = $('#pwSubmitBtn');
-            $btn.prop('disabled', true);
-
-            $.ajax({
-                method: 'POST',
-                url: "{{ route('admin.partnerwebsite.store') }}",
-                data: $(this).serialize(),
-                success: function (res) {
-                    toastr.success(res.message || 'Saved');
-                    location.reload();
-                },
-                error: function (xhr) {
-                    var message = 'Something went wrong';
-
-                    if (xhr.responseJSON?.errors) {
-                        message = Object.values(xhr.responseJSON.errors).flat().join('<br>');
-                    } else if (xhr.responseJSON?.message) {
-                        message = xhr.responseJSON.message;
-                    }
-
-                    toastr.error(message);
-                    $btn.prop('disabled', false);
-                }
-            });
-        });
-
-        $('#partnerWebsiteLogoForm').on('submit', function (e) {
-            e.preventDefault();
-
-            var partnerId = {{ $post->id }};
-            var $btn = $('#pwLogoSubmitBtn');
-            var enFile = $('.pw-input-en')[0].files[0];
-            var arFile = $('.pw-input-ar')[0].files[0];
-
-            if (!enFile && !arFile) {
-                toastr.error('Choose at least one logo to upload');
-                return;
-            }
-
-            var readers = [];
-            var payload = {
-                _token: "{{ csrf_token() }}"
-            };
-
-            function readAsDataUrl(file, key) {
-                return new Promise(function (resolve) {
-                    var reader = new FileReader();
-                    reader.onload = function (e) {
-                        payload[key] = e.target.result;
-                        resolve();
-                    };
-                    reader.readAsDataURL(file);
-                });
-            }
-
-            if (enFile) readers.push(readAsDataUrl(enFile, 'english_logo'));
-            if (arFile) readers.push(readAsDataUrl(arFile, 'arabic_logo'));
-
-            $btn.prop('disabled', true);
-
-            Promise.all(readers).then(function () {
-                $.ajax({
-                    method: 'POST',
-                    url: "{{ url('admin/partnerwebsite/logo/update') }}/" + partnerId,
-                    data: payload,
-                    success: function (res) {
-                        toastr.success(res.message || 'Logos updated');
-
-                        if (res.data?.english_logo) {
-                            $('.pw-preview-en').attr('src', "{{ asset('admin/assets/images/partnerwebsite/') }}/" + res.data.english_logo + '?t=' + Date.now());
-                        }
-                        if (res.data?.arabic_logo) {
-                            $('.pw-preview-ar').attr('src', "{{ asset('admin/assets/images/partnerwebsite/') }}/" + res.data.arabic_logo + '?t=' + Date.now());
-                        }
-
-                        $btn.prop('disabled', false);
-                    },
-                    error: function (xhr) {
-                        toastr.error(xhr.responseJSON?.message || 'Something went wrong');
-                        $btn.prop('disabled', false);
-                    }
-                });
-            });
-        });
     </script>
 @endsection
