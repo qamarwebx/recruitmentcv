@@ -65,8 +65,18 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
     Route::get('/employer/{id}', [PartnerPortalController::class, 'employerPlusShow'])->name('employer.show');
     Route::post('/employer/{id}/update', [PartnerPortalController::class, 'employerUpdate'])->name('employer.update');
     Route::post('/employer/{id}/delete', [PartnerPortalController::class, 'employerDelete'])->name('employer.delete');
+    Route::get('/employer/{id}/assignable-candidates', [PartnerPortalController::class, 'employerAssignableCandidates'])->name('employer.assignable-candidates');
+    Route::post('/employer/{id}/assign-candidate', [PartnerPortalController::class, 'employerAssignCandidate'])->name('employer.assign-candidate');
+    Route::post('/employer/{id}/deassign-candidate', [PartnerPortalController::class, 'employerDeassignCandidate'])->name('employer.deassign-candidate');
+    // Legacy bookmarked URL - the combined Profile/Settings page is now
+    // split into Account (Personal Details) and Website (Company Profile/
+    // Branding/Domain); redirects to Account rather than 404ing.
     Route::get('/profile', [PartnerPortalController::class, 'profile'])->name('profile');
-    Route::post('/profile', [PartnerPortalController::class, 'profileUpdate'])->name('profile.update');
+
+    Route::get('/account', [PartnerPortalController::class, 'account'])->name('account');
+    Route::post('/account', [PartnerPortalController::class, 'accountUpdate'])->name('account.update');
+
+    Route::get('/website', [PartnerPortalController::class, 'website'])->name('website');
 
     // Settings page tabs (Company Profile / Branding / Domain) - all three
     // read/write the logged-in partner's own Domain row (see

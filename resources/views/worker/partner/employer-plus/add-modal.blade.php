@@ -24,7 +24,8 @@
                         <input type="text" name="employer_name" class="w-input" placeholder="{{ __('locale.Enter Employer Name...') }}" value="{{ old('employer_name') }}">
                     </div>
                     <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.Employer Arabic Name') }} <span style="color:#dc2626;">*</span></label>
+                        <Add Employer
+label class="w-form-label">{{ __('locale.Employer Arabic Name') }} <span style="color:#dc2626;">*</span></label>
                         <input type="text" name="employer_ar_name" class="w-input" placeholder="{{ __('locale.Enter Employer Name (Arabic)...') }}" value="{{ old('employer_ar_name') }}" required>
                         @error('employer_ar_name')<div class="w-form-error">{{ $message }}</div>@enderror
                     </div>
@@ -53,13 +54,21 @@
                     </div>
                     <div class="w-form-row">
                         <label class="w-form-label">{{ __('locale.City of Work') }} <span style="color:#dc2626;">*</span></label>
-                        <select name="wpcity_id" class="w-select w-select2" data-placeholder="{{ __('locale.Select City of Work') }}">
+                        <select name="wpcity_id" class="w-select w-select2" data-placeholder="{{ __('locale.Select City of Work') }}" data-other-city-select>
                             <option value=""></option>
                             @foreach ($workCities as $workCity)
                                 <option value="{{ $workCity->id }}" @selected(old('wpcity_id') == $workCity->id)>{{ $workCity->display_name }}</option>
                             @endforeach
+                            <option value="other" @selected(old('wpcity_id') === 'other')>{{ __('locale.Other') }}</option>
                         </select>
                         @error('wpcity_id')<div class="w-form-error">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="w-form-row" data-other-city-wrap @if(old('wpcity_id') !== 'other') hidden @endif>
+                        <label class="w-form-label">{{ __('locale.City Name') }} <span style="color:#dc2626;">*</span></label>
+                        <input type="text" name="custom_city_name" class="w-input" data-other-city-input
+                            placeholder="{{ __('locale.Enter city name...') }}" value="{{ old('custom_city_name') }}"
+                            @if(old('wpcity_id') === 'other') required @endif>
+                        @error('custom_city_name')<div class="w-form-error">{{ $message }}</div>@enderror
                     </div>
                     <div class="w-form-row w-form-row-full">
                         <label class="w-form-label">{{ __('locale.Profession') }} / {{ __('locale.Openings') }} / {{ __('locale.Monthly Salary') }} <span style="color:#dc2626;">*</span></label>

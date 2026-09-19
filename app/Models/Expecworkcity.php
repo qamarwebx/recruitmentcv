@@ -23,4 +23,49 @@ class Expecworkcity extends Model
 
         return $this->name;
     }
+
+    /**
+     * Backs the Partner Employer "City of Work" -> Other option
+     * (Worker\PartnerPortalController::resolveWorkCityId()): finds an
+     * existing city by case-insensitive, trimmed name match, or creates
+     * one. "Dubai"/"dubai"/" DUBAI "/etc. always resolve to the same row.
+     *
+     * The SELECT-then-INSERT here has an inherent TOCTOU race under
+     * concurrent identical requests, so it doesn't rely on the SELECT
+     * alone for correctness - the unique index on `name` (added
+     * alongside this method, same collation already case-insensitive)
+     * is the actual safety net. A losing request's INSERT throws a
+     * QueryException on that constraint, which is caught and treated as
+     * "someone else just created it" by re-selecting that row, rather
+     * than surfacing a 500 or leaving a partially-failed write behind.
+     */
+    public static function findOrCreateByName(string $name, int $adminId): self
+    {
+        $name = trim($name);
+
+        $existing = static::whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($name)])->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $city = new static();
+        $city->name = $name;
+        $city->admin_id = $adminId;
+        $city->status = 1;
+
+        try {
+            $city->save();
+
+            return $city;
+        } catch (\Illuminate\Database\QueryException $e) {
+            $existing = static::whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($name)])->first();
+
+            if ($existing) {
+                return $existing;
+            }
+
+            throw $e;
+        }
+    }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Worker;
 
+use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
 use App\Models\Basepathstatus;
@@ -20,7 +21,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 
 /**
  * Worker-hosted Partner Portal, reachable only after partner login (see
@@ -740,7 +740,19 @@ class PartnerPortalController extends Controller
             ];
         })->values();
 
-        return view('worker.partner.employer-plus.show', compact('employer', 'visaRows'));
+        // Assigned Candidates section - the same active-assignment rows
+        // (status=1) the CRM's own admin/employer-listp/add-visa-view/{id}
+        // page lists as $candempLists (EmployerController::VisaDetViewp()),
+        // scoped to this already-ownership-verified Employer. candidate()/
+        // proff() are the existing Employercandidate relationships, not a
+        // new query pattern.
+        $assignedCandidates = Employercandidate::where('emp_id', $employer->id)
+            ->where('status', 1)
+            ->with(['candidate', 'proff'])
+            ->latest('id')
+            ->get();
+
+        return view('worker.partner.employer-plus.show', compact('employer', 'visaRows', 'assignedCandidates'));
     }
 
     /**
@@ -766,22 +778,7 @@ class PartnerPortalController extends Controller
     {
         $partnerId = $this->partnerId();
 
-        $validator = Validator::make($request->all(), [
-            'employer_name' => 'nullable|string|max:150',
-            'employer_ar_name' => 'required|string|max:150',
-            'visa_no' => 'required|string|max:25',
-            'id_no' => 'required|string|max:25',
-            'visa_date' => 'nullable|date',
-            'issuing_authority' => 'required|in:Mumbai,New Delhi',
-            'proff_id' => 'required|array|min:1',
-            'proff_id.*' => 'integer|exists:professions,id',
-            'openings' => 'required|array|min:1',
-            'openings.*' => 'required|string|max:50',
-            'salary' => 'nullable|array',
-            'salary.*' => 'nullable|string|max:50',
-            'wpcity_id' => 'required|integer|exists:expecworkcities,id',
-            'notes' => 'nullable|string|max:2000',
-        ]);
+        $validator = Validator::make($request->all(), $this->employerValidationRules());
 
         if ($validator->fails()) {
             return redirect()->route('worker.partner.employer')
@@ -800,12 +797,72 @@ class PartnerPortalController extends Controller
         $employer->employer_ar_name = $request->employer_ar_name;
         $employer->issuing_authority = $request->issuing_authority;
         $employer->visa_date = $request->visa_date;
-        $employer->wpcity_id = $request->wpcity_id;
+        $employer->wpcity_id = $this->resolveWorkCityId($request);
         $employer->partneroffice_id = $partnerId;
         $employer->notes = $request->notes;
         $employer->save();
 
         return redirect()->route('worker.partner.employer')->with('success', __('locale.Employer added successfully.'));
+    }
+
+    /**
+     * Shared by employerStore()/employerUpdate() - wpcity_id is either a
+     * real Expecworkcity id (normal dropdown selection) or the literal
+     * "other" sentinel the Add/Edit Employer forms' City of Work select
+     * uses for its extra "Other" option; custom_city_name is only
+     * present/required in that second case (see employerValidationRules()).
+     */
+    private function employerValidationRules(): array
+    {
+        return [
+            'employer_name' => 'nullable|string|max:150',
+            'employer_ar_name' => 'required|string|max:150',
+            'visa_no' => 'required|string|max:25',
+            'id_no' => 'required|string|max:25',
+            'visa_date' => 'nullable|date',
+            'issuing_authority' => 'required|in:Mumbai,New Delhi',
+            'proff_id' => 'required|array|min:1',
+            'proff_id.*' => 'integer|exists:professions,id',
+            'openings' => 'required|array|min:1',
+            'openings.*' => 'required|string|max:50',
+            'salary' => 'nullable|array',
+            'salary.*' => 'nullable|string|max:50',
+            'wpcity_id' => ['required', function ($attribute, $value, $fail) {
+                if ($value === 'other') {
+                    return;
+                }
+                if (!ctype_digit((string) $value) || !Expecworkcity::whereKey($value)->exists()) {
+                    $fail(__('locale.The selected city of work is invalid.'));
+                }
+            }],
+            'custom_city_name' => 'required_if:wpcity_id,other|nullable|string|max:255',
+            'notes' => 'nullable|string|max:2000',
+        ];
+    }
+
+    /**
+     * Resolves the wpcity_id to actually save: the submitted value as-is
+     * for a normal dropdown selection, or - when the "Other" option was
+     * chosen - the id of a matching Expecworkcity found or created from
+     * custom_city_name (Expecworkcity::findOrCreateByName(), case-
+     * insensitive/trimmed, never a duplicate). admin_id on a
+     * newly-created row is the logged-in partner's own managing admin
+     * (Partner::admin_id, the same "which staff member owns this
+     * partner" column PartnerController::store() already sets from the
+     * admin side) - there's no admin session here to pull it from, and
+     * this reuses existing data instead of inventing a sentinel value.
+     */
+    private function resolveWorkCityId(Request $request): int
+    {
+        if ((string) $request->wpcity_id !== 'other') {
+            return (int) $request->wpcity_id;
+        }
+
+        $partner = Auth::guard('partner')->user();
+
+        $city = Expecworkcity::findOrCreateByName($request->custom_city_name, (int) ($partner->admin_id ?? 0));
+
+        return $city->id;
     }
 
     /**
@@ -833,22 +890,7 @@ class PartnerPortalController extends Controller
 
         abort_if(!$employer, 404);
 
-        $validator = Validator::make($request->all(), [
-            'employer_name' => 'nullable|string|max:150',
-            'employer_ar_name' => 'required|string|max:150',
-            'visa_no' => 'required|string|max:25',
-            'id_no' => 'required|string|max:25',
-            'visa_date' => 'nullable|date',
-            'issuing_authority' => 'required|in:Mumbai,New Delhi',
-            'proff_id' => 'required|array|min:1',
-            'proff_id.*' => 'integer|exists:professions,id',
-            'openings' => 'required|array|min:1',
-            'openings.*' => 'required|string|max:50',
-            'salary' => 'nullable|array',
-            'salary.*' => 'nullable|string|max:50',
-            'wpcity_id' => 'required|integer|exists:expecworkcities,id',
-            'notes' => 'nullable|string|max:2000',
-        ]);
+        $validator = Validator::make($request->all(), $this->employerValidationRules());
 
         if ($validator->fails()) {
             return redirect()->back()->withErrors($validator)->withInput();
@@ -863,7 +905,7 @@ class PartnerPortalController extends Controller
         $employer->openings = implode(',', $request->openings);
         $employer->salary = implode(',', (array) $request->salary);
         $employer->issuing_authority = $request->issuing_authority;
-        $employer->wpcity_id = $request->wpcity_id;
+        $employer->wpcity_id = $this->resolveWorkCityId($request);
         $employer->status = $request->boolean('status');
         $employer->notes = $request->notes;
         $employer->save();
@@ -904,7 +946,188 @@ class PartnerPortalController extends Controller
         return response()->json(['status' => 'success', 'message' => __('locale.Employer deleted successfully.')]);
     }
 
+    /**
+     * "Assign Candidate" modal's candidate table. Eligibility is the same
+     * rule the CRM's own Add/Assign Candidate dropdown uses (Candidate::
+     * where('status', 1) - see EmployerController::VisaDetViewp() and
+     * Helper::assignCandidateToEmployer(), which flips status back to
+     * false the moment a candidate is assigned and deassigngetdata()
+     * flips it back to true on release), narrowed further to only the
+     * professions this specific Employer actually needs (explode on
+     * $employer->proff_id, the same CSV format Helper::
+     * assignCandidateToEmployer() itself parses) so a partner is never
+     * offered a candidate whose assignment would just fail that Helper's
+     * own "Profession is not available for this employer" check a
+     * moment later - not a new business rule, just not surfacing a
+     * guaranteed-failure choice.
+     */
+    public function employerAssignableCandidates($id)
+    {
+        $partnerId = $this->partnerId();
+
+        $employer = Employerplus::where('partneroffice_id', $partnerId)->where('id', $id)->first();
+
+        if (!$employer) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Employer not found.')], 404);
+        }
+
+        $professionIds = array_filter(array_map('trim', explode(',', (string) $employer->proff_id)));
+
+        $candidates = Candidate::where('status', 1)
+            ->whereIn('jobtype_id', $professionIds)
+            ->with('profession')
+            ->orderBy('cand_name')
+            ->get()
+            ->map(function ($candidate) {
+                return [
+                    'id' => $candidate->id,
+                    'name' => $candidate->cand_name,
+                    'pass_no' => $candidate->pass_no,
+                    'profession_id' => $candidate->jobtype_id,
+                    'profession_name' => optional($candidate->profession)->eng_name,
+                ];
+            });
+
+        return response()->json(['status' => 'success', 'data' => $candidates]);
+    }
+
+    /**
+     * Assigns one candidate to this Employer, reusing the exact same
+     * Helper::assignCandidateToEmployer() the CRM's own Assign Candidate
+     * modal (admin/employer-listp/add-visa-view/{id}) posts to - not a
+     * second assignment implementation. proff_id is deliberately derived
+     * here from the candidate's own jobtype_id rather than trusted from
+     * the request, and eligibility (status=1, profession actually needed
+     * by this employer) is re-checked immediately before calling the
+     * Helper - opening the modal and clicking Assign are two separate
+     * requests, so another assignment could have happened in between
+     * (the actual race-safety net, not the modal's own candidate list).
+     *
+     * assignbystaff_id ends up null on the resulting Employercandidate
+     * row (Helper::assignCandidateToEmployer() always reads Auth::
+     * guard('admin'), which has no session here) - left as-is rather
+     * than patched around, since changing that shared Helper is exactly
+     * what reusing it unmodified means not doing; partneroffice_id
+     * (which partner owns this Employer) is still correctly set from
+     * $employer->partneroffice_id regardless, and is the field that
+     * actually enforces ownership elsewhere in this controller.
+     */
+    public function employerAssignCandidate(Request $request, $id)
+    {
+        $partnerId = $this->partnerId();
+
+        $employer = Employerplus::where('partneroffice_id', $partnerId)->where('id', $id)->first();
+
+        if (!$employer) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Employer not found.')], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'cand_id' => 'required|integer|exists:candidates,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $candidate = Candidate::find($request->cand_id);
+
+        $professionIds = array_filter(array_map('trim', explode(',', (string) $employer->proff_id)));
+
+        if (!$candidate || (int) $candidate->status !== 1 || !in_array((string) $candidate->jobtype_id, $professionIds, true)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => __('locale.This candidate is no longer available. Please choose another candidate.'),
+            ], 409);
+        }
+
+        $result = Helper::assignCandidateToEmployer([
+            'fromreq' => 'employerplus',
+            'visaeditid' => $employer->id,
+            'cand_id' => $candidate->id,
+            'proff_id' => $candidate->jobtype_id,
+        ]);
+
+        $succeeded = (int) ($result['status'] ?? 0) === 1;
+
+        return response()->json([
+            'status' => $succeeded ? 'success' : 'error',
+            'message' => $result['message'] ?? __('locale.Something went wrong.'),
+        ], $succeeded ? 200 : 422);
+    }
+
+    /**
+     * Deassigns one candidate from this Employer - the smallest
+     * equivalent of the CRM's own EmployerController::deassigngetdata()
+     * (same two-step release: the Employercandidate row's status -> 0,
+     * the Candidate's own status -> 1), reimplemented rather than called
+     * directly because that admin method trusts $request->candemp_id on
+     * its own (Employercandidate::find(), no ownership check at all -
+     * fine there since only an authenticated admin can reach it) and has
+     * no partner/employer scoping to reuse. Authorization chain mirrors
+     * employerAssignCandidate(): authenticated partner -> owns this
+     * Employer -> the assignment row itself belongs to THIS Employer's
+     * own emp_id, never trusted from the request in isolation - a bare
+     * employercandidate_id alone could otherwise name a row belonging to
+     * a completely different (possibly another partner's) Employer.
+     */
+    public function employerDeassignCandidate(Request $request, $id)
+    {
+        $partnerId = $this->partnerId();
+
+        $employer = Employerplus::where('partneroffice_id', $partnerId)->where('id', $id)->first();
+
+        if (!$employer) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Employer not found.')], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'employercandidate_id' => 'required|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $assignment = Employercandidate::where('id', $request->employercandidate_id)
+            ->where('emp_id', $employer->id)
+            ->where('status', 1)
+            ->first();
+
+        if (!$assignment) {
+            return response()->json([
+                'status' => 'error',
+                'message' => __('locale.This assignment could not be found or was already removed.'),
+            ], 404);
+        }
+
+        DB::transaction(function () use ($assignment) {
+            $assignment->status = false;
+            $assignment->save();
+
+            $candidate = Candidate::find($assignment->cand_id);
+
+            if ($candidate) {
+                $candidate->status = true;
+                $candidate->save();
+            }
+        });
+
+        return response()->json(['status' => 'success', 'message' => __('locale.Candidate deassigned successfully.')]);
+    }
+
+    /**
+     * The old combined Profile/Settings page is now split into Account
+     * (Personal Details) and Website (Company Profile/Branding/Domain) -
+     * this bookmarked URL redirects to its Personal Details replacement
+     * rather than 404ing.
+     */
     public function profile()
+    {
+        return redirect()->route('worker.partner.account');
+    }
+
+    public function account()
     {
         $partner = Auth::guard('partner')->user();
 
@@ -914,20 +1137,10 @@ class PartnerPortalController extends Controller
         $countries = Country::orderBy('name')->get();
         $cities = City::orderBy('name')->get();
 
-        // The Company Profile/Branding/Domain settings tabs below all read
-        // this SAME Domain row (App\Models\Partner::domain(), partner_id-
-        // scoped) that the CRM's "Website" tab manages - not persisted
-        // here on a bare page view (only settingsCompanyUpdate/
-        // settingsLogoUpdate/settingsDomainUpdate actually create the row,
-        // on first real save), just built in-memory so the form fields
-        // below have something to bind to for a partner who hasn't saved
-        // anything there yet.
-        $domain = $partner->domain ?: $partner->domain()->make();
-
-        return view('worker.partner.profile', compact('partner', 'countries', 'cities', 'domain'));
+        return view('worker.partner.account', compact('partner', 'countries', 'cities'));
     }
 
-    public function profileUpdate(Request $request)
+    public function accountUpdate(Request $request)
     {
         $partner = Auth::guard('partner')->user();
 
@@ -940,7 +1153,7 @@ class PartnerPortalController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return redirect()->route('worker.partner.profile')
+            return redirect()->route('worker.partner.account')
                 ->withErrors($validator)
                 ->withInput();
         }
@@ -952,7 +1165,26 @@ class PartnerPortalController extends Controller
         $partner->city_id = $request->city_id;
         $partner->save();
 
-        return redirect()->route('worker.partner.profile')->with('success', 'Profile updated successfully.');
+        return redirect()->route('worker.partner.account')->with('success', 'Profile updated successfully.');
+    }
+
+    /**
+     * Website page - Company Profile/Branding/Domain tabs, all three
+     * reading/writing this SAME Domain row (App\Models\Partner::domain(),
+     * partner_id-scoped) that the CRM's "Website" tab manages - not
+     * persisted here on a bare page view (only settingsCompanyUpdate/
+     * settingsLogoUpdate/settingsDomainUpdate actually create the row, on
+     * first real save), just built in-memory so the form fields below
+     * have something to bind to for a partner who hasn't saved anything
+     * there yet.
+     */
+    public function website()
+    {
+        $partner = Auth::guard('partner')->user();
+
+        $domain = $partner->domain ?: $partner->domain()->make();
+
+        return view('worker.partner.website', compact('partner', 'domain'));
     }
 
     /**
@@ -1085,47 +1317,22 @@ class PartnerPortalController extends Controller
     }
 
     /**
-     * Domain settings tab - the SAME `sub_domain` column on the Domain row
-     * (App\Models\Partner::domain()) that ResolvePartnerWebsiteDomain
-     * middleware reads on recruitmentcv.com subdomain requests, and that
-     * the CRM's "Website" tab also writes. Validation mirrors
-     * DomainController::websitelogoupdt()'s sub_domain handling; $domain
-     * is always the logged-in partner's own row, never request-supplied.
+     * The Domain settings tab is now DISPLAY-ONLY - a Partner can see
+     * their configured *.recruitmentcv.com subdomain (App\Models\
+     * Partner::domain()->sub_domain, the same column ResolvePartner
+     * WebsiteDomain middleware reads and the CRM's automatic Hostinger
+     * provisioning flow - HostingerSubdomainService - writes) but can no
+     * longer change it from here. This endpoint is intentionally kept
+     * rather than removed, specifically so it can go on rejecting writes
+     * even though the form/button that used to POST here is gone from
+     * the UI - the frontend no longer offering a way to reach this is
+     * not what prevents a change, this is.
      */
     public function settingsDomainUpdate(Request $request)
     {
-        $partner = Auth::guard('partner')->user();
-
-        $domain = $partner->domain()->firstOrCreate([]);
-
-        $subDomain = strtolower(trim((string) $request->sub_domain));
-
-        $validator = Validator::make(
-            ['sub_domain' => $subDomain],
-            [
-                'sub_domain' => [
-                    'nullable',
-                    'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/',
-                    Rule::unique('domains', 'sub_domain')->ignore($domain->id),
-                ],
-            ],
-            [
-                'sub_domain.regex' => __('locale.Subdomain may only contain lowercase letters, numbers and hyphens (no spaces, dots or slashes).'),
-                'sub_domain.unique' => __('locale.This subdomain is already taken.'),
-            ]
-        );
-
-        if ($validator->fails()) {
-            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
-        }
-
-        $domain->sub_domain = $subDomain;
-        $domain->save();
-
         return response()->json([
-            'status' => 'success',
-            'message' => __('locale.Domain updated successfully.'),
-            'data' => ['sub_domain' => $domain->sub_domain],
-        ]);
+            'status' => 'error',
+            'message' => __('locale.Your subdomain is managed automatically and cannot be changed here.'),
+        ], 403);
     }
 }

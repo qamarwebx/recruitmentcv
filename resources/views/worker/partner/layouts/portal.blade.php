@@ -37,6 +37,17 @@
         $__partnerLogoFile = $__partner->portalLogoFile($__isArabic);
         $__partnerLogoUrl = $__partnerLogoFile ? asset('admin/assets/images/partner/' . $__partnerLogoFile) : null;
         $__defaultPartnerLogo = asset('user/img/logo/' . ($__isArabic ? 'new_logo_Arabic_white.webp' : 'Logo_eng_white.webp'));
+
+        // Same $__partner->domain relation as above (already loaded, no extra
+        // query) - same gating condition already used by the Settings > Domain
+        // tab's own Live URL link (profile.blade.php): active status + a
+        // non-empty sub_domain. Null means "hide gracefully" per spec, never
+        // a fallback URL (unlike Partner::portalBaseUrl(), which is used for
+        // post-login redirects and intentionally falls back to app().url).
+        $__partnerDomain = $__partner->domain;
+        $__partnerLiveUrl = ($__partnerDomain && $__partnerDomain->status === 'active' && !empty($__partnerDomain->sub_domain))
+            ? 'https://' . $__partnerDomain->full_domain
+            : null;
     @endphp
 
     <div class="wp-shell" data-wp-shell>
@@ -86,9 +97,13 @@
                 </a>
 
                 <div class="wp-nav-label">{{ __('locale.Account') }}</div>
-                <a href="{{ route('worker.partner.profile') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.profile*') ? 'is-active' : '' }}">
+                <a href="{{ route('worker.partner.website') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.website*') ? 'is-active' : '' }}">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    <span>{{ __('locale.Website') }}</span>
+                </a>
+                <a href="{{ route('worker.partner.account') }}" class="wp-nav-link {{ (request()->routeIs('worker.partner.account*') || request()->routeIs('worker.partner.profile*')) ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
-                    <span>{{ __('locale.Profile / Account') }}</span>
+                    <span>{{ __('locale.My Account') }}</span>
                 </a>
             </nav>
 
@@ -114,6 +129,13 @@
                 </button>
 
                 <div class="wp-page-title">@yield('page-title')</div>
+
+                @if ($__partnerLiveUrl)
+                    <a href="{{ $__partnerLiveUrl }}" target="_blank" rel="noopener" class="wp-live-url" title="{{ $__partnerLiveUrl }}">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        <span class="wp-live-url-text">{{ $__partnerLiveUrl }}</span>
+                    </a>
+                @endif
 
                 <div class="wp-topbar-actions">
                     @include('worker.partials.language-switcher', ['switchRoute' => 'worker.partner.lang.switch'])
@@ -149,9 +171,9 @@
                             <span>{{ $__partnerLabel }}</span>
                         </button>
                         <div class="wp-dropdown" data-wp-dropdown="profile">
-                            <a href="{{ route('worker.partner.profile') }}" class="wp-menu-item">
+                            <a href="{{ route('worker.partner.account') }}" class="wp-menu-item">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
-                                {{ __('locale.Profile / Account') }}
+                                {{ __('locale.My Account') }}
                             </a>
                             <form action="{{ route('worker.partner.logout') }}" method="POST">
                                 @csrf

@@ -26,6 +26,12 @@ class Domain extends Model
         'domain_name',
         'sub_domain',
 
+        // Hostinger subdomain provisioning (sub_domain above)
+        'hostinger_status',
+        'hostinger_created_at',
+        'hostinger_error',
+        'hostinger_reference',
+
         // Branding
         'company_name',
         'company_name_ar',
@@ -68,6 +74,8 @@ class Domain extends Model
         'ssl_verified_at'  => 'datetime',
 
         'ssl_expiry_date'  => 'date',
+
+        'hostinger_created_at' => 'datetime',
     ];
 
     /*
@@ -114,6 +122,26 @@ class Domain extends Model
         $value = strtolower(trim((string) $value));
 
         $this->attributes['sub_domain'] = $value === '' ? null : $value;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Accessors
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * sub_domain + the configured Hostinger parent domain, e.g. "raha" ->
+     * "raha.recruitmentcv.com". Computed, not stored - see the Hostinger
+     * status migration's doc comment for why.
+     */
+    public function getFullDomainAttribute(): ?string
+    {
+        if (empty($this->sub_domain)) {
+            return null;
+        }
+
+        return $this->sub_domain . '.' . config('services.hostinger.recruitmentcv_domain', 'recruitmentcv.com');
     }
 
     /*

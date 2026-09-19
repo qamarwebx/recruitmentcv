@@ -54,12 +54,18 @@
                     </div>
                     <div class="w-form-row">
                         <label class="w-form-label">{{ __('locale.City of Work') }}</label>
-                        <select name="wpcity_id" id="edit-wpcity-id" class="w-select w-select2" data-placeholder="{{ __('locale.Select City of Work') }}">
+                        <select name="wpcity_id" id="edit-wpcity-id" class="w-select w-select2" data-placeholder="{{ __('locale.Select City of Work') }}" data-other-city-select>
                             <option value=""></option>
                             @foreach ($workCities as $workCity)
                                 <option value="{{ $workCity->id }}">{{ $workCity->display_name }}</option>
                             @endforeach
+                            <option value="other">{{ __('locale.Other') }}</option>
                         </select>
+                    </div>
+                    <div class="w-form-row" data-other-city-wrap hidden>
+                        <label class="w-form-label">{{ __('locale.City Name') }} <span style="color:#dc2626;">*</span></label>
+                        <input type="text" name="custom_city_name" id="edit-custom-city-name" class="w-input" data-other-city-input
+                            placeholder="{{ __('locale.Enter city name...') }}">
                     </div>
                     <div class="w-form-row">
                         <label class="w-form-label">{{ __('locale.Status') }}</label>

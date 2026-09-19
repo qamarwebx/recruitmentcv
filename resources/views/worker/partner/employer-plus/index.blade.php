@@ -101,6 +101,7 @@
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
                                     </button>
                                     <div class="wp-dropdown" data-employer-actions-menu="{{ $employer->id }}">
+                                        <button type="button" class="wp-menu-item" data-assign-candidate-trigger data-employer-id="{{ $employer->id }}">{{ __('locale.Assign Candidate') }}</button>
                                         <a href="{{ route('worker.partner.employer.show', $employer->id) }}" class="wp-menu-item">{{ __('locale.View Profile') }}</a>
                                         <button type="button" class="wp-menu-item"
                                             data-edit-employer-trigger
@@ -152,6 +153,7 @@
     @include('worker.partner.employer-plus.add-modal', ['professionOptions' => $professionOptions, 'workCities' => $workCities])
     @include('worker.partner.employer-plus.edit-modal', ['professionOptions' => $professionOptions, 'workCities' => $workCities])
     @include('worker.partner.employer-plus.delete-modal')
+    @include('worker.partner.employer-plus.assign-candidate-modal')
 @endsection
 
 @section('page-script')
@@ -164,4 +166,11 @@
     <script src="{{ asset('worker/js/employer-add.js') }}?v={{ @filemtime(public_path('worker/js/employer-add.js')) ?: time() }}"></script>
     <script src="{{ asset('worker/js/employer-edit.js') }}?v={{ @filemtime(public_path('worker/js/employer-edit.js')) ?: time() }}"></script>
     <script src="{{ asset('worker/js/employer-delete.js') }}?v={{ @filemtime(public_path('worker/js/employer-delete.js')) ?: time() }}"></script>
+    <script>
+        window.WorkerEmployerUrls = {
+            assignableCandidates: "{{ route('worker.partner.employer.assignable-candidates', ['id' => '__ID__']) }}",
+            assignCandidate: "{{ route('worker.partner.employer.assign-candidate', ['id' => '__ID__']) }}",
+        };
+    </script>
+    <script src="{{ asset('worker/js/employer-assign-candidate.js') }}?v={{ @filemtime(public_path('worker/js/employer-assign-candidate.js')) ?: time() }}"></script>
 @endsection

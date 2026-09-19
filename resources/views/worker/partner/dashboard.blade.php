@@ -111,7 +111,7 @@
                             <span>{{ __('locale.View employer records') }}</span>
                         </div>
                     </a>
-                    <a href="{{ route('worker.partner.profile') }}" class="wp-quick-action">
+                    <a href="{{ route('worker.partner.account') }}" class="wp-quick-action">
                         <span class="wp-stat-icon is-accent">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
                         </span>
