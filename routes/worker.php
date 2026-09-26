@@ -78,6 +78,20 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
 
     Route::get('/website', [PartnerPortalController::class, 'website'])->name('website');
 
+    // Website Config (Home/About/Contact/Privacy/Terms) - one save endpoint,
+    // {page} restricted to the known set so an unknown value 404s instead
+    // of silently creating a stray row (see PartnerPageContent::PAGES).
+    // Contact Us > Branches/Locations - its own endpoint (a list of
+    // records with image uploads, not the flat locale-nested text fields
+    // the generic {page} endpoint below validates) - registered first so
+    // its literal /contact/branches segment is never shadowed by {page}.
+    Route::post('/website-config/contact/branches', [PartnerPortalController::class, 'websiteConfigBranchesUpdate'])
+        ->name('website-config.branches.update');
+
+    Route::post('/website-config/{page}', [PartnerPortalController::class, 'websiteConfigUpdate'])
+        ->where('page', 'home|about|contact|privacy|terms')
+        ->name('website-config.update');
+
     // Settings page tabs (Company Profile / Branding / Domain) - all three
     // read/write the logged-in partner's own Domain row (see
     // PartnerPortalController::settingsCompanyUpdate/settingsLogoUpdate/

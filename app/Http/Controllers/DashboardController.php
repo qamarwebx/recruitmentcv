@@ -392,7 +392,7 @@ class DashboardController extends Controller
 
         // Get Meta Whatsapp API and Meta Template
         // $metaAPI = Metawhatsappapi::where('status','=',1)->first();
-        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['otp'])->first();
+        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['recruitmentcv_otp'])->first();
         if($page == 'en'){
             // $otpTemplate = Metanotification::where('meta_template_name','=','otpone')->first();
             $otpTemplate = Metanotification::where('meta_template_name','=','otp')->first();
@@ -704,7 +704,7 @@ class DashboardController extends Controller
 
         // Get Meta Whatsapp API and Meta Template
         // $metaAPI = Metawhatsappapi::where('status','=',1)->first();
-        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['otp'])->first();
+        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['recruitmentcv_otp'])->first();
         $staticTemplates = Staticmetanotification::where('status','=',1)->get();
 
         // Get Normal Whatsapp API and Template
@@ -1156,7 +1156,7 @@ class DashboardController extends Controller
 
             // $metaAPI = Metawhatsappapi::where('status','=',1)->first();
 
-            $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['otp'])->first();
+            $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['recruitmentcv_otp'])->first();
 
             if(isset($metaAPI)){
                 $base_url = $metaAPI->api_base_url;

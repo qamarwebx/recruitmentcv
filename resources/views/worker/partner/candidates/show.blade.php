@@ -14,11 +14,6 @@
 @endsection
 
 @section('content')
-    @php
-        $imagePath = \App\Support\CandidatePhoto::url($post->photo_file);
-        $defaultAvatar = \App\Support\CandidatePhoto::defaultUrl();
-    @endphp
-
     <a href="{{ route('worker.partner.candidates') }}" class="w-form-back" style="margin:0 0 18px;display:inline-flex;align-items:center;gap:6px;">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         {{ __('locale.Back to Candidates') }}
@@ -26,9 +21,7 @@
 
     <div class="w-details-grid wp-fade-in">
         <div class="w-gallery">
-            <div class="w-gallery-main">
-                <img src="{{ $imagePath }}" alt="{{ $post->display_name }}" onerror="this.onerror=null;this.src='{{ $defaultAvatar }}';">
-            </div>
+            @include('worker.partials.candidate-gallery')
 
             <div class="w-profile-card">
                 <div class="w-profile-name">
@@ -39,7 +32,21 @@
                             {{ __('locale.Linked to you') }}
                         </span>
                     @endif
-                </div>
+                </div>     
+                
+                 
+               <div class="w-profile-tags">
+                    {{-- Locale-aware: Profession::display_name (existing
+                    accessor, already used elsewhere on this page) picks
+                    ar_name over eng_name when app()->getLocale() is 'ar' -
+                    the same locale detection already used throughout this
+                    project, not a new one. "Indian Experience"/"Ex-Abroad"
+                    go through the existing __('locale.*') translation
+                    system the same way. --}}
+                    <span class="w-tag">
+                        {{ $post->jobtype_id != '' ? (($post->gulfexperience == 1 ? __('locale.Indian Experience') . ' ' : ($post->gulfexperience == 2 ? __('locale.Ex-Abroad') . ' ' : '')) . optional($post->profession)->display_name) : '---' }}
+                    </span>
+               </div>
 
                 <div class="w-profile-tags">
                     @if (optional($post->profession)->display_name)
@@ -51,10 +58,7 @@
                     @endif
                 </div>
 
-                <div class="wp-badge {{ in_array($post->candidate_current_status, ['Deployed','Cancelled']) ? 'is-neutral' : 'is-success' }}" style="margin-top:14px;width:fit-content;">
-                    {{ $post->candidate_current_status ? __('locale.' . $post->candidate_current_status) : __('locale.Available') }}
-                </div>
-
+            
                 <div class="w-cta-row" style="margin-top:14px;">
                     @if ($hasBooking)
                         <a href="{{ route('worker.partner.orders.show', $existingBooking->id) }}" class="w-btn w-btn-accent">
@@ -91,12 +95,20 @@
                 </h2>
                 <div class="w-info-grid">
                     <div class="w-info-item">
+                        <span>{{ __('locale.Applied For') }}</span>
+                        <strong>{{ optional($post->profession)->display_name ?: '---' }}</strong>
+                    </div>
+                    <div class="w-info-item">
                         <span>{{ __('locale.Full Name') }}</span>
                         <strong>{{ $post->display_name }}</strong>
                     </div>
                     <div class="w-info-item">
                         <span>{{ __('locale.Age') }}</span>
-                        <strong>{{ $post->age ?: '---' }}</strong>
+                        <strong>{{ $post->age ?: '---' }} {{ __('locale.Years') }}</strong>
+                    </div>
+                    <div class="w-info-item">
+                        <span>{{ __('locale.Religion') }}</span>
+                        <strong>{{ optional($religion)->display_name ?: '---' }}</strong>
                     </div>
                     <div class="w-info-item">
                         <span>{{ __('locale.Marital Status') }}</span>
@@ -107,12 +119,93 @@
                         <strong>{{ optional($nation)->display_name ?: '---' }}</strong>
                     </div>
                     <div class="w-info-item">
+                        <span>{{ __('locale.Region') }}</span>
+                        <strong>{{ optional($region)->display_name ?: '---' }}</strong>
+                    </div>
+                    <div class="w-info-item">
                         <span>{{ __('locale.Language') }}</span>
                         <strong>{{ $post->display_language ?: '---' }}</strong>
                     </div>
                     <div class="w-info-item">
+                        <span>{{ __('locale.Preferred Work Location') }}</span>
+                        <strong>{{ $expectedWorkPlaces->count() ? $expectedWorkPlaces->pluck('display_name')->implode(', ') : __('locale.Anywhere') }}</strong>
+                    </div>
+                    <div class="w-info-item">
                         <span>{{ __('locale.Reference No.') }}</span>
                         <strong>{{ $post->reference_no ?: '---' }}</strong>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Same source/logic as worker.resumes.details (public page) -
+            per-row Country/Profession/City lookups happen right here in
+            the loop there too, not pre-resolved into arrays server-side,
+            so this mirrors it exactly rather than introducing a second
+            way of shaping the same data. --}}
+            <div class="w-info-card wp-fade-in">
+                <h2>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                    {{ __('locale.Employment Experience') }}
+                </h2>
+
+                @if ($post->experience && $post->experience != '0')
+                    @php
+                        $exps = explode(',', $post->experience);
+                        $exprof = explode(',', (string) $post->proff_id);
+                        $expcont = explode(',', (string) $post->expcountry_id);
+                        $expcity = explode(',', (string) $post->expcity_id);
+                    @endphp
+                    @foreach ($exps as $key => $exp)
+                        @php
+                            $expCountry = \App\Models\Country::find($expcont[$key] ?? null);
+                            $expProf = \App\Models\Profession::find($exprof[$key] ?? null);
+                            $expCity = \App\Models\City::find($expcity[$key] ?? null);
+                        @endphp
+                        <div class="w-exp-row">
+                            <div class="w-info-item">
+                                <span>{{ __('locale.Job') }}</span>
+                                <strong>{{ optional($expProf)->display_name ?: '---' }}</strong>
+                            </div>
+                            <div class="w-info-item">
+                                <span>{{ __('locale.Period') }}</span>
+                                <strong>{{ $exp }} {{ __('locale.Years Experience') }}</strong>
+                            </div>
+                            <div class="w-info-item">
+                                <span>{{ __('locale.Country') }}</span>
+                                <strong>{{ optional($expCountry)->display_name ?: '---' }}</strong>
+                            </div>
+                            <div class="w-info-item">
+                                <span>{{ __('locale.City') }}</span>
+                                <strong>{{ optional($expCity)->display_name ?: '---' }}</strong>
+                            </div>
+                        </div>
+                    @endforeach
+                @else
+                    <p style="color:var(--w-ink-500);">{{ __('locale.This candidate is a fresher with no prior employment record on file.') }}</p>
+                @endif
+            </div>
+
+            <div class="w-info-card wp-fade-in">
+                <h2>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5-10-5Zm4 2v5c0 1 3 3 6 3s6-2 6-3v-5"/></svg>
+                    {{ __('locale.Education & Skills') }}
+                </h2>
+                <div class="w-info-grid w-cols-4">
+                    <div class="w-info-item">
+                        <span>{{ __('locale.Education') }}</span>
+                        <strong>{{ optional($education)->name ?: '---' }}</strong>
+                    </div>
+                    <div class="w-info-item">
+                        <span>{{ __('locale.Vehicle Known') }}</span>
+                        <strong>{{ $vehiclesKnown->count() ? $vehiclesKnown->pluck('name')->implode(', ') : '---' }}</strong>
+                    </div>
+                    <div class="w-info-item">
+                        <span>{{ __('locale.Vehicle Transmission') }}</span>
+                        <strong>{{ $vehicleTransmissions->count() ? $vehicleTransmissions->map(fn($t) => (app()->getLocale() === 'ar' && !empty($t->ar_name)) ? $t->ar_name : $t->eng_name)->implode(', ') : '---' }}</strong>
+                    </div>
+                    <div class="w-info-item">
+                        <span>{{ __('locale.Google Map Location') }}</span>
+                        <strong>{{ $post->google_map == 1 ? __('locale.Available') : __('locale.Not Available') }}</strong>
                     </div>
                 </div>
             </div>
@@ -139,25 +232,67 @@
                         <span>{{ __('locale.Date of Expiry') }}</span>
                         <strong>{{ $post->doe ? \Illuminate\Support\Carbon::parse($post->doe)->format('d/m/Y') : '---' }}</strong>
                     </div>
+                    <div class="w-info-item">
+                        <span>{{ __('locale.Place of Issue') }}</span>
+                        <strong>{{ optional($placeOfIssue)->display_name ?: '---' }}</strong>
+                    </div>
+                    <div class="w-info-item">
+                        <span>{{ __('locale.Date of Birth') }}</span>
+                        <strong>{{ $post->dob ? \Illuminate\Support\Carbon::parse($post->dob)->format('d/m/Y') : '---' }}</strong>
+                    </div>
                 </div>
             </div>
 
             <div class="w-info-card wp-fade-in">
                 <h2>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 2 .7 3a2 2 0 0 1-.5 2.1L8 10a16 16 0 0 0 6 6l1.2-1.3a2 2 0 0 1 2.1-.5c1 .4 2 .6 3 .7a2 2 0 0 1 1.7 2z"/></svg>
-                    {{ __('locale.Contact') }}
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    {{ __('locale.Price & Departure') }}
                 </h2>
-                <div class="w-info-grid">
-                    <div class="w-info-item">
-                        <span>{{ __('locale.Mobile Number') }}</span>
-                        <strong>{{ $post->mobile_no ?: '---' }}</strong>
+                <div class="w-summary-grid">
+                    <div class="w-summary-item">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9 9.5a2.5 2.5 0 0 1 2.5-2.5h1a2 2 0 1 1 0 4h-1a2 2 0 1 0 0 4h1a2.5 2.5 0 0 0 2.5-2.5"/></svg>
+                        <strong>{{ $priceLabel }}</strong>
+                        <span>{{ __('locale.Service Price') }}</span>
                     </div>
-                    <div class="w-info-item">
-                        <span>{{ __('locale.Email') }}</span>
-                        <strong>{{ $post->email ?: '---' }}</strong>
+                    <div class="w-summary-item">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 15-9-9-9 9M12 6v15"/></svg>
+                        <strong>{{ $departureLabel }}</strong>
+                        <span>{{ __('locale.Departure from India') }}</span>
+                    </div>
+                    <div class="w-summary-item">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4Z"/></svg>
+                        <strong>{{ __('locale.90 Days') }}</strong>
+                        <span>{{ __('locale.Warranty') }}</span>
+                    </div>
+                    <div class="w-summary-item">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="12" cy="10" r="3"/></svg>
+                        <strong>{{ __('locale.In Office') }}</strong>
+                        <span>{{ __('locale.Passport') }}</span>
+                    </div>
+                    <div class="w-summary-item">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-8-4.5-8-11a8 8 0 0 1 16 0c0 6.5-8 11-8 11Z"/></svg>
+                        <strong>{{ __('locale.Medically Fit') }}</strong>
+                        <span>{{ __('locale.Medical Status') }}</span>
                     </div>
                 </div>
             </div>
+
+            @if ($bookingRequirements->count() > 0)
+                <div class="w-info-card wp-fade-in">
+                    <h2>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+                        {{ __('locale.Booking Requirements') }}
+                    </h2>
+                    <ul class="w-requirement-list">
+                        @foreach ($bookingRequirements as $requirement)
+                            <li>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+                                {{ $requirement->requirement_text }}
+                            </li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
         </div>
     </div>
 
@@ -167,6 +302,15 @@
 @endsection
 
 @section('page-script')
+    {{-- Same worker/js/main.js the public resumes/details page loads - its
+    initGallery() is what drives the shared candidate-gallery partial above
+    (thumbnail/arrow clicks), reused as-is rather than a second copy of that
+    logic. Its other init*() calls all no-op safely here (each guards on a
+    selector - [data-nav-toggle], [data-filter-panel], etc. - that doesn't
+    exist on this Partner Portal page), so loading the whole file scoped to
+    just this page is safe. --}}
+    <script src="{{ asset('worker/js/main.js') }}?v={{ @filemtime(public_path('worker/js/main.js')) ?: time() }}"></script>
+
     @unless ($hasBooking)
         <script src="{{ asset('admin/assets/vendor/libs/jquery/jquery.js') }}"></script>
         <script src="{{ asset('admin/assets/vendor/libs/select2/select2.js') }}"></script>

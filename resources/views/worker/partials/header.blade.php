@@ -25,13 +25,19 @@
 
         <div class="w-header-actions">
             @include('worker.partials.language-switcher', ['switchRoute' => 'worker.lang.switch'])
-            @guest('partner')
-                <button type="button" class="w-btn w-btn-primary w-btn-sm w-btn-primary-desktop" data-partner-auth-trigger data-redirect="{{ route('worker.partner.candidates') }}">
-                    {{ __('locale.Login as Partner') }}
+           @guest('partner')
+                <button type="button" class="w-btn w-btn-primary w-btn-sm w-btn-primary-desktop"
+                    data-partner-auth-trigger
+                    data-redirect="{{ route('worker.partner.candidates') }}">
+                    {{ request()->getHost() === 'recruitmentcv.com' || request()->getHost() === 'www.recruitmentcv.com'
+                        ? __('locale.Login as Partner')
+                        : __('locale.Login') }}
                 </button>
             @else
                 <a href="{{ route('worker.partner.candidates') }}" class="w-btn w-btn-primary w-btn-sm w-btn-primary-desktop">
-                    {{ __('locale.Partner Dashboard') }}
+                    {{ request()->getHost() === 'recruitmentcv.com' || request()->getHost() === 'www.recruitmentcv.com'
+                        ? __('locale.Partner Dashboard')
+                        : __('locale.Dashboard') }}
                 </a>
             @endguest
             <button type="button" class="w-nav-toggle" data-nav-toggle aria-label="Toggle navigation" aria-expanded="false">

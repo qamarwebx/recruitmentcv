@@ -29,6 +29,8 @@
         'registerSubtitle' => __('locale.Fill in your details below and verify your phone number to create a partner account.'),
         'loginTitle' => __('locale.Partner Login'),
         'loginSubtitle' => __('locale.Sign in with your phone number to continue.'),
+        'signInWithGoogle' => __('locale.Sign in with Google'),
+        'signUpWithGoogle' => __('locale.Sign up with Google'),
         'otpSubtitle' => __('locale.Enter the verification code to continue.'),
         'completeRegTitle' => __('locale.Complete Your Registration'),
         'completeRegSubtitle' => __('locale.We couldn\'t find an account for this number - just a few details to get started.'),

@@ -6,30 +6,23 @@
 @section('content')
 
     @php
-        $contactIntro = (app()->getLocale() === 'ar' && !empty($frontwebsite->contact_us_ar ?? null))
+        // Partner Website Config override, then the SAME site-wide
+        // frontendwebsiteconfigs fields the CRM's own Contact Us config
+        // already drives, then the hardcoded default.
+        $contactIntro = $contactContent['intro_text'] ?? ((app()->getLocale() === 'ar' && !empty($frontwebsite->contact_us_ar ?? null))
             ? $frontwebsite->contact_us_ar
-            : ($frontwebsite->contact_us_eng ?? __('locale.Fill out the form and our team will get back to you within 24 hours.'));
+            : ($frontwebsite->contact_us_eng ?? __('locale.Fill out the form and our team will get back to you within 24 hours.')));
 
         // Same three fields (and the same fallback values) as qamarhire.com's
         // own Contact Us page (resources/views/contact.blade.php's "Contact
         // cards" section) - not bottom_contact_us_* (that's the site-wide
         // footer/legal contact block used elsewhere, a different field set
         // for a different purpose).
-        $contactAddr = (app()->getLocale() === 'ar' && !empty($frontwebsite->contact_us_location_ar ?? null))
+        $contactAddr = $contactContent['address'] ?? ((app()->getLocale() === 'ar' && !empty($frontwebsite->contact_us_location_ar ?? null))
             ? $frontwebsite->contact_us_location_ar
-            : ($frontwebsite->contact_us_location ?: __('locale.Mumbai, India'));
-        $contactPhone = $frontwebsite->contact_us_phone ?: '+919969566388';
-        $contactEmail = $frontwebsite->contact_us_email ?: 'info@qamrintl.com';
-
-        // Same 5 branch photos as qamarhire.com's own Contact Us page
-        // (its #branch "Location" section).
-        $branches = [
-            ['img' => 'user/img/ksa.png', 'label' => __('locale.Al Riyadh and Al Qassim')],
-            ['img' => 'user/img/Mumbai.png', 'label' => __('locale.Mumbai')],
-            ['img' => 'user/img/delhi.png', 'label' => __('locale.New Delhi')],
-            ['img' => 'user/img/lucknow.png', 'label' => __('locale.Lucknow')],
-            ['img' => 'user/img/hydr.png', 'label' => __('locale.Hyderabad')],
-        ];
+            : ($frontwebsite->contact_us_location ?: __('locale.Mumbai, India')));
+        $contactPhone = $contactContent['phone'] ?? ($frontwebsite->contact_us_phone ?: '+919969566388');
+        $contactEmail = $contactContent['email'] ?? ($frontwebsite->contact_us_email ?: 'info@qamrintl.com');
     @endphp
 
     <section class="w-page-header">
@@ -39,8 +32,8 @@
                 <span>/</span>
                 <span>{{ __('locale.Contact Us') }}</span>
             </div>
-            <h1>{{ __('locale.Get in touch!') }}</h1>
-            <p>{{ __('locale.Have questions about hiring or working with Qamr International? Reach us directly using the details below.') }}</p>
+            <h1>{{ $contactContent['header_title'] ?? __('locale.Get in touch!') }}</h1>
+            <p>{{ $contactContent['header_subtitle'] ?? __('locale.Have questions about hiring or working with Qamr International? Reach us directly using the details below.') }}</p>
         </div>
     </section>
 
@@ -116,16 +109,21 @@
     <section class="w-section" style="padding-top:0;">
         <div class="w-container">
             <div class="w-section-head w-center w-fade">
-                <span class="w-eyebrow" style="margin-inline:auto;">{{ __('locale.Our Office') }}</span>
-                <h2>{{ __('locale.Location') }}</h2>
-                <p>{{ __('locale.Our branches across the region.') }}</p>
+                <span class="w-eyebrow" style="margin-inline:auto;">{{ $contactContent['branches_eyebrow'] ?? __('locale.Our Office') }}</span>
+                <h2>{{ $contactContent['branches_heading'] ?? __('locale.Location') }}</h2>
+                <p>{{ $contactContent['branches_subheading'] ?? __('locale.Our branches across the region.') }}</p>
             </div>
 
             <div class="w-branch-grid w-fade">
                 @foreach ($branches as $branch)
+                    @php
+                        $branchLabel = (app()->getLocale() === 'ar' && !empty($branch['name_ar']))
+                            ? $branch['name_ar']
+                            : ($branch['name_en'] ?? $branch['name_ar'] ?? '');
+                    @endphp
                     <div class="w-branch-card">
-                        <img src="{{ asset($branch['img']) }}" alt="{{ $branch['label'] }}">
-                        <h3>{{ $branch['label'] }}</h3>
+                        <img src="{{ $branch['image'] }}" alt="{{ $branchLabel }}">
+                        <h3>{{ $branchLabel }}</h3>
                     </div>
                 @endforeach
             </div>

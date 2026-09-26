@@ -17,7 +17,7 @@ class OfficialWhatsappController extends Controller
     public function SendTextMessage(Request $request){
 
         // $metaAPI = Metawhatsappapi::where('status','=',1)->first();
-        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['otp'])->first();
+        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['recruitmentcv_otp'])->first();
 
         if(isset($metaAPI)){
             $base_url = $metaAPI->api_base_url;

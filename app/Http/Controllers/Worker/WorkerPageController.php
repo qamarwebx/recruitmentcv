@@ -11,6 +11,7 @@ use App\Models\Customercost;
 use App\Models\Education;
 use App\Models\Expecworkcity;
 use App\Models\Placeofissue;
+use App\Models\PartnerPageContent;
 use App\Models\Profession;
 use App\Models\Region;
 use App\Models\Religion;
@@ -31,6 +32,28 @@ class WorkerPageController extends Controller
             ->where('publish', 1)
             ->where('isdelete', 0)
             ->where('cv_execute', 1);
+    }
+
+    /**
+     * This request's Website Config overrides for one public page, in the
+     * current locale - resolved from the SAME Partner ResolvePartnerWebsiteDomain
+     * already bound into the container from the Host header (never a
+     * second subdomain lookup). Always an array (never null), and always
+     * only the fields a Partner actually chose to override - every call
+     * site falls back to the existing default with `?? __('locale...')` /
+     * `?? $frontwebsite->...`, so an apex-domain visit or a partner who
+     * hasn't configured anything renders byte-identical to today.
+     */
+    private function pageContent(string $page): array
+    {
+        return PartnerPageContent::contentFor($this->currentPartnerId(), $page, app()->getLocale());
+    }
+
+    private function currentPartnerId(): ?int
+    {
+        $partner = app()->bound('currentPartner') ? app('currentPartner') : null;
+
+        return optional($partner)->id;
     }
 
     public function home()
@@ -73,6 +96,8 @@ class WorkerPageController extends Controller
 
         $jobTypes = Profession::orderBy('eng_name')->limit(10)->get();
 
+        $homeContent = $this->pageContent('home');
+
         return view('worker.home', compact(
             'frontwebsite',
             'webconfig',
@@ -81,7 +106,8 @@ class WorkerPageController extends Controller
             'totalCities',
             'totalCountries',
             'featured',
-            'jobTypes'
+            'jobTypes',
+            'homeContent'
         ));
     }
 
@@ -152,6 +178,7 @@ class WorkerPageController extends Controller
         return view('worker.privacy-policy', [
             'frontwebsite' => DB::table('frontendwebsiteconfigs')->first(),
             'webconfig' => Websiteconfig::first(),
+            'privacyContent' => $this->pageContent('privacy'),
         ]);
     }
 
@@ -160,6 +187,7 @@ class WorkerPageController extends Controller
         return view('worker.terms-of-service', [
             'frontwebsite' => DB::table('frontendwebsiteconfigs')->first(),
             'webconfig' => Websiteconfig::first(),
+            'termsContent' => $this->pageContent('terms'),
         ]);
     }
 
@@ -176,6 +204,7 @@ class WorkerPageController extends Controller
         return view('worker.about', [
             'frontwebsite' => DB::table('frontendwebsiteconfigs')->first(),
             'webconfig' => Websiteconfig::first(),
+            'aboutContent' => $this->pageContent('about'),
         ]);
     }
 
@@ -192,6 +221,8 @@ class WorkerPageController extends Controller
         return view('worker.contact', [
             'frontwebsite' => DB::table('frontendwebsiteconfigs')->first(),
             'webconfig' => Websiteconfig::first(),
+            'contactContent' => $this->pageContent('contact'),
+            'branches' => PartnerPageContent::effectiveBranches($this->currentPartnerId()),
         ]);
     }
 

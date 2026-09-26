@@ -8,16 +8,26 @@ use App\Models\Activity;
 use App\Models\Basepathstatus;
 use App\Models\Booking;
 use App\Models\Candidate;
+use App\Models\Carnknown;
 use App\Models\City;
 use App\Models\Country;
+use App\Models\Customercost;
 use App\Models\Domain;
+use App\Models\Education;
 use App\Models\Employercandidate;
 use App\Models\Employerplus;
 use App\Models\Expecworkcity;
 use App\Models\PartnerEmployerSaveFilter;
+use App\Models\PartnerPageContent;
+use App\Models\Placeofissue;
 use App\Models\Profession;
+use App\Models\Region;
+use App\Models\Religion;
 use App\Models\Visadetails;
+use App\Support\HtmlSanitizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -504,6 +514,13 @@ class PartnerPortalController extends Controller
         $totalExperience = $post->experience ? array_sum(array_filter(explode(',', $post->experience), 'is_numeric')) : 0;
         $nation = Country::find($post->nation_id);
 
+        // Same computation as WorkerPageController::resumeDetails() - feeds
+        // the image/document gallery's YouTube-thumbnail slides, reusing that
+        // page's own worker.resumes.details gallery partial rather than a
+        // second copy of this slide-building logic.
+        $videoId = $post->video_link ? explode('/', $post->video_link) : null;
+        $testVideoId = $post->trade_test_video_link ? explode('/', $post->trade_test_video_link) : null;
+
         // Same source the existing "Choose Your Nearest Recruitment Office"
         // flow uses for its own worklocation dropdown (FrontEndController::
         // fullresumes()'s $expwpf) - the candidate's own preferred work
@@ -516,13 +533,59 @@ class PartnerPortalController extends Controller
             ? Expecworkcity::orderBy('name')->get()
             : Expecworkcity::whereIn('id', explode(',', (string) $post->expwp_id))->get();
 
+        // Everything below mirrors WorkerPageController::resumeDetails()
+        // field-for-field (same models, same lookups) so this page's right
+        // column shows exactly what the public resumes/details/{id}) page
+        // does - not a second, divergent data-loading path. $expectedWorkPlaces
+        // is deliberately its own query (not reused from $hireWorkLocations
+        // above): that one falls back to every city when the candidate has
+        // no preference, which is correct for a picker but wrong for a
+        // read-only "Preferred Work Location" display (which should read
+        // "Anywhere" instead) - see resumeDetails()'s identical query.
+        $religion = Religion::find($post->religion_id);
+        $region = Region::find($post->region_id);
+        $expectedWorkPlaces = Expecworkcity::whereIn('id', explode(',', (string) $post->expwp_id))->get();
+
+        $placeOfIssue = Placeofissue::find($post->poi);
+        $vehiclesKnown = Carnknown::whereIn('id', explode(',', (string) $post->carknown_id))->get();
+        $education = Education::find($post->education_id);
+        $vehicleTransmissions = DB::table('vehical_transmission')
+            ->whereIn('id', explode(',', (string) $post->vehical_transmission))
+            ->get();
+
+        $bookingRequirements = DB::table('requirement_info')->where('language_type', 1)->get();
+
+        $serviceCost = Customercost::where('proff_id', $post->jobtype_id)
+            ->where('exp_type', $post->gulfexperience)
+            ->where('status', 1)
+            ->first();
+
+        $priceLabel = __('locale.On Request');
+        $departureLabel = '---';
+        if ($serviceCost) {
+            $priceLabel = round($serviceCost->cost, 0) == 0 ? __('locale.Free') : round($serviceCost->cost, 0) . ' SAR';
+            $departureLabel = $serviceCost->days . ' ' . __('locale.Days');
+        }
+
         return view('worker.partner.candidates.show', compact(
             'post',
             'hasBooking',
             'existingBooking',
             'totalExperience',
             'nation',
-            'hireWorkLocations'
+            'videoId',
+            'testVideoId',
+            'hireWorkLocations',
+            'religion',
+            'region',
+            'expectedWorkPlaces',
+            'placeOfIssue',
+            'vehiclesKnown',
+            'education',
+            'vehicleTransmissions',
+            'bookingRequirements',
+            'priceLabel',
+            'departureLabel'
         ));
     }
 
@@ -1184,7 +1247,500 @@ class PartnerPortalController extends Controller
 
         $domain = $partner->domain ?: $partner->domain()->make();
 
-        return view('worker.partner.website', compact('partner', 'domain'));
+        // One row per page (Home/About/Contact/Privacy/Terms), each holding
+        // both locales' EFFECTIVE values (this Partner's saved override
+        // merged over the same default every public page itself falls
+        // back to - see websiteConfigDefaults()), keyed by page so the
+        // Website Config sub-tabs below can prefill their fields with
+        // data_get($pageContents['home']['en'] ?? [], 'hero.eyebrow') etc.
+        // Prefilling with the resolved default (not blank) is what lets a
+        // Partner see exactly what's currently live before changing
+        // anything; array_replace_recursive keeps this merge field-by-
+        // field within each nested group (e.g. overriding just hero.lead
+        // never blanks out the rest of hero.*).
+        $frontwebsite = DB::table('frontendwebsiteconfigs')->first();
+        $pageContentRows = PartnerPageContent::where('partner_id', $partner->id)->get()->keyBy('page');
+        $pageContents = collect(PartnerPageContent::PAGES)->mapWithKeys(function ($page) use ($pageContentRows, $frontwebsite) {
+            $row = $pageContentRows->get($page);
+            $override = [
+                'en' => $row->content['en'] ?? [],
+                'ar' => $row->content['ar'] ?? [],
+            ];
+
+            return [$page => [
+                'en' => array_replace_recursive($this->websiteConfigDefaults($page, 'en', $frontwebsite), $override['en']),
+                'ar' => array_replace_recursive($this->websiteConfigDefaults($page, 'ar', $frontwebsite), $override['ar']),
+            ]];
+        })->all();
+
+        // Contact Us > Branches/Locations - a sibling of content.en/ar
+        // (see PartnerPageContent's own doc comment for why), so it's
+        // resolved separately rather than folded into the merge above.
+        $pageContents['contact']['branches'] = PartnerPageContent::effectiveBranches($partner->id);
+
+        return view('worker.partner.website', compact('partner', 'domain', 'pageContents'));
+    }
+
+    /**
+     * Website Config save - one endpoint for all 5 pages (Home/About/
+     * Contact/Privacy/Terms), $page validated against an allow-list so an
+     * unknown value 404s rather than silently creating a stray row.
+     * Always resolves the partner from the authenticated guard, never from
+     * request input - a Partner can only ever write their own row (the
+     * unique(partner_id,page) index also makes this a single updateOrCreate,
+     * never a duplicate).
+     */
+    public function websiteConfigUpdate(Request $request, string $page)
+    {
+        abort_unless(in_array($page, PartnerPageContent::PAGES, true), 404);
+
+        $partner = Auth::guard('partner')->user();
+
+        $validator = Validator::make($request->all(), $this->websiteConfigValidationRules($page));
+
+        if ($validator->fails()) {
+            return redirect()->route('worker.partner.website', ['open' => $page])
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        // Fields are prefilled with the resolved default (see
+        // websiteConfigDefaults()) so the Partner can see the live site
+        // before editing - which means an unchanged field arrives back
+        // here holding that same default text, not blank. Anything that
+        // still matches the CURRENT default is dropped rather than saved,
+        // so it keeps tracking that default going forward (e.g. if the
+        // CRM's frontendwebsiteconfigs or a translation later changes)
+        // instead of being frozen as a stale "override" the moment the
+        // Partner saves the form without touching it.
+        $frontwebsite = DB::table('frontendwebsiteconfigs')->first();
+
+        $contentEn = (array) $request->input('content.en', []);
+        $contentAr = (array) $request->input('content.ar', []);
+        $skipDefaultCompare = [];
+
+        // Privacy/Terms "body" is Quill's HTML output - sanitize it
+        // server-side before it's ever persisted (the only Website Config
+        // value rendered unescaped on the public site), and never
+        // auto-revert it by text-equality (see stripDefaultValues()'s own
+        // doc comment for why that check doesn't apply to this field).
+        if (in_array($page, ['privacy', 'terms'], true)) {
+            if (array_key_exists('body', $contentEn)) {
+                $contentEn['body'] = HtmlSanitizer::clean($contentEn['body']);
+            }
+            if (array_key_exists('body', $contentAr)) {
+                $contentAr['body'] = HtmlSanitizer::clean($contentAr['body']);
+            }
+            $skipDefaultCompare = ['body'];
+        }
+
+        $this->saveWebsiteConfigContent($partner->id, $page, [
+            'en' => $this->stripDefaultValues($contentEn, $this->websiteConfigDefaults($page, 'en', $frontwebsite), $skipDefaultCompare),
+            'ar' => $this->stripDefaultValues($contentAr, $this->websiteConfigDefaults($page, 'ar', $frontwebsite), $skipDefaultCompare),
+        ]);
+
+        return redirect()->route('worker.partner.website', ['open' => $page])
+            ->with('success', __('locale.Website Config updated successfully.'));
+    }
+
+    /**
+     * Contact Us > Branches/Locations - a repeater of {name_en, name_ar,
+     * image} records (add/edit/delete/reorder all happen client-side in
+     * the DOM; Save resubmits the whole current list in one request,
+     * which is what "reorder" and "delete" actually persist as - there's
+     * no separate per-branch endpoint). image is either an existing URL
+     * (unchanged/default - left exactly as submitted, never re-uploaded)
+     * or a data: URI for a newly chosen file, decoded/validated/stored the
+     * same way settingsLogoUpdate() already does for the Branding tab's
+     * logos, into its own admin/assets/images/partner/branches folder so
+     * filenames can never collide with a partner's logo uploads.
+     *
+     * If the submitted list (after upload) is identical to the current
+     * default branches, it's dropped rather than saved - same "don't
+     * freeze today's default as a permanent override" rule
+     * stripDefaultValues() applies to every other Website Config field.
+     */
+    public function websiteConfigBranchesUpdate(Request $request)
+    {
+        $partner = Auth::guard('partner')->user();
+
+        $validator = Validator::make($request->all(), [
+            'branches' => 'present|array|max:24',
+            'branches.*.name_en' => 'required|string|max:150',
+            'branches.*.name_ar' => 'required|string|max:150',
+            'branches.*.image' => 'required|string|max:5000000',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+        $maxBytes = 2048 * 1024;
+
+        $basepathstatus = Basepathstatus::first();
+        $uploadPath = ($basepathstatus && $basepathstatus->base_path_status == 1)
+            ? base_path('public/admin/assets/images/partner/branches')
+            : base_path('public_html/admin/assets/images/partner/branches');
+
+        $branches = [];
+
+        foreach ($request->input('branches') as $i => $branch) {
+            $image = trim((string) $branch['image']);
+
+            if (preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/', $image, $matches)) {
+                if (!in_array(strtolower($matches[1]), $allowedMimes, true)) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => __('locale.Only JPG, PNG or WEBP images are allowed.'),
+                    ], 422);
+                }
+
+                $binary = base64_decode($matches[2]);
+
+                if ($binary === false || strlen($binary) > $maxBytes) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => __('locale.Image must not be larger than 2MB.'),
+                    ], 422);
+                }
+
+                if (!is_dir($uploadPath)) {
+                    mkdir($uploadPath, 0755, true);
+                }
+
+                $extension = strtolower($matches[1]) === 'image/png' ? 'png' : (strtolower($matches[1]) === 'image/webp' ? 'webp' : 'jpg');
+                $filename = 'branch_' . $partner->id . '_' . time() . '_' . $i . '.' . $extension;
+                file_put_contents($uploadPath . '/' . $filename, $binary);
+
+                // New file is written and confirmed before the image URL
+                // below ever points at it - an old, now-replaced image
+                // (if any) simply becomes unreferenced, never deleted
+                // here, so a failed/interrupted save can never leave a
+                // branch pointing at nothing.
+                $image = asset('admin/assets/images/partner/branches/' . $filename);
+            }
+
+            $branches[] = [
+                'name_en' => trim($branch['name_en']),
+                'name_ar' => trim($branch['name_ar']),
+                'image' => $image,
+            ];
+        }
+
+        if ($branches === PartnerPageContent::defaultBranches()) {
+            $branches = null;
+        }
+
+        $this->saveWebsiteConfigContent($partner->id, 'contact', ['branches' => $branches]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => __('locale.Branches updated successfully.'),
+            'data' => ['branches' => PartnerPageContent::effectiveBranches($partner->id)],
+        ]);
+    }
+
+    /**
+     * Merges into (rather than replaces) a page's saved content JSON -
+     * content.en/content.ar (websiteConfigUpdate) and content.branches
+     * (websiteConfigBranchesUpdate) are sibling keys on the SAME row, each
+     * saved by a different form/request, so a plain updateOrCreate()
+     * would silently wipe out whichever sibling key wasn't part of the
+     * request that just saved.
+     */
+    private function saveWebsiteConfigContent(int $partnerId, string $page, array $partial): void
+    {
+        $row = PartnerPageContent::where('partner_id', $partnerId)->where('page', $page)->first();
+        $content = array_merge($row->content ?? [], $partial);
+
+        PartnerPageContent::updateOrCreate(
+            ['partner_id' => $partnerId, 'page' => $page],
+            ['content' => $content]
+        );
+    }
+
+    /**
+     * Every field is optional (nullable) - a Partner overrides only what
+     * they want to change, everything else keeps rendering the existing
+     * default (frontendwebsiteconfigs field or hardcoded/translated copy)
+     * exactly as it does today. Applied identically to both content.en.*
+     * and content.ar.* so neither locale can be partially validated.
+     */
+    private function websiteConfigValidationRules(string $page): array
+    {
+        $text = 'nullable|string|max:255';
+        $longText = 'nullable|string|max:2000';
+        $body = 'nullable|string|max:50000';
+
+        $fieldsByPage = [
+            'home' => [
+                'hero.eyebrow' => $text,
+                'hero.heading_prefix' => $text,
+                'hero.heading_highlight' => $text,
+                'hero.heading_suffix' => $text,
+                'hero.lead' => $longText,
+                'hero.primary_cta_text' => $text,
+                'hero.card_title' => $text,
+                'hero.card_subtitle' => $text,
+                'process.eyebrow' => $text,
+                'process.heading' => $text,
+                'process.subheading' => $longText,
+                'process.step1_heading' => $text,
+                'process.step1_text' => $longText,
+                'process.step2_heading' => $text,
+                'process.step2_text' => $longText,
+                'process.step3_heading' => $text,
+                'process.step3_text' => $longText,
+                'categories.eyebrow' => $text,
+                'categories.heading' => $text,
+                'cta.heading' => $text,
+                'cta.text' => $longText,
+                'cta.button_text' => $text,
+            ],
+            'about' => [
+                'header_title' => $text,
+                'header_subtitle' => $longText,
+                'intro_text' => $longText,
+                'why_choose_eyebrow' => $text,
+                'why_choose_heading' => $text,
+                'mission_heading' => $text,
+                'mission_text' => $longText,
+                'vision_heading' => $text,
+                'vision_text' => $longText,
+                'values_heading' => $text,
+                'values_text' => $longText,
+                'value_added_eyebrow' => $text,
+                'value_added_heading' => $text,
+                'value_added_1_heading' => $text,
+                'value_added_1_text' => $longText,
+                'value_added_2_heading' => $text,
+                'value_added_2_text' => $longText,
+                'value_added_3_heading' => $text,
+                'value_added_3_text' => $longText,
+                'cta_heading' => $text,
+                'cta_text' => $longText,
+                'cta_button_text' => $text,
+            ],
+            'contact' => [
+                'header_title' => $text,
+                'header_subtitle' => $longText,
+                'intro_text' => $longText,
+                'address' => $text,
+                'phone' => $text,
+                'email' => 'nullable|email|max:255',
+                'branches_eyebrow' => $text,
+                'branches_heading' => $text,
+                'branches_subheading' => $longText,
+            ],
+            'privacy' => [
+                'title' => $text,
+                'subtitle' => $longText,
+                'body' => $body,
+            ],
+            'terms' => [
+                'title' => $text,
+                'subtitle' => $longText,
+                'body' => $body,
+            ],
+        ];
+
+        $rules = [];
+        foreach (['en', 'ar'] as $locale) {
+            foreach ($fieldsByPage[$page] as $field => $rule) {
+                $rules["content.{$locale}.{$field}"] = $rule;
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Drops any submitted field that still matches the current default -
+     * see websiteConfigUpdate()'s own comment for why (Website Config's
+     * inputs are prefilled with the resolved default, so "didn't touch
+     * this field" and "typed the default text back in" are indistinguishable
+     * on submit; both should keep tracking the live default rather than
+     * freezing today's default text as a permanent override).
+     */
+    /**
+     * $skipDefaultCompare names fields (e.g. 'body') that never get the
+     * "matches the current default, so drop it" check - only the "empty
+     * means revert to default" rule still applies to them. Needed for the
+     * Privacy/Terms rich-text body: its default is the richer 14/18-
+     * section legal markup (TOC nav, anchored sections), which Quill's
+     * simpler paragraph/heading/list model can never round-trip back to
+     * byte-for-byte - comparing it for equality would never match and is
+     * pointless, not "safe to skip for other reasons".
+     */
+    private function stripDefaultValues(array $submitted, array $defaults, array $skipDefaultCompare = []): array
+    {
+        $flatDefaults = Arr::dot($defaults);
+        $result = [];
+
+        foreach (Arr::dot($submitted) as $key => $value) {
+            $value = is_string($value) ? trim($value) : $value;
+
+            if ($value === '') {
+                continue;
+            }
+
+            if (!in_array($key, $skipDefaultCompare, true)) {
+                $defaultValue = array_key_exists($key, $flatDefaults) ? trim((string) $flatDefaults[$key]) : null;
+                if ($value === $defaultValue) {
+                    continue;
+                }
+            }
+
+            Arr::set($result, $key, $value);
+        }
+
+        return $result;
+    }
+
+    /**
+     * The value every public page itself already falls back to for one
+     * Website Config field, in one locale - built from the exact same
+     * sources those pages read from (never a second copy of the actual
+     * copy): translation keys via __(..., $locale) (resources/lang/{en,ar}/
+     * locale.php - the same key the public Blade's own `?? __('locale.X')`
+     * uses), the frontendwebsiteconfigs row (About/Contact intro + contact
+     * details, same as worker.about/worker.contact), and for Privacy/Terms'
+     * full legal body, the same worker.partials.*-legal-content partial
+     * the public page itself @includes, rendered here to a string. This is
+     * ALSO what a Partner's saved override is diffed against on save (see
+     * stripDefaultValues()) - one function, two call sites, so the two can
+     * never drift apart.
+     */
+    private function websiteConfigDefaults(string $page, string $locale, $frontwebsite): array
+    {
+        $isArabic = $locale === 'ar';
+
+        switch ($page) {
+            case 'home':
+                return [
+                    'hero' => [
+                        // Not translated on the public page either (worker/home.blade.php
+                        // writes this eyebrow as a plain literal, not __()) - kept
+                        // identical to that literal, not reworded here.
+                        'eyebrow' => 'Qamr Worker Portal',
+                        'heading_prefix' => __('locale.Hire', [], $locale),
+                        'heading_highlight' => __('locale.Verified, Work-Ready', [], $locale),
+                        'heading_suffix' => __('locale.Talent — Faster', [], $locale),
+                        'lead' => __('locale.Browse professionally screened candidate resumes across trades, domestic and skilled roles. Every profile is reviewed for accuracy so you can shortlist with confidence.', [], $locale),
+                        'primary_cta_text' => __('locale.Browse Resumes', [], $locale),
+                        'card_title' => __('locale.Find talent in seconds', [], $locale),
+                        'card_subtitle' => __("locale.Jump straight to what you're hiring for.", [], $locale),
+                    ],
+                    'process' => [
+                        'eyebrow' => __('locale.Simple Process', [], $locale),
+                        'heading' => __('locale.Hiring made straightforward', [], $locale),
+                        'subheading' => __('locale.From search to shortlist in three simple steps.', [], $locale),
+                        'step1_heading' => __('locale.Search & Filter', [], $locale),
+                        'step1_text' => __('locale.Narrow candidates by profession, experience type, work location and more.', [], $locale),
+                        'step2_heading' => __('locale.Review Full Profile', [], $locale),
+                        'step2_text' => __('locale.Check personal details, employment history, education and passport information.', [], $locale),
+                        'step3_heading' => __('locale.Reach Out To Hire', [], $locale),
+                        'step3_text' => __('locale.Contact our team directly by phone or WhatsApp to start the hiring process.', [], $locale),
+                    ],
+                    'categories' => [
+                        'eyebrow' => __('locale.Popular Categories', [], $locale),
+                        'heading' => __('locale.Browse by profession', [], $locale),
+                    ],
+                    'cta' => [
+                        'heading' => __('locale.Ready to find your next hire?', [], $locale),
+                        'text' => __('locale.Explore the full list of verified, work-ready candidates on the portal today.', [], $locale),
+                        'button_text' => __('locale.Browse All Resumes', [], $locale),
+                    ],
+                ];
+
+            case 'about':
+                return [
+                    'header_title' => __('locale.About Us', [], $locale),
+                    'header_subtitle' => __('locale.Learn about our mission, vision and the team behind Qamr International.', [], $locale),
+                    // Same frontendwebsiteconfigs.about_us_eng/about_us_ar +
+                    // hardcoded fallback chain as worker.about's own $aboutText.
+                    'intro_text' => ($isArabic && !empty($frontwebsite->about_us_ar ?? null))
+                        ? $frontwebsite->about_us_ar
+                        : ($frontwebsite->about_us_eng ?? __('locale.Connecting verified, work-ready candidates with employers who need reliable talent, fast.', [], $locale)),
+                    'why_choose_eyebrow' => __('locale.About Us', [], $locale),
+                    'why_choose_heading' => __('locale.Why Choose Us', [], $locale),
+                    'mission_heading' => __('locale.Mission', [], $locale),
+                    'mission_text' => __('locale.To provide unmatched recruitment solutions that help our clients become more productive and profitable.', [], $locale),
+                    'vision_heading' => __('locale.Vision', [], $locale),
+                    'vision_text' => __('locale.To be globally known for an impactful, efficient and innovative Human Resources Consulting Partner.', [], $locale),
+                    'values_heading' => __('locale.Values', [], $locale),
+                    'values_text' => __('locale.Creating a self-sustaining, productive environment that gives the best experiences and opportunities of growth to our customers and employees alike.', [], $locale),
+                    'value_added_eyebrow' => __('locale.Why Choose Us', [], $locale),
+                    'value_added_heading' => __('locale.Value Added Services for World-Class Customer Experience', [], $locale),
+                    'value_added_1_heading' => __('locale.Providing Service Before Self-Interest', [], $locale),
+                    'value_added_1_text' => __('locale.We take care of everything before your visit so that you can focus on your business and growth by saving your valuable time.', [], $locale),
+                    'value_added_2_heading' => __('locale.We have always been at the forefront of providing value-added services', [], $locale),
+                    'value_added_2_text' => __('locale.Catering our clients with all the benefits and convenience.', [], $locale),
+                    'value_added_3_heading' => __('locale.Delightful Experience', [], $locale),
+                    'value_added_3_text' => __('locale.Taking into account the overall journey by building long term relationship with our clients.', [], $locale),
+                    'cta_heading' => __('locale.Have a question for our team?', [], $locale),
+                    'cta_text' => __("locale.We'd love to hear from you - get in touch and we'll respond as soon as we can.", [], $locale),
+                    'cta_button_text' => __('locale.Contact Us', [], $locale),
+                ];
+
+            case 'contact':
+                return [
+                    'header_title' => __('locale.Get in touch!', [], $locale),
+                    'header_subtitle' => __('locale.Have questions about hiring or working with Qamr International? Reach us directly using the details below.', [], $locale),
+                    // Same frontendwebsiteconfigs fields + hardcoded fallback
+                    // chain as worker.contact's own $contactIntro/$contactAddr/
+                    // $contactPhone/$contactEmail.
+                    'intro_text' => ($isArabic && !empty($frontwebsite->contact_us_ar ?? null))
+                        ? $frontwebsite->contact_us_ar
+                        : ($frontwebsite->contact_us_eng ?? __('locale.Fill out the form and our team will get back to you within 24 hours.', [], $locale)),
+                    'address' => ($isArabic && !empty($frontwebsite->contact_us_location_ar ?? null))
+                        ? $frontwebsite->contact_us_location_ar
+                        : ($frontwebsite->contact_us_location ?: __('locale.Mumbai, India', [], $locale)),
+                    'phone' => $frontwebsite->contact_us_phone ?: '+919969566388',
+                    'email' => $frontwebsite->contact_us_email ?: 'info@qamrintl.com',
+                    'branches_eyebrow' => __('locale.Our Office', [], $locale),
+                    'branches_heading' => __('locale.Location', [], $locale),
+                    'branches_subheading' => __('locale.Our branches across the region.', [], $locale),
+                ];
+
+            case 'privacy':
+                return [
+                    'title' => __('locale.Privacy Policy', [], $locale),
+                    'subtitle' => __('locale.How Qamr International collects, uses, discloses and protects information on the Worker Portal.', [], $locale),
+                    'body' => $this->renderDefaultLegalBody('worker.partials.privacy-policy-legal-content', $frontwebsite, $locale),
+                ];
+
+            case 'terms':
+                return [
+                    'title' => __('locale.Terms of Service', [], $locale),
+                    'subtitle' => __('locale.The terms that govern access to and use of the Qamr International Worker Portal.', [], $locale),
+                    'body' => $this->renderDefaultLegalBody('worker.partials.terms-of-service-legal-content', $frontwebsite, $locale),
+                ];
+        }
+
+        return [];
+    }
+
+    /**
+     * Renders the same worker.partials.*-legal-content partial the public
+     * Privacy/Terms pages @include, in a specific locale, to a plain HTML
+     * string - the Website Config "Full Page Content" textarea's default.
+     * Temporarily swaps the app locale (that partial's __() calls read it,
+     * not a parameter) and always restores it in a finally, since this
+     * runs mid-request while building the Partner's own admin page (which
+     * has its own, unrelated current locale).
+     */
+    private function renderDefaultLegalBody(string $view, $frontwebsite, string $locale): string
+    {
+        $previousLocale = App::getLocale();
+        App::setLocale($locale);
+
+        try {
+            return view($view, ['frontwebsite' => $frontwebsite])->render();
+        } finally {
+            App::setLocale($previousLocale);
+        }
     }
 
     /**

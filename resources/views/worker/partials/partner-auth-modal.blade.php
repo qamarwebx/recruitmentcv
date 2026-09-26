@@ -85,9 +85,14 @@
                     copy of this same modal, which still must hardcode the
                     qamarhire.com host - see that file for why).
                 --}}
+                {{-- Label text is mode-dependent ("Sign in"/"Sign up with
+                Google" - login vs register), swapped by setMode() in
+                partner-auth.js via this span, never the icon/link itself.
+                Server-rendered default matches the modal's own default
+                mode (login). --}}
                 <a href="{{ route('partner.google.start') }}" class="w-btn w-btn-outline w-btn-block w-btn-google" data-partner-google-wrap>
                     <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.48a5.54 5.54 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.56-5.17 3.56-8.82Z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.07 7.93-2.91l-3.88-3c-1.08.72-2.45 1.15-4.05 1.15-3.11 0-5.75-2.1-6.69-4.92H1.3v3.09A12 12 0 0 0 12 24Z"/><path fill="#FBBC05" d="M5.31 14.32a7.2 7.2 0 0 1 0-4.64V6.59H1.3a12 12 0 0 0 0 10.82l4.01-3.09Z"/><path fill="#EA4335" d="M12 4.75c1.76 0 3.35.61 4.6 1.8l3.44-3.44C17.94 1.19 15.24 0 12 0A12 12 0 0 0 1.3 6.59l4.01 3.09C6.25 6.86 8.89 4.75 12 4.75Z"/></svg>
-                    {{ __('locale.Continue with Google') }}
+                    <span data-partner-google-label>{{ __('locale.Sign in with Google') }}</span>
                 </a>
 
                 <p class="w-form-switch" data-partner-switch-to-register>

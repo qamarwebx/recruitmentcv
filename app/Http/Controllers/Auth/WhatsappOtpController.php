@@ -94,7 +94,7 @@ class WhatsappOtpController extends Controller
  
         // Get Meta Whatsapp API and Meta Template
         // $metaAPI = Metawhatsappapi::where('status','=',1)->first();
-        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['otp'])->first();
+        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['recruitmentcv_otp'])->first();
 
         $staticTemplates = Staticmetanotification::where('status','=',1)->get();
         $otpTemplate = Metanotification::where('meta_template_name','=','otp')->first();

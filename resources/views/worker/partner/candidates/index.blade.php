@@ -138,7 +138,6 @@
                             <th>{{ __('locale.Profession') }}</th>
                             <th>{{ __('locale.Experience') }}</th>
                             <th>{{ __('locale.Nationality') }}</th>
-                            <th>{{ __('locale.Status') }}</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -163,11 +162,6 @@
                                 <td>{{ optional($candidate->profession)->display_name ?? '---' }}</td>
                                 <td>{{ $totalExp > 0 ? $totalExp . ' ' . __('locale.Years Experience') : __('locale.Fresher') }}</td>
                                 <td>{{ $nation->display_name ?? '---' }}</td>
-                                <td>
-                                    <span class="wp-badge {{ in_array($candidate->candidate_current_status, ['Deployed','Cancelled']) ? 'is-neutral' : 'is-success' }}">
-                                        {{ $candidate->candidate_current_status ? __('locale.' . $candidate->candidate_current_status) : __('locale.Available') }}
-                                    </span>
-                                </td>
                                 <td>
                                     <div style="display:flex;gap:8px;">
                                         <a href="{{ route('worker.partner.candidates.show', $candidate->slug_text) }}" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.View Profile') }}</a>

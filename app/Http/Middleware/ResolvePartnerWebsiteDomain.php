@@ -42,14 +42,31 @@ class ResolvePartnerWebsiteDomain
             'logo_ar' => null,
         ];
 
+        $currentPartner = null;
+
         if ($host !== 'recruitmentcv.com' && str_ends_with($host, '.recruitmentcv.com')) {
             $label = substr($host, 0, -strlen('.recruitmentcv.com'));
 
-            $record = Domain::active()->where('sub_domain', $label)->first();
+            // Gated on hostinger_status, not the legacy status column: status
+            // (pending/active/inactive/suspended) belongs to the older
+            // custom-domain_name flow (manual DNS/SSL verification before
+            // cutover) and nothing anywhere ever transitions it to 'active'
+            // for a *.recruitmentcv.com sub_domain - every subdomain sits at
+            // its 'pending' default forever regardless of how well it's
+            // provisioned. hostinger_status is the column HostingerSubdomainService/
+            // DomainController::subdomainUpdate() actually maintain automatically,
+            // so it's the real "is this subdomain live" signal here. status is
+            // still honored for its two explicit kill-switch values, in case
+            // a partner's subdomain is ever deliberately disabled that way.
+            $record = Domain::where('sub_domain', $label)
+                ->where('hostinger_status', 'success')
+                ->whereNotIn('status', ['inactive', 'suspended'])
+                ->first();
 
             if (!$record) {
                 // Never falls back to the default site or another partner -
-                // an unconfigured/inactive subdomain is a hard 404.
+                // an unconfigured/not-yet-provisioned/disabled subdomain is a
+                // hard 404.
                 abort(404);
             }
 
@@ -58,11 +75,21 @@ class ResolvePartnerWebsiteDomain
 
             $brand['logo_en'] = $englishLogo ? asset('admin/assets/images/partner/' . $englishLogo) : null;
             $brand['logo_ar'] = $arabicLogo ? asset('admin/assets/images/partner/' . $arabicLogo) : null;
+
+            // Same already-loaded $record, just following its existing
+            // partner() relation - not a second Domain lookup. This is the
+            // single place "which Partner's public website is this" gets
+            // resolved (Website Config's public-page content); still only
+            // ever identity for CONTENT selection, never auth - the
+            // partner guard/session is completely untouched by this.
+            $currentPartner = $record->partner;
         }
 
         // Any other host (apex, www, or a non-recruitmentcv.com dev/local
-        // domain) keeps the default (empty) $brand and is never rejected.
+        // domain) keeps the default (empty) $brand/no partner and is never
+        // rejected.
         View::share('partnerBrand', $brand);
+        app()->instance('currentPartner', $currentPartner);
 
         return $next($request);
     }

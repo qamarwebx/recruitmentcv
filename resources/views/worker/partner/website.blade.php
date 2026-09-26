@@ -3,6 +3,14 @@
 @section('title', 'Website')
 @section('page-title', __('locale.Website'))
 
+@section('page-style')
+    {{-- Quill 2.0.3 (Privacy Policy / Terms of Service body editors) - the
+    official Quickstart build (https://quilljs.com/docs/quickstart), not
+    the CRM's older vendored 1.x bundle. Loaded once, here only - never
+    alongside a second Quill version on this same page. --}}
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
+@endsection
+
 @section('content')
     @php
         $initials = collect(explode(' ', trim($partner->rec_off_name ?: $partner->owner_name ?: 'P')))->map(fn($w) => mb_substr($w, 0, 1))->take(2)->implode('');
@@ -12,6 +20,14 @@
             'inactive' => __('locale.Inactive'),
             'suspended' => __('locale.Suspended'),
         ];
+
+        // Website Config save handlers redirect back with ?open={page} so
+        // the partner lands back on the tab/sub-tab they just saved,
+        // rather than resetting to Company Profile - resolved server-side
+        // (not just via JS hash-routing) so it's correct on first paint.
+        $openWcPage = request()->query('open');
+        $activeTopTab = $openWcPage ? 'website-config' : 'company';
+        $activeWcPage = in_array($openWcPage, \App\Models\PartnerPageContent::PAGES, true) ? $openWcPage : 'home';
     @endphp
 
     <div class="wp-profile-header wp-fade-in">
@@ -23,15 +39,16 @@
     </div>
 
     <div class="wp-settings-tabs wp-fade-in" role="tablist">
-        <button type="button" class="wp-settings-tab-btn is-active" data-settings-tab-btn="company">{{ __('locale.Company Profile') }}</button>
+        <button type="button" class="wp-settings-tab-btn {{ $activeTopTab === 'company' ? 'is-active' : '' }}" data-settings-tab-btn="company">{{ __('locale.Company Profile') }}</button>
         <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="branding">{{ __('locale.Branding') }}</button>
         <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="domain">{{ __('locale.Domain') }}</button>
+        <button type="button" class="wp-settings-tab-btn {{ $activeTopTab === 'website-config' ? 'is-active' : '' }}" data-settings-tab-btn="website-config">{{ __('locale.Website Config') }}</button>
     </div>
 
     {{-- Company Profile - Domain model's company_name/company_address/etc,
     the SAME row + columns the CRM's "Website" tab -> Address sub-tab
     manages (DomainController::updateAddress()). --}}
-    <div class="wp-settings-tab-pane is-active" data-settings-tab-pane="company">
+    <div class="wp-settings-tab-pane {{ $activeTopTab === 'company' ? 'is-active' : '' }}" data-settings-tab-pane="company">
         <div class="w-info-card wp-fade-in">
             <h2>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1m-1 4h1m4-4h1m-1 4h1M9 21v-4h6v4"/></svg>
@@ -160,6 +177,13 @@
             @endif
         </div>
     </div>
+
+    {{-- Website Config (Home/About/Contact/Privacy/Terms) - its own file,
+    included here rather than inlined, since this one tab-pane is already
+    as large as the rest of this page combined. --}}
+    <div class="wp-settings-tab-pane {{ $activeTopTab === 'website-config' ? 'is-active' : '' }}" data-settings-tab-pane="website-config">
+        @include('worker.partner.website-config-partial', ['activeWcPage' => $activeWcPage])
+    </div>
 @endsection
 
 @section('page-script')
@@ -169,6 +193,13 @@
             logo: "{{ route('worker.partner.settings.logo') }}",
             domain: "{{ route('worker.partner.settings.domain') }}"
         };
+        window.WorkerBranchesUpdateUrl = "{{ route('worker.partner.website-config.branches.update') }}";
+        window.WorkerBranchesConfirmDelete = "{{ __('locale.Are you sure you want to delete this branch?') }}";
     </script>
     <script src="{{ asset('worker/js/partner-settings.js') }}?v={{ @filemtime(public_path('worker/js/partner-settings.js')) ?: time() }}"></script>
+    <script src="{{ asset('worker/js/partner-website-config.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config.js')) ?: time() }}"></script>
+    <script src="{{ asset('worker/js/partner-website-config-branches.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config-branches.js')) ?: time() }}"></script>
+    <script src="{{ asset('worker/js/partner-website-config-collapse.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config-collapse.js')) ?: time() }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+    <script src="{{ asset('worker/js/partner-website-config-quill.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config-quill.js')) ?: time() }}"></script>
 @endsection

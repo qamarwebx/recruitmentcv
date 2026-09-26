@@ -310,7 +310,7 @@ class AssociateController extends Controller
     public function primary_getotp(Request $request){
         $mobile_no = $request->mobile_no;
         // $metaAPI = Metawhatsappapi::where('status',1)->first();
-        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['otp'])->first();
+        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['recruitmentcv_otp'])->first();
 
         $otp = mt_rand(1000,9999);
 
@@ -390,7 +390,7 @@ class AssociateController extends Controller
     public function secondary_getotp(Request $request){
         $mobile_no = $request->mobile_no;
         // $metaAPI = Metawhatsappapi::where('status',1)->first();
-        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['otp'])->first();
+        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['recruitmentcv_otp'])->first();
 
 
         $otp = mt_rand(1000,9999);
