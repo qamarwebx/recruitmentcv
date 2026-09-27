@@ -38,6 +38,11 @@ Route::get('/lang/{locale}', [PartnerLanguageController::class, 'SwitchLang'])->
 // which are already reachable on this domain (no domain restriction there).
 Route::post('/partner/login-otp', [PartnerAuthController::class, 'login'])->name('worker.partner.login');
 Route::post('/partner/register-otp', [PartnerAuthController::class, 'register'])->name('worker.partner.register');
+// Fired right after Send OTP succeeds (register mode only) - saves the
+// submitted details immediately, before the OTP is ever verified, so an
+// abandoned registration still leaves a trackable record. register() above
+// then finalizes this same row once OTP verification succeeds.
+Route::post('/partner/register-pending', [PartnerAuthController::class, 'registerPending'])->name('worker.partner.register-pending');
 Route::post('/partner/check-mobile', [PartnerAuthController::class, 'checkMobile'])->name('worker.partner.check-mobile');
 Route::post('/partner/logout', [PartnerAuthController::class, 'logout'])->name('worker.partner.logout');
 

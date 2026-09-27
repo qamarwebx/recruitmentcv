@@ -38,17 +38,23 @@ class PartnerAuthController extends Controller
             return response()->json(['status' => 'new_partner']);
         }
 
+        // Recorded regardless of the registration_status gate below - this
+        // OTP verification is a real event against this Partner record even
+        // if a still-pending registerPending() row (see register() /
+        // registerPending() above) is the one being verified here, e.g. the
+        // original Register attempt was abandoned before OTP and the same
+        // number is now being verified through Login instead.
+        if (!$partner->mobile_verified_at) {
+            $partner->mobile_verified_at = now();
+            $partner->save();
+        }
+
         if ((int) $partner->registration_status === 0) {
             return response()->json(['status' => 'pending', 'message' => __('locale.Your registration is pending approval.')], 403);
         }
 
         if ((int) $partner->registration_status === 2) {
             return response()->json(['status' => 'rejected', 'message' => __('locale.Your registration has been rejected.')], 403);
-        }
-
-        if (!$partner->mobile_verified_at) {
-            $partner->mobile_verified_at = now();
-            $partner->save();
         }
 
         Auth::guard('partner')->login($partner);
@@ -88,6 +94,100 @@ class PartnerAuthController extends Controller
         ]);
     }
 
+    /**
+     * Saves the submitted registration details immediately when "Send OTP"
+     * is clicked in the Register as Partner modal - before OTP is ever
+     * verified - so admin can see registration attempts even if the OTP
+     * step is abandoned. mobile_verified_at is deliberately left null here;
+     * that's what marks this row as "pending OTP verification" (as opposed
+     * to registration_status, which separately gates admin approval and is
+     * unaffected by this step). register() below finalizes this same row -
+     * by owner_mobile_no, which is unique at the DB level - once OTP
+     * verification actually succeeds; it never creates a second row.
+     */
+    public function registerPending(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'company_name' => 'required|string|max:255',
+            'full_name' => 'required|string|max:255',
+            'email' => 'nullable|email|max:255',
+            'google_token' => 'nullable|string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $mobile = $request->session()->get('Mobile');
+
+        if (!$mobile) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Please verify your mobile number first.')], 422);
+        }
+
+        // Only an already-OTP-verified partner counts as a real duplicate -
+        // a still-pending row for this same number (e.g. Resend OTP, or a
+        // retry after abandoning an earlier attempt) is reused below
+        // instead of being treated as a conflict.
+        if (Partner::where('owner_mobile_no', $mobile)->whereNotNull('mobile_verified_at')->exists()) {
+            return response()->json(['status' => 'error', 'message' => __('locale.An account with this mobile number already exists.')], 422);
+        }
+
+        $googleData = null;
+        if ($request->filled('google_token')) {
+            $googleData = Cache::get('partner_google_register:' . $request->google_token);
+
+            if (!$googleData) {
+                return response()->json(['status' => 'error', 'message' => __('locale.Your Google sign-in has expired. Please try again.')], 422);
+            }
+
+            if (Partner::where('email', $googleData['email'])->whereNotNull('mobile_verified_at')->exists()) {
+                return response()->json(['status' => 'error', 'message' => __('locale.An account with this email already exists.')], 422);
+            }
+        }
+
+        $countryId = $request->session()->get('CountryId');
+        $country = $countryId ? Country::find($countryId) : null;
+
+        $partner = Partner::where('owner_mobile_no', $mobile)->whereNull('mobile_verified_at')->first() ?? new Partner();
+        $partner->rec_off_name = $request->company_name;
+        $partner->owner_name = $googleData['name'] ?? $request->full_name;
+        $partner->email = $googleData['email'] ?? $request->email;
+        if ($googleData) {
+            $partner->google_id = $googleData['google_id'];
+        }
+        $partner->owner_mobile_no = $mobile;
+        $partner->user_type = '1';
+        $partner->country_id = $country->id ?? null;
+        $partner->status = 1;
+        $partner->portal_status = 0;
+        $partner->registration_status = 0;
+        // mobile_verified_at intentionally NOT set - still pending OTP
+        // verification. register() sets it once that actually succeeds.
+        $partner->save();
+
+        // Match the existing admin-created-partner pattern (PartnerController::store)
+        // which also self-references partner_id = id for uniqueness.
+        if (!$partner->partner_id) {
+            $partner->partner_id = $partner->id;
+            $partner->save();
+        }
+
+        return response()->json(['status' => 'success']);
+    }
+
+    /**
+     * Finalizes the pending Partner row registerPending() above already
+     * created for this session's Mobile, once OTP verification has
+     * actually succeeded (see verifyOtp() in partner-auth.js, which calls
+     * this instead of the login flow for a register-mode OTP success).
+     * Updates that same row rather than creating a new one - owner_mobile_no
+     * is unique at the DB level, so a second insert here would fail anyway.
+     * Still reachable as a plain create+verify in one step for the
+     * "tried to Login, number wasn't registered" fallback form (step 3 of
+     * the modal), which never goes through registerPending() since no
+     * register-mode Send OTP ever happened for that path - firstOrNew below
+     * covers both.
+     */
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -107,7 +207,7 @@ class PartnerAuthController extends Controller
             return response()->json(['status' => 'error', 'message' => __('locale.Please verify your mobile number first.')], 422);
         }
 
-        if (Partner::where('owner_mobile_no', $mobile)->exists()) {
+        if (Partner::where('owner_mobile_no', $mobile)->whereNotNull('mobile_verified_at')->exists()) {
             return response()->json(['status' => 'error', 'message' => __('locale.An account with this mobile number already exists.')], 422);
         }
 
@@ -127,7 +227,7 @@ class PartnerAuthController extends Controller
                 return response()->json(['status' => 'error', 'message' => __('locale.Your Google sign-in has expired. Please try again.')], 422);
             }
 
-            if (Partner::where('email', $googleData['email'])->exists()) {
+            if (Partner::where('email', $googleData['email'])->whereNotNull('mobile_verified_at')->exists()) {
                 Cache::forget('partner_google_register:' . $request->google_token);
                 return response()->json(['status' => 'error', 'message' => __('locale.An account with this email already exists.')], 422);
             }
@@ -136,7 +236,7 @@ class PartnerAuthController extends Controller
         $countryId = $request->session()->get('CountryId');
         $country = $countryId ? Country::find($countryId) : null;
 
-        $partner = new Partner();
+        $partner = Partner::where('owner_mobile_no', $mobile)->whereNull('mobile_verified_at')->first() ?? new Partner();
         $partner->rec_off_name = $request->company_name;
         $partner->owner_name = $googleData['name'] ?? $request->full_name;
         $partner->email = $googleData['email'] ?? $request->email;
@@ -154,8 +254,10 @@ class PartnerAuthController extends Controller
 
         // Match the existing admin-created-partner pattern (PartnerController::store)
         // which also self-references partner_id = id for uniqueness.
-        $partner->partner_id = $partner->id;
-        $partner->save();
+        if (!$partner->partner_id) {
+            $partner->partner_id = $partner->id;
+            $partner->save();
+        }
 
         if ($googleData) {
             Cache::forget('partner_google_register:' . $request->google_token);

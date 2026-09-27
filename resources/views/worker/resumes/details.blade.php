@@ -35,6 +35,21 @@
                             </span>
                         </div>
 
+                        {{-- Locale-aware: Profession::display_name (existing
+                        accessor, same one used elsewhere on this page) picks
+                        ar_name over eng_name when app()->getLocale() is 'ar'
+                        - the same locale detection already used throughout
+                        this project, not a new one. "Indian Experience"/
+                        "Ex-Abroad" go through the existing __('locale.*')
+                        translation system the same way. Same markup as the
+                        Partner candidate detail page
+                        (worker.partner.candidates.show), reused verbatim. --}}
+                        <div class="w-profile-tags">
+                            <span class="w-tag">
+                                {{ $post->jobtype_id != '' ? (($post->gulfexperience == 1 ? __('locale.Indian Experience') . ' ' : ($post->gulfexperience == 2 ? __('locale.Ex-Abroad') . ' ' : '')) . optional($post->profession)->display_name) : '---' }}
+                            </span>
+                        </div>
+
                         <div class="w-profile-tags">
                             @if (optional($post->profession)->display_name)
                                 <span class="w-tag">{{ $post->profession->display_name }}</span>

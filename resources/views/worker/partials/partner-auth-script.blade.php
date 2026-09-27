@@ -16,6 +16,7 @@
     data-validate-otp-url="{{ url('/validate-otp2') }}"
     data-login-url="{{ route('worker.partner.login') }}"
     data-register-url="{{ route('worker.partner.register') }}"
+    data-register-pending-url="{{ route('worker.partner.register-pending') }}"
     data-check-mobile-url="{{ route('worker.partner.check-mobile') }}"
     data-verify-mobile-url="{{ route('worker.partner.mobile.verify') }}"
     data-open-login="{{ request('login') ? '1' : '0' }}"
