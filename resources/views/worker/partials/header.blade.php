@@ -11,9 +11,6 @@
         </a>
 
         <nav class="w-nav" data-nav>
-            <button type="button" class="w-nav-close" data-nav-close aria-label="{{ __('locale.Close') }}">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
-            </button>
             <a href="{{ route('worker.home') }}" class="{{ request()->routeIs('worker.home') ? 'is-active' : '' }}">{{ __('locale.Home') }}</a>
             <a href="{{ route('worker.resumes') }}" class="{{ request()->routeIs('worker.resumes*') ? 'is-active' : '' }}">{{ __('locale.Browse Resumes') }}</a>
             <a href="{{ route('worker.about') }}" class="{{ request()->routeIs('worker.about') ? 'is-active' : '' }}">{{ __('locale.About Us') }}</a>
