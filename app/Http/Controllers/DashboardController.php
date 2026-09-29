@@ -75,7 +75,8 @@ class DashboardController extends Controller
 
     public function getDetails($id)
     {
-        $booking = Booking::find($id);
+        // Only the logged-in customer's own booking.
+        $booking = Booking::where('id', $id)->where('user_id', Auth::id())->first();
 
         if (!$booking) {
             return response()->json(['error' => 'Order not found'], 404);
@@ -129,21 +130,24 @@ class DashboardController extends Controller
 
     public function updateMyprofile(Request $request)
     {
-    
-        $id = $request->user_id;
+        // Always the logged-in customer - never an id from the request
+        // (previously User::find($request->user_id) let any customer edit
+        // any account).
+        $user = Auth::user();
         $basepathstatus = Basepathstatus::first();
-        $user = User::find($id);
         $country = Country::find($request->country_id);
+
+        // Images only, and the stored extension comes from the detected
+        // file type - never the client's filename (a .php "photo" would have
+        // been saved into a public folder).
+        $request->validate([
+            'photo' => 'nullable|file|image|mimes:jpg,jpeg,png,webp|max:4096',
+        ]);
 
         // Upload Files
         if ($request->hasFile('photo')) {
             $file = $request->file('photo');
-            $name = time().'_'.$file->getClientOriginalName();
-            // remove space from image
-            $filename_ren = pathinfo($name,PATHINFO_FILENAME);
-            $fileext_ren = pathinfo($name,PATHINFO_EXTENSION);
-            $repspfilename = str_replace(" ","_",$filename_ren);
-            $new_file1 = $repspfilename.'.'.$fileext_ren;
+            $new_file1 = time().'_'.\Illuminate\Support\Str::random(10).'.'.$file->extension();
             if($basepathstatus->base_path_status == 1){
                 $file->move(base_path().'/public/user/img/avatars',$new_file1);
             }else{
@@ -151,14 +155,15 @@ class DashboardController extends Controller
             }
             $photo = $new_file1;
         }else{
-            $photo = '';
+            // Keep the current photo when none is uploaded.
+            $photo = $user->photo;
         }
 
         // Update data and change status of user in User table
         $user->name = $request->name;
-        if(isset($request->mobile_no)){
-            $user->mobile_no = $request->mobile_no;
-        }
+        // mobile_no is NOT changed here - only through the OTP flow
+        // (getMobileOTPandUpdate + getMobileOTPandUpdateValidate), so an
+        // unverified number can never be attached to an account.
         $user->company_name = $request->company_name;
         $user->address = $request->address;
         $user->country_id = $request->country_id;
@@ -533,10 +538,8 @@ class DashboardController extends Controller
     }
 
     public function getOTPValidation(Request $request){
-        $requestOtp = $request->otp;
-        $sessionOTP =  $request->session()->get('OTP');
-
-        if($requestOtp == $sessionOTP){
+        if (\App\Support\OtpVerification::check($request, $request->otp)) {
+            \App\Support\OtpVerification::consume($request);
             $mobile = $request->session()->get('Mobile');
             $country_id = $request->session()->get('CountryId');
 
@@ -570,7 +573,15 @@ class DashboardController extends Controller
 
 
     public function getEmailOTPandUpdate(Request $request){
-        $email = $request->email;
+        $email = trim((string) $request->email);
+        // users.email is unique - reject a taken/invalid address before
+        // sending anything (saving it later would just fail).
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['message' => __('locale.Please enter a valid email address.')], 422);
+        }
+        if (User::where('email', $email)->where('id', '!=', Auth::id())->exists()) {
+            return response()->json(['message' => __('locale.An account with this email already exists.')], 422);
+        }
         $userData = User::find(Auth::user()->id);
         // Generate OTP For Email
         $otp = mt_rand(1000,9999);
@@ -581,7 +592,8 @@ class DashboardController extends Controller
         $request->session()->put('emaiAddr',$email);
 
         $data['name'] = $userData->name;
-        $data['EmailOtp'] = $otp;
+        // The code is only sent by email and checked server-side - it is no
+        // longer returned in this response.
         $data['email'] = $email;
 
         // Send OTP to Email
@@ -596,7 +608,27 @@ class DashboardController extends Controller
 
     }
 
+    /** The code sent by getEmailOTPandUpdate(), for that same email. Single use. */
+    private function emailOtpMatches(Request $request): bool
+    {
+        $expected = (string) $request->session()->get('EmailOtp');
+        $expectedEmail = (string) $request->session()->get('emaiAddr');
+        $ok = $expected !== ''
+            && hash_equals($expected, trim((string) $request->otp))
+            && $expectedEmail !== ''
+            && strcasecmp($expectedEmail, trim((string) $request->email)) === 0;
+
+        if ($ok) {
+            $request->session()->forget(['EmailOtp', 'emaiAddr']);
+        }
+
+        return $ok;
+    }
+
     public function getEmailOTPandUpdateValidate(Request $request){
+        if (!$this->emailOtpMatches($request)) {
+            return response()->json(['message' => 'Invalid OTP. Please try again.'], 422);
+        }
         $email = $request->email;
         $userData = User::find(Auth::user()->id);
         $userData->email = $email;
@@ -607,6 +639,9 @@ class DashboardController extends Controller
     }
 
     public function getEmailOTPandUpdateValidateAr(Request $request){
+        if (!$this->emailOtpMatches($request)) {
+            return response()->json(['message' => 'رمز التحقق غير صحيح. يرجى المحاولة مرة أخرى.'], 422);
+        }
         $email = $request->email;
         $userData = User::find(Auth::user()->id);
         $userData->email = $email;
@@ -691,13 +726,18 @@ class DashboardController extends Controller
         }else{
             $country_id = Null;
         }
-        $userData = User::find(Auth::user()->id);
-        $userData->mobile_no = $mobile;
-        $userData->whatsapp_notification = "1";
-        $userData->country_id = $country_id;
-        $userData->country_code = $countryCode;
+        // One account per mobile number per website (CustomerSite) -
+        // otherwise OTP login for that number would be ambiguous.
+        if (\App\Support\CustomerSite::accounts()->where('mobile_no', $mobile)->where('id', '!=', Auth::id())->exists()) {
+            return response()->json(['message' => __('locale.An account with this mobile number already exists.')], 422);
+        }
 
-        $userData->save();
+        // The new number is only written to the account after its OTP is
+        // verified (getMobileOTPandUpdateValidate) - previously it was saved
+        // here, before any code was even sent.
+        \App\Support\OtpVerification::reset($request);
+        $request->session()->put('PendingMobileCountryId', $country_id);
+        $request->session()->put('PendingMobileCountryCode', $countryCode);
 
         $responseData = [];
 
@@ -885,37 +925,58 @@ class DashboardController extends Controller
         $responseData['mobile_no'] = $mobile;
         $responseData['countryCode'] = $countryCode;
         $responseData['country_iso_code'] = $country->iso_code;
-        $responseData['otp'] = $otp;
+        // The code is only sent by WhatsApp and checked server-side
+        // (applyVerifiedMobile) - never returned here.
 
 
         return response()->json($responseData);
 
     }
 
-    public function getMobileOTPandUpdateValidate(Request $request){
-        $otp = $request->otp;
+    /**
+     * Applies the number sent by getMobileOTPandUpdate() to the logged-in
+     * account - only once its OTP has actually been verified.
+     */
+    private function applyVerifiedMobile(Request $request): bool
+    {
+        if (!\App\Support\OtpVerification::check($request, $request->otp)) {
+            return false;
+        }
+
+        $mobile = $request->session()->get('Mobile');
+        if (\App\Support\CustomerSite::accounts()->where('mobile_no', $mobile)->where('id', '!=', Auth::id())->exists()) {
+            return false;
+        }
 
         $post = User::find(Auth::user()->id);
-
+        $post->mobile_no = $request->session()->get('Mobile');
+        $post->whatsapp_notification = "1";
+        $post->country_id = $request->session()->get('PendingMobileCountryId');
+        $post->country_code = $request->session()->get('PendingMobileCountryCode');
         $post->mobile_verified_at = date('Y-m-d H:i:s');
         $post->status = true;
-
         $post->save();
+
+        \App\Support\OtpVerification::consume($request);
+        $request->session()->forget(['PendingMobileCountryId', 'PendingMobileCountryCode']);
+
+        return true;
+    }
+
+    public function getMobileOTPandUpdateValidate(Request $request){
+        if (!$this->applyVerifiedMobile($request)) {
+            return response()->json(['message' => 'Invalid OTP. Please try again.'], 422);
+        }
 
         return response()->json(['message' => 'Mobile No Verified Successfully!']);
     }
 
     public function getMobileOTPandUpdateValidateAr(Request $request){
-        $otp = $request->otp;
+        if (!$this->applyVerifiedMobile($request)) {
+            return response()->json(['message' => 'رمز التحقق غير صحيح. يرجى المحاولة مرة أخرى.'], 422);
+        }
 
-        $post = User::find(Auth::user()->id);
-
-        $post->mobile_verified_at = date('Y-m-d H:i:s');
-        $post->status = true;
-
-        $post->save();
-
-        return response()->json(['message' => 'لم يتم التحقق من الجوال بنجاح!']);
+        return response()->json(['message' => 'تم التحقق من الجوال بنجاح!']);
     }
 
     public function checkMobileExists(Request $request){
@@ -1045,6 +1106,13 @@ class DashboardController extends Controller
             ->where('partner.id','=',$request->id)
             ->first();
 
+            // Never expose credentials/internal fields to a customer.
+            if ($post) {
+                foreach (['password', 'remember_token', 'google_id', 'email_verified_at', 'admin_id', 'registration_status', 'portal_status', 'user_type'] as $secret) {
+                    unset($post->{$secret});
+                }
+            }
+
             return response()->json($post);
     }
 
@@ -1073,7 +1141,12 @@ class DashboardController extends Controller
     {
         $id = $request->id;
 
-        $booking = Booking::find($id);
+        // Only the logged-in customer's own booking (previously any booking
+        // id, including other customers' and partners', could be cancelled).
+        $booking = Booking::where('id', $id)->where('user_id', Auth::id())->first();
+        if (!$booking) {
+            return response()->json(['message' => 'Order not found'], 404);
+        }
         $booking->status = true;
         $booking->booking_status = 2;
         $booking->booking_cancelled_by = 'User';

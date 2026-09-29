@@ -2,6 +2,9 @@
     $waNumber = isset($webconfig) && !empty($webconfig->whatsapp_number)
         ? preg_replace('/[^0-9]/', '', $webconfig->whatsapp_number)
         : null;
+    // Main recruitmentcv.com = PARTNER entry point (existing partner auth);
+    // a partner subdomain = that partner's CUSTOMER login.
+    $isPartnerSite = \App\Support\CustomerSite::isPartnerSite();
 @endphp
 <header class="w-header">
     <div class="w-nav-backdrop" data-nav-backdrop></div>
@@ -18,25 +21,63 @@
             @if ($waNumber)
                 <a href="https://wa.me/{{ $waNumber }}" target="_blank" rel="noopener">{{ __('locale.WhatsApp Us') }}</a>
             @endif
+            {{-- Mobile-only copy of the header button below (the header
+            button is hidden at the mobile breakpoint). --}}
+            @if ($isPartnerSite)
+                {{-- A logged-in customer uses the account dropdown in the
+                header (shown on mobile too), so only guests need this. --}}
+                @auth('partner')
+                    <a href="{{ route('worker.partner.candidates') }}" class="w-nav-account">{{ __('locale.Dashboard') }}</a>
+                @else
+                    @guest('web')
+                        <button type="button" class="w-nav-auth" data-customer-auth-trigger>{{ __('locale.Login') }}</button>
+                    @endguest
+                @endauth
+            @else
+                @guest('partner')
+                    <button type="button" class="w-nav-auth" data-partner-auth-trigger data-redirect="{{ route('worker.partner.candidates') }}">{{ __('locale.Login as Partner') }}</button>
+                @else
+                    <a href="{{ route('worker.partner.candidates') }}" class="w-nav-account">{{ __('locale.Partner Dashboard') }}</a>
+                @endguest
+            @endif
         </nav>
 
         <div class="w-header-actions">
             @include('worker.partials.language-switcher', ['switchRoute' => 'worker.lang.switch'])
-           @guest('partner')
-                <button type="button" class="w-btn w-btn-primary w-btn-sm w-btn-primary-desktop"
-                    data-partner-auth-trigger
-                    data-redirect="{{ route('worker.partner.candidates') }}">
-                    {{ request()->getHost() === 'recruitmentcv.com' || request()->getHost() === 'www.recruitmentcv.com'
-                        ? __('locale.Login as Partner')
-                        : __('locale.Login') }}
-                </button>
+            @if ($isPartnerSite)
+                {{-- Partner subdomain: CUSTOMER auth (users / `web` guard).
+                Partner auth here is only at /partner/login; a logged-in
+                partner keeps the existing Dashboard link and never gets the
+                customer menu. --}}
+                @auth('partner')
+                    <a href="{{ route('worker.partner.candidates') }}" class="w-btn w-btn-primary w-btn-sm w-btn-primary-desktop">
+                        {{ __('locale.Dashboard') }}
+                    </a>
+                @else
+                    @auth('web')
+                        @include('worker.partials.customer-menu')
+                    @else
+                        <button type="button" class="w-btn w-btn-primary w-btn-sm w-btn-primary-desktop" data-customer-auth-trigger>
+                            {{ __('locale.Login') }}
+                        </button>
+                    @endauth
+                @endauth
             @else
-                <a href="{{ route('worker.partner.candidates') }}" class="w-btn w-btn-primary w-btn-sm w-btn-primary-desktop">
-                    {{ request()->getHost() === 'recruitmentcv.com' || request()->getHost() === 'www.recruitmentcv.com'
-                        ? __('locale.Partner Dashboard')
-                        : __('locale.Dashboard') }}
-                </a>
-            @endguest
+                {{-- Main recruitmentcv.com: the existing PARTNER login/register
+                (same partner-auth modal + partner-auth.js + PartnerAuthController
+                as /partner/login). --}}
+                @guest('partner')
+                    <button type="button" class="w-btn w-btn-primary w-btn-sm w-btn-primary-desktop"
+                        data-partner-auth-trigger
+                        data-redirect="{{ route('worker.partner.candidates') }}">
+                        {{ __('locale.Login as Partner') }}
+                    </button>
+                @else
+                    <a href="{{ route('worker.partner.candidates') }}" class="w-btn w-btn-primary w-btn-sm w-btn-primary-desktop">
+                        {{ __('locale.Partner Dashboard') }}
+                    </a>
+                @endguest
+            @endif
             <button type="button" class="w-nav-toggle" data-nav-toggle aria-label="Toggle navigation" aria-expanded="false">
                 <span></span>
             </button>

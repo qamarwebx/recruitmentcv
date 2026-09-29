@@ -46,7 +46,7 @@
                         (worker.partner.candidates.show), reused verbatim. --}}
                         <div class="w-profile-tags">
                             <span class="w-tag">
-                                {{ $post->jobtype_id != '' ? (($post->gulfexperience == 1 ? __('locale.Indian Experience') . ' ' : ($post->gulfexperience == 2 ? __('locale.Ex-Abroad') . ' ' : '')) . optional($post->profession)->display_name) : '---' }}
+                                {{ $post->display_profession_label }}
                             </span>
                         </div>
 
@@ -61,15 +61,34 @@
                         </div>
 
                         <div class="w-cta-row">
-                            @guest('partner')
-                                <button type="button" class="w-btn w-btn-accent" data-partner-auth-trigger data-redirect="{{ route('worker.partner.candidates.show', $post->slug_text) }}?hire=1">
-                                    {{ __('locale.Hire Now') }}
-                                </button>
-                            @else
+                            {{-- Partner session: the partner portal's own hire flow
+                            (unchanged). Customer: customer Hire Now modal. Guest:
+                            customer Login - this is the customer website; partners
+                            sign in at /partner/login. --}}
+                            @php $isPartnerSite = \App\Support\CustomerSite::isPartnerSite(); @endphp
+                            @auth('partner')
                                 <a href="{{ route('worker.partner.candidates.show', $post->slug_text) }}?hire=1" class="w-btn w-btn-accent">
                                     {{ __('locale.Hire Now') }}
                                 </a>
-                            @endguest
+                            @else
+                                @if ($isPartnerSite)
+                                    @auth('web')
+                                        <button type="button" class="w-btn w-btn-accent" data-customer-hire-open>
+                                            {{ __('locale.Hire Now') }}
+                                        </button>
+                                    @else
+                                        <button type="button" class="w-btn w-btn-accent" data-customer-auth-trigger>
+                                            {{ __('locale.Hire Now') }}
+                                        </button>
+                                    @endauth
+                                @else
+                                    {{-- Main site = partner entry point: original
+                                    partner login/register, then partner hire. --}}
+                                    <button type="button" class="w-btn w-btn-accent" data-partner-auth-trigger data-redirect="{{ route('worker.partner.candidates.show', $post->slug_text) }}?hire=1">
+                                        {{ __('locale.Hire Now') }}
+                                    </button>
+                                @endif
+                            @endauth
 
                             @if ($post->cv_execute == 1 && $post->cv_execute_file != '')
                                 @guest('partner')
@@ -77,12 +96,35 @@
                                         {{ __('locale.Download CV') }}
                                     </button>
                                 @else
-                                    <a href="{{ asset('admin/assets/images/pdf/' . $post->cv_execute_file) }}" target="_blank" class="w-btn w-btn-outline">
+                                    {{-- Logged-in partner: their own B2B CV (PartnerPortalController::candidateCv). --}}
+                                    <a href="{{ route('worker.partner.candidates.cv', $post->slug_text) }}" target="_blank" class="w-btn w-btn-outline">
                                         {{ __('locale.Download CV') }}
                                     </a>
                                 @endguest
                             @elseif ($contactPhone)
                                 <a href="tel:{{ $contactPhone }}" class="w-btn w-btn-outline">{{ __('locale.Call') }}</a>
+                            @endif
+
+                            {{-- Customer wishlist (web guard) - partner subdomains
+                            only. Guests get the customer Login modal instead. --}}
+                            @if ($isPartnerSite)
+                            @auth('web')
+                                <button type="button" class="w-btn w-btn-outline w-wishlist-btn {{ $isWishlisted ? 'is-active' : '' }}"
+                                    data-wishlist-toggle
+                                    data-url="{{ route('worker.account.wishlist.toggle') }}"
+                                    data-candidate="{{ $post->slug_text }}"
+                                    data-label-on="{{ __('locale.Saved to Wishlist') }}"
+                                    data-label-off="{{ __('locale.Add to Wishlist') }}"
+                                    aria-pressed="{{ $isWishlisted ? 'true' : 'false' }}">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+                                    <span data-wishlist-label>{{ $isWishlisted ? __('locale.Saved to Wishlist') : __('locale.Add to Wishlist') }}</span>
+                                </button>
+                            @else
+                                <button type="button" class="w-btn w-btn-outline w-wishlist-btn" data-customer-auth-trigger>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+                                    <span>{{ __('locale.Add to Wishlist') }}</span>
+                                </button>
+                            @endauth
                             @endif
                         </div>
                     </div>
@@ -303,4 +345,14 @@
         </section>
     @endif
 
+    @if ($hire)
+        @include('worker.partials.customer-hire-modal', ['hire' => $hire, 'post' => $post])
+    @endif
+
+@endsection
+
+@section('page-script')
+    @if ($hire)
+        <script src="{{ asset('worker/js/customer-hire.js') }}?v={{ @filemtime(public_path('worker/js/customer-hire.js')) ?: time() }}"></script>
+    @endif
 @endsection

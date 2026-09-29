@@ -32,8 +32,10 @@ class SendOTPVerification extends Mailable
      */
     public function envelope()
     {
+        // Optional per-caller subject/view (Partner email change passes its
+        // own); defaults unchanged for every other caller.
         return new Envelope(
-            subject: 'OTP Verification '.$this->data['EmailOtp'],
+            subject: $this->data['subject'] ?? 'OTP Verification '.$this->data['EmailOtp'],
         );
     }
 
@@ -45,7 +47,7 @@ class SendOTPVerification extends Mailable
     public function content()
     {
         return new Content(
-            view: 'emails.emailerification',
+            view: $this->data['view'] ?? 'emails.emailerification',
         );
     }
 

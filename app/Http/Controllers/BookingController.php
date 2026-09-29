@@ -3922,7 +3922,9 @@ class BookingController extends Controller
     
     public function getDetails($id)
     {
-        $booking = Booking::with('workLocation')->find($id); // ✅ added
+        // Only the logged-in customer's own booking (customer route only:
+        // /my-order/details/{id}).
+        $booking = Booking::with('workLocation')->where('id', $id)->where('user_id', Auth::id())->first();
     
         if (!$booking) {
             return response()->json(['error' => 'Order not found'], 404);

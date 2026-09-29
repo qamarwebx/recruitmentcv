@@ -1,47 +1,50 @@
 @php
-    // Same 5-country set/order/default as the Driver app's phone dropdown
-    // (qamrjob.com/driver, intl-tel-input onlyCountries: sa/in/qa/ae/kw,
-    // preferredCountries: in/sa) - preferred pair first, then the rest
-    // alphabetically. Sourced from `countries` (already has all 5 active
-    // rows with correct country_code, and is the table generateOtp2()
-    // itself validates country_code against) rather than the 2-row
-    // otpcountrycodes table, so no DB changes were needed and the shared
-    // main-site OTP dropdown (which also reads otpcountrycodes) is untouched.
-    $partnerCountryCodeOrder = ['966', '91', '965', '974', '971'];
-    $partnerCountryFlags = [
-        '966' => '🇸🇦',
-        '91' => '🇮🇳',
-        '965' => '🇰🇼',
-        '974' => '🇶🇦',
-        '971' => '🇦🇪',
-    ];
-    $partnerCountries = \App\Models\Country::whereIn('country_code', $partnerCountryCodeOrder)->get()->keyBy('country_code');
+    // Country-code list: App\Support\CountryCodeOptions (shared with the
+    // customer account Change Mobile modal) via worker.partials.country-code-select.
 
-    // Display-only override for this phone selector specifically - the
-    // Country model's own display_name (used for nationality/other Country
-    // dropdowns site-wide) is left untouched, so this only affects how
-    // Saudi Arabia is labeled here, not anywhere else the same countries
-    // table is shown. +966 itself is unaffected either way, since the code
-    // is always rendered separately from this label.
-    $partnerCountryLabels = [
-        '966' => __('locale.Saudi Arabia (Country Code)'),
-    ];
+    // Inline = rendered as the body of the dedicated /partner/login page
+    // (PartnerAuthController::loginPage) instead of an overlay - same markup
+    // and same partner-auth.js flow, just without the backdrop/close button.
+    $inline = $inline ?? false;
 @endphp
-<div class="w-modal-backdrop" data-partner-auth-backdrop></div>
-<div class="w-modal" data-partner-auth-modal role="dialog" aria-modal="true" aria-labelledby="partnerAuthTitle">
+@unless ($inline)
+    <div class="w-modal-backdrop" data-partner-auth-backdrop></div>
+@endunless
+<div class="w-modal{{ $inline ? ' is-inline' : '' }}" data-partner-auth-modal
+    @if ($inline)
+        data-partner-auth-inline
+        data-inline-redirect="{{ $inlineRedirect ?? '' }}"
+        data-inline-mode="{{ ($inlineMode ?? 'login') === 'register' ? 'register' : 'login' }}"
+    @else
+        role="dialog" aria-modal="true"
+    @endif
+    aria-labelledby="partnerAuthTitle">
     <div class="w-modal-dialog">
-        <button type="button" class="w-modal-close" data-partner-auth-close aria-label="Close">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
+        @unless ($inline)
+            <button type="button" class="w-modal-close" data-partner-auth-close aria-label="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        @endunless
 
         <div class="w-modal-body">
+            {{-- /partner/login page: the language switcher (same partial the
+            public header used) sits on the right of the title. --}}
+            @if ($inline)
+                <div class="w-partner-auth-title-row">
+            @endif
             <h3 id="partnerAuthTitle" class="w-modal-title" data-partner-auth-title>{{ __('locale.Partner Login') }}</h3>
+            @if ($inline)
+                    @include('worker.partials.language-switcher', ['switchRoute' => 'worker.lang.switch'])
+                </div>
+            @endif
             <p class="w-modal-subtitle" data-partner-auth-subtitle>{{ __('locale.Sign in with your phone number to continue.') }}</p>
 
             <div class="w-form-alert" data-partner-auth-alert hidden></div>
 
             {{-- Step 1: mobile number (+ company/full name when registering) --}}
             <div data-partner-step="mobile">
+                {{-- Register-only fields, split around the shared Mobile Number row:
+                Full Name, Company, [Mobile], Email, Password, Confirm Password. --}}
                 <div data-partner-register-fields hidden>
                     <div class="w-form-row">
                         <label class="w-form-label">{{ __('locale.Full Name') }}</label>
@@ -51,24 +54,41 @@
                         <label class="w-form-label">{{ __('locale.Company / Recruitment Office Name') }}</label>
                         <input type="text" class="w-input" placeholder="e.g. Al Noor Recruitment Office" data-partner-reg-company>
                     </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.Email') }}</label>
-                        <input type="email" class="w-input" placeholder="{{ __('locale.Email') }}" data-partner-reg-email>
-                    </div>
                 </div>
                 <div class="w-form-row">
                     <label class="w-form-label">{{ __('locale.Mobile Number') }}</label>
                     <div class="w-form-phone-row">
-                        <select class="w-select" data-partner-country-code>
-                            @foreach ($partnerCountryCodeOrder as $code)
-                                @continue(!isset($partnerCountries[$code]))
-                                <option value="{{ $code }}">{{ $partnerCountryFlags[$code] }} {{ $partnerCountryLabels[$code] ?? trim($partnerCountries[$code]->display_name) }} +{{ $code }}</option>
-                            @endforeach
-                        </select>
+                        @include('worker.partials.country-code-select', ['attr' => 'data-partner-country-code'])
                         <input type="tel" class="w-input" placeholder="{{ __('locale.Mobile Number') }}" data-partner-mobile inputmode="numeric">
                     </div>
                 </div>
+                <div data-partner-register-fields hidden>
+                    <div class="w-form-row">
+                        <label class="w-form-label">{{ __('locale.Email') }}</label>
+                        <input type="email" class="w-input" placeholder="{{ __('locale.Email') }}" data-partner-reg-email>
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label">{{ __('locale.Password') }}</label>
+                        <input type="password" class="w-input" autocomplete="new-password" placeholder="{{ __('locale.Password') }}" data-partner-reg-password>
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label">{{ __('locale.Confirm Password') }}</label>
+                        <input type="password" class="w-input" autocomplete="new-password" placeholder="{{ __('locale.Confirm Password') }}" data-partner-reg-password-confirm>
+                    </div>
+                </div>
+                {{-- Order: Mobile -> Password (Login with Password only) ->
+                method switch -> button. Register/add-mobile always use OTP
+                (partner-auth.js hides the password row and switch there). --}}
+                <div class="w-form-row" data-partner-password-row hidden>
+                    <label class="w-form-label">{{ __('locale.Password') }}</label>
+                    <input type="password" class="w-input" autocomplete="current-password" placeholder="{{ __('locale.Password') }}" data-partner-password>
+                </div>
+                <div class="w-auth-method" role="tablist" data-partner-login-method>
+                    <button type="button" class="w-auth-method-btn is-active" role="tab" aria-selected="true" data-partner-method="otp">{{ __('locale.Login with OTP') }}</button>
+                    <button type="button" class="w-auth-method-btn" role="tab" aria-selected="false" data-partner-method="password">{{ __('locale.Login with Password') }}</button>
+                </div>
                 <button type="button" class="w-btn w-btn-primary w-btn-block" data-partner-send-otp>{{ __('locale.Send OTP') }}</button>
+                <button type="button" class="w-btn w-btn-primary w-btn-block" data-partner-password-login hidden>{{ __('locale.Continue') }}</button>
 
                 <div class="w-auth-divider" data-partner-google-wrap>
                     <span>{{ __('locale.OR') }}</span>
@@ -131,6 +151,14 @@
                 <div class="w-form-row">
                     <label class="w-form-label">{{ __('locale.Email') }}</label>
                     <input type="email" class="w-input" placeholder="{{ __('locale.Email') }}" data-partner-email>
+                </div>
+                <div class="w-form-row">
+                    <label class="w-form-label">{{ __('locale.Password') }}</label>
+                    <input type="password" class="w-input" autocomplete="new-password" placeholder="{{ __('locale.Password') }}" data-partner-password-new>
+                </div>
+                <div class="w-form-row">
+                    <label class="w-form-label">{{ __('locale.Confirm Password') }}</label>
+                    <input type="password" class="w-input" autocomplete="new-password" placeholder="{{ __('locale.Confirm Password') }}" data-partner-password-new-confirm>
                 </div>
                 <button type="button" class="w-btn w-btn-primary w-btn-block" data-partner-register-submit>{{ __('locale.Register') }}</button>
             </div>

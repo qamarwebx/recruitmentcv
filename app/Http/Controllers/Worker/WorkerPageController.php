@@ -7,11 +7,11 @@ use App\Models\Candidate;
 use App\Models\Carnknown;
 use App\Models\City;
 use App\Models\Country;
-use App\Models\Customercost;
 use App\Models\Education;
 use App\Models\Expecworkcity;
 use App\Models\Placeofissue;
 use App\Models\PartnerPageContent;
+use App\Models\PartnerPrice;
 use App\Models\Profession;
 use App\Models\Region;
 use App\Models\Religion;
@@ -302,22 +302,47 @@ class WorkerPageController extends Controller
 
         $bookingRequirements = DB::table('requirement_info')->where('language_type', 1)->get();
 
-        $serviceCost = Customercost::where('proff_id', $post->jobtype_id)
-            ->where('exp_type', $post->gulfexperience)
-            ->where('status', 1)
-            ->first();
-
-        $priceLabel = __('locale.On Request');
-        $departureLabel = '---';
-        if ($serviceCost) {
-            $priceLabel = round($serviceCost->cost, 0) == 0 ? __('locale.Free') : round($serviceCost->cost, 0) . ' SAR';
-            $departureLabel = $serviceCost->days . ' ' . __('locale.Days');
-        }
+        // This subdomain partner's own price for the candidate's experience
+        // type + profession, else the global default (apex: default only).
+        [$priceLabel, $departureLabel] = PartnerPrice::labelsFor($this->currentPartnerId(), $post);
 
         $frontwebsite = DB::table('frontendwebsiteconfigs')->first();
         $webconfig = Websiteconfig::first();
 
+        // Customer wishlist state for the Add/Saved button (web guard only).
+        $customer = \Illuminate\Support\Facades\Auth::guard('web')->user();
+        $customerId = $customer ? $customer->id : null;
+        $isWishlisted = $customerId
+            ? DB::table('wishlists')->where('user_id', $customerId)->where('cand_id', $post->id)->where('status', 1)->exists()
+            : false;
+
+        // Customer Hire Now modal options (logged-in customers only). The
+        // partner shown/offered comes from the same server-side rule the
+        // order itself uses (CustomerHireController::resolvePartner).
+        $hire = null;
+        // Customers only exist on partner subdomains (main site = partner entry).
+        if ($customer && \App\Support\CustomerSite::isPartnerSite()) {
+            [$hirePartnerId, $hireMustChoose] = \App\Http\Controllers\Worker\CustomerHireController::resolvePartner($post);
+            $existingOrder = DB::table('bookings')->where('user_id', $customerId)->where('cand_id', $post->id)->where('booking_status', '!=', 2)->first(['reference_no']);
+
+            $hire = [
+                'cities' => empty($post->expwp_id)
+                    ? Expecworkcity::orderBy('name')->get()
+                    : Expecworkcity::whereIn('id', explode(',', (string) $post->expwp_id))->get(),
+                'embassies' => DB::table('embassies')
+                    ->when(!empty($post->embassy_for), fn ($q) => $q->where('id', $post->embassy_for))
+                    ->orderBy('embassy')->get(['id', 'embassy']),
+                'partner' => $hirePartnerId ? \App\Models\Partner::find($hirePartnerId, ['id', 'rec_off_name', 'rec_office_arname', 'portal_rec_off_name', 'portal_add_disp_only']) : null,
+                'offices' => $hireMustChoose ? \App\Http\Controllers\Worker\CustomerHireController::portalOffices() : collect(),
+                'canHire' => (int) $customer->status === 1 && !empty($customer->mobile_verified_at),
+                'limitReached' => $webconfig && DB::table('bookings')->where('user_id', $customerId)->where('booking_status', '!=', 2)->count() >= (int) $webconfig->max_booking_limit,
+                'existingRef' => $existingOrder->reference_no ?? null,
+            ];
+        }
+
         return view('worker.resumes.details', [
+            'isWishlisted' => $isWishlisted,
+            'hire' => $hire,
             'post' => $post,
             'videoId' => $videoId,
             'testVideoId' => $testVideoId,

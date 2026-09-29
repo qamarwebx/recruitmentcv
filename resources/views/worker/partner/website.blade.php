@@ -41,8 +41,9 @@
     <div class="wp-settings-tabs wp-fade-in" role="tablist">
         <button type="button" class="wp-settings-tab-btn {{ $activeTopTab === 'company' ? 'is-active' : '' }}" data-settings-tab-btn="company">{{ __('locale.Company Profile') }}</button>
         <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="branding">{{ __('locale.Branding') }}</button>
-        <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="domain">{{ __('locale.Domain') }}</button>
+        <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="whatsapp">{{ __('locale.WhatsApp') }}</button>
         <button type="button" class="wp-settings-tab-btn {{ $activeTopTab === 'website-config' ? 'is-active' : '' }}" data-settings-tab-btn="website-config">{{ __('locale.Website Config') }}</button>
+        <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="domain">{{ __('locale.Domain') }}</button>
     </div>
 
     {{-- Company Profile - Domain model's company_name/company_address/etc,
@@ -113,9 +114,95 @@
                             <input type="file" class="w-input" accept="image/png,image/jpeg,image/webp" data-logo-input="ar">
                         </div>
                     </div>
+                    {{-- Same Domain row / folder as the logos (website_favicon). --}}
+                    <div class="w-form-row">
+                        <label class="w-form-label">{{ __('locale.Favicon') }}</label>
+                        <div class="wp-logo-upload">
+                            <img src="{{ $domain->website_favicon ? asset('admin/assets/images/partner/'.$domain->website_favicon) : asset('favicon.ico') }}" alt="Favicon" class="wp-favicon-preview" data-logo-preview="fav">
+                            <input type="file" class="w-input" accept="image/png,image/jpeg,image/webp" data-logo-input="fav">
+                        </div>
+                        <div class="form-text" style="color:var(--w-ink-500);font-size:0.8rem;margin-top:6px;">{{ __('locale.Square image recommended, e.g. 64 × 64 px.') }}</div>
+                    </div>
                 </div>
                 <div class="form-text" style="color:var(--w-ink-500);font-size:0.82rem;margin-bottom:16px;">{{ __('locale.JPG, PNG or WEBP, up to 2MB.') }}</div>
                 <button type="submit" class="w-btn w-btn-primary" data-settings-submit>{{ __('locale.Save Changes') }}</button>
+            </form>
+        </div>
+    </div>
+
+    {{-- WhatsApp - the floating WhatsApp button on this partner's public
+    website + portal (partner_page_contents 'whatsapp' row, see
+    PartnerPageContent::effectiveWhatsapp()). Prefilled with the saved
+    values, otherwise the defaults; an empty number keeps the default one. --}}
+    <div class="wp-settings-tab-pane" data-settings-tab-pane="whatsapp">
+        <div class="w-info-card wp-fade-in">
+            <h2>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5Z"/></svg>
+                {{ __('locale.WhatsApp') }}
+            </h2>
+            <div class="w-form-alert" style="display:none;" data-settings-alert="whatsapp"></div>
+            <form data-settings-form="whatsapp"
+                  data-wa-default-bg="{{ $whatsappDefaults['bg_color'] }}"
+                  data-wa-default-icon-color="{{ $whatsappDefaults['icon_color'] }}">
+                <div class="wp-info-grid">
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="wa-number">{{ __('locale.WhatsApp Number') }}</label>
+                        <input type="tel" id="wa-number" name="whatsapp_number" class="w-input" dir="ltr" inputmode="tel" maxlength="25"
+                               value="{{ $whatsapp['is_custom'] && $whatsapp['number'] !== $whatsappDefaults['number'] ? '+' . $whatsapp['number'] : '' }}"
+                               placeholder="+{{ $whatsappDefaults['number'] }}">
+                        <div class="wp-field-hint">{{ __('locale.Include the country code, e.g. +966 5X XXX XXXX. Leave empty to use the default number.') }}</div>
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label">{{ __('locale.WhatsApp Icon') }}</label>
+                        <div class="wp-logo-upload">
+                            <span class="wp-wa-icon-preview" data-wa-icon-preview>
+                                @if ($whatsapp['icon_url'])
+                                    <img src="{{ $whatsapp['icon_url'] }}" alt="">
+                                @else
+                                    @include('worker.partials.whatsapp-glyph')
+                                @endif
+                            </span>
+                            <div class="wp-wa-icon-actions">
+                                <input type="file" class="w-input" accept="image/png,image/jpeg,image/webp" data-wa-icon-input>
+                                <button type="button" class="w-btn w-btn-outline w-btn-sm" data-wa-icon-reset {{ $whatsapp['icon_url'] ? '' : 'hidden' }}>{{ __('locale.Use default icon') }}</button>
+                            </div>
+                        </div>
+                        <div class="wp-field-hint">{{ __('locale.JPG, PNG or WEBP, up to 2MB.') }} {{ __('locale.Square image recommended, e.g. 64 × 64 px.') }}</div>
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="wa-bg-color">{{ __('locale.Background Color') }}</label>
+                        <div class="wp-color-field">
+                            <input type="color" id="wa-bg-color" value="{{ $whatsapp['bg_color'] }}" data-wa-color="bg_color" aria-label="{{ __('locale.Background Color') }}">
+                            <input type="text" name="bg_color" class="w-input" dir="ltr" maxlength="7" value="{{ $whatsapp['bg_color'] }}" data-wa-color-text="bg_color" pattern="#[0-9a-fA-F]{6}">
+                        </div>
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="wa-icon-color">{{ __('locale.Text Color') }}</label>
+                        <div class="wp-color-field">
+                            <input type="color" id="wa-icon-color" value="{{ $whatsapp['icon_color'] }}" data-wa-color="icon_color" aria-label="{{ __('locale.Text Color') }}">
+                            <input type="text" name="icon_color" class="w-input" dir="ltr" maxlength="7" value="{{ $whatsapp['icon_color'] }}" data-wa-color-text="icon_color" pattern="#[0-9a-fA-F]{6}">
+                        </div>
+                        <div class="wp-field-hint">{{ __('locale.Colour of the button label. The WhatsApp icon uses the background colour on a white circle.') }}</div>
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="wa-label">{{ __('locale.Button Label') }}</label>
+                        <input type="text" id="wa-label" name="label" class="w-input" maxlength="40"
+                               value="{{ $whatsapp['label'] ?? '' }}" placeholder="{{ __('locale.Customer Support') }}" data-wa-label>
+                        <div class="wp-field-hint">{{ __('locale.Text shown beside the WhatsApp icon, e.g. Customer Support, WhatsApp Support or Contact Us. Leave empty for the default.') }}</div>
+                    </div>
+                </div>
+
+                <div class="w-form-row">
+                    <label class="w-form-label">{{ __('locale.Preview') }}</label>
+                    <div class="wp-wa-preview">
+                        {{-- The real floating button partial, in preview mode. --}}
+                        @include('worker.partials.whatsapp-float', ['wa' => $whatsapp, 'waPreview' => true])
+                        <span class="wp-wa-preview-link" dir="ltr" data-wa-preview-link>{{ $whatsapp['link'] }}</span>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-btn w-btn-primary" data-settings-submit>{{ __('locale.Save Changes') }}</button>
+                <template data-wa-glyph>@include('worker.partials.whatsapp-glyph')</template>
             </form>
         </div>
     </div>
@@ -191,7 +278,8 @@
         window.settingsUrls = {
             company: "{{ route('worker.partner.settings.company') }}",
             logo: "{{ route('worker.partner.settings.logo') }}",
-            domain: "{{ route('worker.partner.settings.domain') }}"
+            domain: "{{ route('worker.partner.settings.domain') }}",
+            whatsapp: "{{ route('worker.partner.settings.whatsapp') }}"
         };
         window.WorkerBranchesUpdateUrl = "{{ route('worker.partner.website-config.branches.update') }}";
         window.WorkerBranchesConfirmDelete = "{{ __('locale.Are you sure you want to delete this branch?') }}";

@@ -12,8 +12,8 @@ use Illuminate\Support\Facades\Auth;
  * hardcodes redirects to route('partner.login') - the pre-existing
  * email/password login page - for any /partner/* path. That would collide
  * with the Worker site's own phone+OTP login on the same URL prefix. This
- * sends unauthenticated visitors back to the worker homepage instead, where
- * the login/register modal lives.
+ * sends unauthenticated visitors to the dedicated /partner/login page
+ * (PartnerAuthController::loginPage) instead.
  *
  * Also re-checks registration_status on every request, not just at login:
  * PartnerAuthController::login() already refuses to establish a session for
@@ -28,7 +28,7 @@ class EnsureWorkerPartnerAuthenticated
         $guard = Auth::guard('partner');
 
         if (!$guard->check()) {
-            return redirect()->route('worker.home', ['login' => 1]);
+            return redirect()->route('worker.partner.login.page');
         }
 
         $partner = $guard->user();
@@ -42,9 +42,17 @@ class EnsureWorkerPartnerAuthenticated
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
-            return redirect()->route('worker.home', ['login' => 1, 'auth_message' => $message]);
+            return redirect()->route('worker.partner.login.page', ['login' => 1, 'auth_message' => $message]);
         }
 
-        return $next($request);
+        $response = $next($request);
+
+        // Authenticated partner pages must not be served from the browser
+        // cache (e.g. Back after logout).
+        $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0, private');
+        $response->headers->set('Pragma', 'no-cache');
+        $response->headers->set('Expires', '0');
+
+        return $response;
     }
 }

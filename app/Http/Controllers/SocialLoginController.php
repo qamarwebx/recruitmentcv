@@ -16,6 +16,7 @@ use Laravel\Socialite\Two\FacebookProvider;
 use Laravel\Socialite\Two\GoogleProvider;
 use Jenssegers\Agent\Agent;
 use Carbon\Carbon;
+use App\Support\CustomerSite;
 
 class SocialLoginController extends Controller
 {
@@ -121,6 +122,11 @@ class SocialLoginController extends Controller
         // Save login status in session
         $request->session()->put('loginStatus2525', $request->loginStatus2525);
 
+        // Google's callback always lands on the main domain, so remember
+        // which website (partner subdomain or main) the customer started on.
+        // The session cookie is shared across *.recruitmentcv.com.
+        $request->session()->put('customer_google_site', CustomerSite::partnerId() ?? 'main');
+
         // dd($this->configDriver()->stateless()->redirect());
         return $this->configDriver()->stateless()->redirect();
     }
@@ -196,16 +202,37 @@ class SocialLoginController extends Controller
                 'last_logged_at'   => Carbon::now()->toDateTimeString(),
             ];
 
-            $user = User::updateOrCreate(
-                ['email' => $googleUser->email], // check condition
-                [
-                    'name'              => $googleUser->name,
-                    'google_id'         => $googleUser->id,
-                    'password'          => \Hash::make('dummy-password'),
-                    'avatar_url'        => $googleUser->avatar,
-                    'email_verified_at' => now(),
-                ]
-            );  
+            // The website the customer started on (session value set in
+            // redirectToGoogle(), never from the request) - only recorded as
+            // "registered via" for a brand-new customer. One customer
+            // account works on every partner website (see CustomerSite), and
+            // only CUSTOMER accounts (users) are looked up here - a Partner
+            // with the same email is a separate account and never matters.
+            $site = $request->session()->pull('customer_google_site', 'main');
+            $sitePartnerId = $site === 'main' ? null : (int) $site;
+
+            $googleAttributes = [
+                'name'              => $googleUser->name,
+                'google_id'         => $googleUser->id,
+                'avatar_url'        => $googleUser->avatar,
+                'email_verified_at' => now(),
+            ];
+
+            $user = User::where('email', $googleUser->email)->first();
+
+            if ($user) {
+                // Existing customer: link Google and log in. Their password
+                // (if any, e.g. set on qamarhire.com) is left untouched.
+                $user->fill($googleAttributes);
+            } else {
+                // New customer: existing Google registration, with an
+                // unusable random password (Google-only sign-in).
+                $user = new User($googleAttributes + ['password' => \Hash::make(\Illuminate\Support\Str::random(40))]);
+                $user->email = $googleUser->email;
+                $user->partner_id = $sitePartnerId;
+            }
+
+            $user->save();
 
             $user->last_login_from = json_encode($last_login_from);
             $user->save();
@@ -221,9 +248,22 @@ class SocialLoginController extends Controller
             return redirect($redirectUrl);
     
         } catch (\Exception $e) {
+            // Back to where the customer started, with the error shown in the
+            // Login modal (customer-auth-modal reads customer_auth_error).
+            \Illuminate\Support\Facades\Log::warning('Google sign-in failed', ['error' => $e->getMessage()]);
+            $message = __('locale.Google sign-in could not be completed. Please try again.');
 
-            return redirect('/')
-                ->with('errorMsg', 'Google login failed. Please try again.');
+            // Partner attempt: back to the Partner Login modal (its existing
+            // ?login=1&auth_message= prompt).
+            if ($request->session()->pull('partner_google_intent')) {
+                return redirect()->route('worker.partner.login.page', ['login' => 1, 'auth_message' => $message]);
+            }
+
+            // Customer attempt: back to the page they started on (the
+            // failure can happen before $storedUrl above was read).
+            $startUrl = Pageloginurl::where('token_id', $request->session()->get('_token'))->value('prev_url');
+
+            return redirect($startUrl ?: url('/'))->with('customer_auth_error', $message);
         }
     }
 
@@ -254,8 +294,14 @@ class SocialLoginController extends Controller
     private function handlePartnerGoogleCallback($googleUser, Request $request)
     {
         $partner = Partner::where('email', $googleUser->email)->first();
+        $partnerLoginPage = route('worker.partner.login.page');
 
-        if (!$partner) {
+        // A row whose mobile was never OTP-verified is only an abandoned
+        // registration attempt (PartnerAuthController::registerPending()) -
+        // let Google resume registration instead of reporting it as
+        // "pending approval". registerPending()/register() reuse that same
+        // row by mobile number, so no duplicate is created.
+        if (!$partner || !$partner->mobile_verified_at) {
             $token = \Illuminate\Support\Str::random(48);
             \Illuminate\Support\Facades\Cache::put('partner_google_register:' . $token, [
                 'name' => $googleUser->name,
@@ -263,7 +309,7 @@ class SocialLoginController extends Controller
                 'google_id' => $googleUser->id,
             ], now()->addMinutes(15));
 
-            return redirect(url('/') . '?register=1&google_token=' . $token);
+            return redirect($partnerLoginPage . '?register=1&google_token=' . $token);
         }
 
         if (!$partner->google_id) {
@@ -272,11 +318,11 @@ class SocialLoginController extends Controller
         }
 
         if ((int) $partner->registration_status === 0) {
-            return redirect(url('/') . '?login=1&auth_message=' . urlencode('Your registration is pending approval.'));
+            return redirect($partnerLoginPage . '?login=1&auth_message=' . urlencode('Your registration is pending approval.'));
         }
 
         if ((int) $partner->registration_status === 2) {
-            return redirect(url('/') . '?login=1&auth_message=' . urlencode('Your registration has been rejected.'));
+            return redirect($partnerLoginPage . '?login=1&auth_message=' . urlencode('Your registration has been rejected.'));
         }
 
         Auth::guard('partner')->login($partner);

@@ -4,14 +4,15 @@ namespace App\Http\Controllers\Worker;
 
 use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\PdfGeneratorController;
 use App\Models\Activity;
 use App\Models\Basepathstatus;
 use App\Models\Booking;
 use App\Models\Candidate;
 use App\Models\Carnknown;
+use App\Models\Companycvexecute;
 use App\Models\City;
 use App\Models\Country;
-use App\Models\Customercost;
 use App\Models\Domain;
 use App\Models\Education;
 use App\Models\Employercandidate;
@@ -19,6 +20,7 @@ use App\Models\Employerplus;
 use App\Models\Expecworkcity;
 use App\Models\PartnerEmployerSaveFilter;
 use App\Models\PartnerPageContent;
+use App\Models\PartnerPrice;
 use App\Models\Placeofissue;
 use App\Models\Profession;
 use App\Models\Region;
@@ -30,6 +32,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -481,16 +484,19 @@ class PartnerPortalController extends Controller
         ));
     }
 
-    public function candidateShow($id)
+    /**
+     * The candidate (by slug) this partner may open, plus their live booking
+     * for it (or null) - 404 otherwise. Shared by candidateShow() and
+     * candidateCv() so both enforce the same access rule.
+     */
+    private function accessibleCandidate($slug, $partnerId): array
     {
-        $partnerId = $this->partnerId();
-
         // Marketplace browsing only shows "available" candidates, but a
         // partner should still be able to open a candidate from their own
         // booking history (e.g. Dashboard > Recent Candidates) even if that
         // candidate has since been deployed/unpublished.
         $post = Candidate::with('profession:id,eng_name,ar_name')
-            ->where('slug_text', $id)
+            ->where('slug_text', $slug)
             ->where('isdelete', 0)
             ->first();
 
@@ -505,11 +511,20 @@ class PartnerPortalController extends Controller
             ->where('cand_id', $post->id)
             ->where('booking_status', '!=', 2)
             ->first();
-        $hasBooking = (bool) $existingBooking;
 
         $isAvailable = (int) $post->status === 1 && (int) $post->publish === 1 && (int) $post->cv_execute === 1;
 
-        abort_if(!$isAvailable && !$hasBooking, 404);
+        abort_if(!$isAvailable && !$existingBooking, 404);
+
+        return [$post, $existingBooking];
+    }
+
+    public function candidateShow($id)
+    {
+        $partnerId = $this->partnerId();
+
+        [$post, $existingBooking] = $this->accessibleCandidate($id, $partnerId);
+        $hasBooking = (bool) $existingBooking;
 
         $totalExperience = $post->experience ? array_sum(array_filter(explode(',', $post->experience), 'is_numeric')) : 0;
         $nation = Country::find($post->nation_id);
@@ -555,17 +570,9 @@ class PartnerPortalController extends Controller
 
         $bookingRequirements = DB::table('requirement_info')->where('language_type', 1)->get();
 
-        $serviceCost = Customercost::where('proff_id', $post->jobtype_id)
-            ->where('exp_type', $post->gulfexperience)
-            ->where('status', 1)
-            ->first();
-
-        $priceLabel = __('locale.On Request');
-        $departureLabel = '---';
-        if ($serviceCost) {
-            $priceLabel = round($serviceCost->cost, 0) == 0 ? __('locale.Free') : round($serviceCost->cost, 0) . ' SAR';
-            $departureLabel = $serviceCost->days . ' ' . __('locale.Days');
-        }
+        // This partner's own price for the candidate's experience type +
+        // profession, else the global default.
+        [$priceLabel, $departureLabel] = PartnerPrice::labelsFor($partnerId, $post);
 
         return view('worker.partner.candidates.show', compact(
             'post',
@@ -587,6 +594,112 @@ class PartnerPortalController extends Controller
             'priceLabel',
             'departureLabel'
         ));
+    }
+
+    /**
+     * Download CV for the logged-in partner = THEIR B2B CV (the CRM's
+     * Candidate -> "B2B CV" tab: companycvexecutes row for this candidate +
+     * this partner, PDF in admin/assets/images/pdf/partner/). If it hasn't
+     * been executed yet, runs the CRM's own per-partner "Execute CV"
+     * (PdfGeneratorController::singlecvexecutepartner, which stamps this
+     * partner's CV-setting logo) first. The partner always comes from the
+     * partner guard, never the request, and the lookup is scoped to that
+     * partner_id, so another partner's CV can never be served.
+     */
+    public function candidateCv($id)
+    {
+        $partnerId = $this->partnerId();
+
+        [$post] = $this->accessibleCandidate($id, $partnerId);
+
+        // Same gate as every Download CV button.
+        abort_unless((int) $post->cv_execute === 1 && $post->cv_execute_file != '', 404);
+
+        $file = $this->partnerCvFile($post->id, $partnerId);
+
+        if (!$file) {
+            // One execution per candidate+partner at a time - the CRM
+            // executor creates the row when missing, so two concurrent
+            // first downloads must not both create one.
+            $lock = 'b2b_cv:' . $post->id . ':' . $partnerId;
+            DB::selectOne('SELECT GET_LOCK(?, 60) AS acquired', [$lock]);
+
+            try {
+                $file = $this->partnerCvFile($post->id, $partnerId);
+
+                if (!$file) {
+                    // The executor ends with ob_end_clean(), which fails when
+                    // no output buffer is open - give it one, and close
+                    // whatever it leaves behind.
+                    $obLevel = ob_get_level();
+                    ob_start();
+                    try {
+                        $result = app(PdfGeneratorController::class)->singlecvexecutepartner($post->id, $partnerId);
+                    } finally {
+                        while (ob_get_level() > $obLevel) {
+                            ob_end_clean();
+                        }
+                    }
+                    $file = $this->partnerCvFile($post->id, $partnerId);
+
+                    if (!$file) {
+                        Log::warning('Partner B2B CV execute failed', [
+                            'candidate_id' => $post->id,
+                            'partner_id' => $partnerId,
+                            'result' => method_exists($result, 'getData') ? $result->getData(true) : null,
+                        ]);
+                    }
+                }
+            } finally {
+                DB::selectOne('SELECT RELEASE_LOCK(?) AS released', [$lock]);
+            }
+        }
+
+        if (!$file) {
+            return redirect()->route('worker.partner.candidates.show', $post->slug_text)
+                ->withErrors(['cv' => __('locale.The CV could not be generated right now. Please try again later.')]);
+        }
+
+        // Private + no-store: the URL is the same for every partner, so no
+        // browser/CDN cache may ever hand one partner's CV to another.
+        $response = response()->file($file, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . basename($file) . '"',
+        ]);
+        // BinaryFileResponse defaults to "public" - override explicitly.
+        $response->setPrivate();
+        $response->headers->addCacheControlDirective('no-store');
+        $response->headers->addCacheControlDirective('max-age', 0);
+
+        return $response;
+    }
+
+    /**
+     * Absolute path of this partner's executed B2B CV for the candidate, or
+     * null if it isn't executed (no row / "Not Execute") or the file is gone.
+     */
+    private function partnerCvFile($candidateId, $partnerId): ?string
+    {
+        $row = Companycvexecute::where('cand_id', $candidateId)
+            ->where('partner_id', $partnerId)
+            ->where('status', 1)
+            ->whereNotNull('cv_file')
+            ->where('cv_file', '!=', '')
+            ->orderBy('id')
+            ->first();
+
+        if (!$row) {
+            return null;
+        }
+
+        $basepathstatus = Basepathstatus::first();
+        $dir = ($basepathstatus && $basepathstatus->base_path_status == 1)
+            ? base_path('public/admin/assets/images/pdf/partner')
+            : base_path('public_html/admin/assets/images/pdf/partner');
+
+        $path = $dir . '/' . basename($row->cv_file);
+
+        return is_file($path) ? $path : null;
     }
 
     public function employerPlus(Request $request)
@@ -1210,7 +1323,6 @@ class PartnerPortalController extends Controller
         $validator = Validator::make($request->all(), [
             'rec_off_name' => 'required|string|max:255',
             'owner_name' => 'required|string|max:255',
-            'email' => 'nullable|email|max:255',
             'country_id' => 'nullable|integer|exists:countries,id',
             'city_id' => 'nullable|integer|exists:cities,id',
         ]);
@@ -1223,7 +1335,8 @@ class PartnerPortalController extends Controller
 
         $partner->rec_off_name = $request->rec_off_name;
         $partner->owner_name = $request->owner_name;
-        $partner->email = $request->email;
+        // Email is changed only through the verified flow below
+        // (accountEmailSend/accountEmailVerify), never from this form.
         $partner->country_id = $request->country_id;
         $partner->city_id = $request->city_id;
         $partner->save();
@@ -1232,15 +1345,141 @@ class PartnerPortalController extends Controller
     }
 
     /**
-     * Website page - Company Profile/Branding/Domain tabs, all three
-     * reading/writing this SAME Domain row (App\Models\Partner::domain(),
-     * partner_id-scoped) that the CRM's "Website" tab manages - not
-     * persisted here on a bare page view (only settingsCompanyUpdate/
-     * settingsLogoUpdate/settingsDomainUpdate actually create the row, on
-     * first real save), just built in-memory so the form fields below
-     * have something to bind to for a partner who hasn't saved anything
-     * there yet.
+     * Account -> Change Password: New + Confirm only (the partner is already
+     * authenticated). partners.password, bcrypt - the same column the CRM's
+     * partner password update and Login with Password use.
      */
+    public function accountPasswordUpdate(Request $request)
+    {
+        $partner = Auth::guard('partner')->user();
+        $hadPassword = !empty($partner->password);
+
+        $validator = Validator::make($request->all(), [
+            'password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
+        ], [], [
+            'password' => __('locale.New Password'),
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->route('worker.partner.account')->withErrors($validator);
+        }
+
+        $partner->password = \Illuminate\Support\Facades\Hash::make($request->password);
+        $partner->save();
+
+        return redirect()->route('worker.partner.account')
+            ->with('success', $hadPassword ? __('locale.Password changed successfully.') : __('locale.Password set successfully. You can now log in with your password.'));
+    }
+
+    /**
+     * Account -> Email: step 1. Emails a code to the NEW address with the
+     * site's existing OTP mail (SendOTPVerification, as the customer email
+     * change does). Nothing is saved yet - the pending change lives only in
+     * this session until accountEmailVerify() confirms the code.
+     */
+    public function accountEmailSend(Request $request)
+    {
+        $partner = Auth::guard('partner')->user();
+        $email = strtolower(trim((string) $request->email));
+
+        $validator = Validator::make(['email' => $email], [
+            'email' => ['required', 'email', 'max:255', \Illuminate\Validation\Rule::unique('partners', 'email')->ignore($partner->id)],
+        ], [
+            'email.unique' => __('locale.An account with this email already exists.'),
+        ], [
+            'email' => __('locale.Email'),
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'message' => $validator->errors()->first('email')], 422);
+        }
+
+        if (strcasecmp($email, (string) $partner->email) === 0) {
+            return response()->json(['status' => 'error', 'message' => __('locale.This is already your email address.')], 422);
+        }
+
+        // At most 3 codes per partner per 10 minutes.
+        $sendKey = 'partner-email-code:' . $partner->id;
+        if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($sendKey, 3)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => __('locale.Too many attempts. Please try again in :seconds seconds.', ['seconds' => \Illuminate\Support\Facades\RateLimiter::availableIn($sendKey)]),
+            ], 429);
+        }
+
+        $code = (string) random_int(100000, 999999);
+
+        try {
+            // The global RecruitmentCV SMTP (CRM -> Website -> SMTP), the same
+            // for every partner; the .env mailer when it isn't configured.
+            \App\Models\WebsiteSmtpSetting::mailerOrDefault()->to($email)->send(new \App\Mail\SendOTPVerification([
+                'name' => $partner->owner_name ?: $partner->rec_off_name,
+                'company' => $partner->rec_off_name,
+                'EmailOtp' => $code,
+                'email' => $email,
+                'view' => 'emails.partner-email-verification',
+                'subject' => 'Your email verification code: ' . $code,
+            ]));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Partner email-change code not sent', ['partner_id' => $partner->id, 'error' => $e->getMessage()]);
+
+            return response()->json(['status' => 'error', 'message' => __('locale.We could not send the verification email. Please try again later.')], 500);
+        }
+
+        \Illuminate\Support\Facades\RateLimiter::hit($sendKey, 600);
+        $request->session()->put('partner_email_change', [
+            'partner_id' => $partner->id,
+            'email' => $email,
+            'code' => \Illuminate\Support\Facades\Hash::make($code),
+            'expires_at' => now()->addMinutes(10)->timestamp,
+            'attempts' => 0,
+        ]);
+
+        return response()->json(['status' => 'success', 'message' => __('locale.We sent a verification code to :email.', ['email' => $email])]);
+    }
+
+    /**
+     * Account -> Email: step 2. Saves the new email only once the emailed
+     * code is confirmed (10 minutes, 5 tries, single use). Anything else
+     * leaves the current email unchanged.
+     */
+    public function accountEmailVerify(Request $request)
+    {
+        $partner = Auth::guard('partner')->user();
+        $pending = $request->session()->get('partner_email_change');
+
+        if (!$pending || (int) $pending['partner_id'] !== (int) $partner->id || now()->timestamp > $pending['expires_at']) {
+            $request->session()->forget('partner_email_change');
+
+            return response()->json(['status' => 'error', 'message' => __('locale.The verification code has expired. Please request a new one.')], 422);
+        }
+
+        if (!\Illuminate\Support\Facades\Hash::check(trim((string) $request->code), $pending['code'])) {
+            $pending['attempts']++;
+            if ($pending['attempts'] >= 5) {
+                $request->session()->forget('partner_email_change');
+
+                return response()->json(['status' => 'error', 'message' => __('locale.Too many incorrect codes. Please request a new one.')], 422);
+            }
+            $request->session()->put('partner_email_change', $pending);
+
+            return response()->json(['status' => 'error', 'message' => __('locale.The verification code is incorrect.')], 422);
+        }
+
+        $request->session()->forget('partner_email_change');
+
+        // Re-checked: the address may have been taken since the code was sent.
+        if (\App\Models\Partner::where('email', $pending['email'])->where('id', '!=', $partner->id)->exists()) {
+            return response()->json(['status' => 'error', 'message' => __('locale.An account with this email already exists.')], 422);
+        }
+
+        $partner->email = $pending['email'];
+        $partner->email_verified_at = now();
+        $partner->save();
+
+        return response()->json(['status' => 'success', 'email' => $partner->email, 'message' => __('locale.Email updated successfully.')]);
+    }
+
     public function website()
     {
         $partner = Auth::guard('partner')->user();
@@ -1278,7 +1517,10 @@ class PartnerPortalController extends Controller
         // resolved separately rather than folded into the merge above.
         $pageContents['contact']['branches'] = PartnerPageContent::effectiveBranches($partner->id);
 
-        return view('worker.partner.website', compact('partner', 'domain', 'pageContents'));
+        $whatsapp = PartnerPageContent::effectiveWhatsapp($partner->id);
+        $whatsappDefaults = PartnerPageContent::defaultWhatsapp();
+
+        return view('worker.partner.website', compact('partner', 'domain', 'pageContents', 'whatsapp', 'whatsappDefaults'));
     }
 
     /**
@@ -1463,96 +1705,12 @@ class PartnerPortalController extends Controller
     /**
      * Every field is optional (nullable) - a Partner overrides only what
      * they want to change, everything else keeps rendering the existing
-     * default (frontendwebsiteconfigs field or hardcoded/translated copy)
-     * exactly as it does today. Applied identically to both content.en.*
-     * and content.ar.* so neither locale can be partially validated.
+     * default. The field list lives on PartnerPageContent::FIELDS, shared
+     * with CRM -> Website, so the two editors can never validate differently.
      */
     private function websiteConfigValidationRules(string $page): array
     {
-        $text = 'nullable|string|max:255';
-        $longText = 'nullable|string|max:2000';
-        $body = 'nullable|string|max:50000';
-
-        $fieldsByPage = [
-            'home' => [
-                'hero.eyebrow' => $text,
-                'hero.heading_prefix' => $text,
-                'hero.heading_highlight' => $text,
-                'hero.heading_suffix' => $text,
-                'hero.lead' => $longText,
-                'hero.primary_cta_text' => $text,
-                'hero.card_title' => $text,
-                'hero.card_subtitle' => $text,
-                'process.eyebrow' => $text,
-                'process.heading' => $text,
-                'process.subheading' => $longText,
-                'process.step1_heading' => $text,
-                'process.step1_text' => $longText,
-                'process.step2_heading' => $text,
-                'process.step2_text' => $longText,
-                'process.step3_heading' => $text,
-                'process.step3_text' => $longText,
-                'categories.eyebrow' => $text,
-                'categories.heading' => $text,
-                'cta.heading' => $text,
-                'cta.text' => $longText,
-                'cta.button_text' => $text,
-            ],
-            'about' => [
-                'header_title' => $text,
-                'header_subtitle' => $longText,
-                'intro_text' => $longText,
-                'why_choose_eyebrow' => $text,
-                'why_choose_heading' => $text,
-                'mission_heading' => $text,
-                'mission_text' => $longText,
-                'vision_heading' => $text,
-                'vision_text' => $longText,
-                'values_heading' => $text,
-                'values_text' => $longText,
-                'value_added_eyebrow' => $text,
-                'value_added_heading' => $text,
-                'value_added_1_heading' => $text,
-                'value_added_1_text' => $longText,
-                'value_added_2_heading' => $text,
-                'value_added_2_text' => $longText,
-                'value_added_3_heading' => $text,
-                'value_added_3_text' => $longText,
-                'cta_heading' => $text,
-                'cta_text' => $longText,
-                'cta_button_text' => $text,
-            ],
-            'contact' => [
-                'header_title' => $text,
-                'header_subtitle' => $longText,
-                'intro_text' => $longText,
-                'address' => $text,
-                'phone' => $text,
-                'email' => 'nullable|email|max:255',
-                'branches_eyebrow' => $text,
-                'branches_heading' => $text,
-                'branches_subheading' => $longText,
-            ],
-            'privacy' => [
-                'title' => $text,
-                'subtitle' => $longText,
-                'body' => $body,
-            ],
-            'terms' => [
-                'title' => $text,
-                'subtitle' => $longText,
-                'body' => $body,
-            ],
-        ];
-
-        $rules = [];
-        foreach (['en', 'ar'] as $locale) {
-            foreach ($fieldsByPage[$page] as $field => $rule) {
-                $rules["content.{$locale}.{$field}"] = $rule;
-            }
-        }
-
-        return $rules;
+        return PartnerPageContent::validationRules($page);
     }
 
     /**
@@ -1599,148 +1757,15 @@ class PartnerPortalController extends Controller
     }
 
     /**
-     * The value every public page itself already falls back to for one
-     * Website Config field, in one locale - built from the exact same
-     * sources those pages read from (never a second copy of the actual
-     * copy): translation keys via __(..., $locale) (resources/lang/{en,ar}/
-     * locale.php - the same key the public Blade's own `?? __('locale.X')`
-     * uses), the frontendwebsiteconfigs row (About/Contact intro + contact
-     * details, same as worker.about/worker.contact), and for Privacy/Terms'
-     * full legal body, the same worker.partials.*-legal-content partial
-     * the public page itself @includes, rendered here to a string. This is
-     * ALSO what a Partner's saved override is diffed against on save (see
-     * stripDefaultValues()) - one function, two call sites, so the two can
-     * never drift apart.
+     * The default each public page falls back to for one Website Config
+     * page/locale - see PartnerPageContent::defaultContent(), the single
+     * implementation (also used to seed the central recruitmentcv.com
+     * content). Also what a Partner's saved override is diffed against on
+     * save (stripDefaultValues()).
      */
     private function websiteConfigDefaults(string $page, string $locale, $frontwebsite): array
     {
-        $isArabic = $locale === 'ar';
-
-        switch ($page) {
-            case 'home':
-                return [
-                    'hero' => [
-                        // Not translated on the public page either (worker/home.blade.php
-                        // writes this eyebrow as a plain literal, not __()) - kept
-                        // identical to that literal, not reworded here.
-                        'eyebrow' => 'Qamr Worker Portal',
-                        'heading_prefix' => __('locale.Hire', [], $locale),
-                        'heading_highlight' => __('locale.Verified, Work-Ready', [], $locale),
-                        'heading_suffix' => __('locale.Talent — Faster', [], $locale),
-                        'lead' => __('locale.Browse professionally screened candidate resumes across trades, domestic and skilled roles. Every profile is reviewed for accuracy so you can shortlist with confidence.', [], $locale),
-                        'primary_cta_text' => __('locale.Browse Resumes', [], $locale),
-                        'card_title' => __('locale.Find talent in seconds', [], $locale),
-                        'card_subtitle' => __("locale.Jump straight to what you're hiring for.", [], $locale),
-                    ],
-                    'process' => [
-                        'eyebrow' => __('locale.Simple Process', [], $locale),
-                        'heading' => __('locale.Hiring made straightforward', [], $locale),
-                        'subheading' => __('locale.From search to shortlist in three simple steps.', [], $locale),
-                        'step1_heading' => __('locale.Search & Filter', [], $locale),
-                        'step1_text' => __('locale.Narrow candidates by profession, experience type, work location and more.', [], $locale),
-                        'step2_heading' => __('locale.Review Full Profile', [], $locale),
-                        'step2_text' => __('locale.Check personal details, employment history, education and passport information.', [], $locale),
-                        'step3_heading' => __('locale.Reach Out To Hire', [], $locale),
-                        'step3_text' => __('locale.Contact our team directly by phone or WhatsApp to start the hiring process.', [], $locale),
-                    ],
-                    'categories' => [
-                        'eyebrow' => __('locale.Popular Categories', [], $locale),
-                        'heading' => __('locale.Browse by profession', [], $locale),
-                    ],
-                    'cta' => [
-                        'heading' => __('locale.Ready to find your next hire?', [], $locale),
-                        'text' => __('locale.Explore the full list of verified, work-ready candidates on the portal today.', [], $locale),
-                        'button_text' => __('locale.Browse All Resumes', [], $locale),
-                    ],
-                ];
-
-            case 'about':
-                return [
-                    'header_title' => __('locale.About Us', [], $locale),
-                    'header_subtitle' => __('locale.Learn about our mission, vision and the team behind Qamr International.', [], $locale),
-                    // Same frontendwebsiteconfigs.about_us_eng/about_us_ar +
-                    // hardcoded fallback chain as worker.about's own $aboutText.
-                    'intro_text' => ($isArabic && !empty($frontwebsite->about_us_ar ?? null))
-                        ? $frontwebsite->about_us_ar
-                        : ($frontwebsite->about_us_eng ?? __('locale.Connecting verified, work-ready candidates with employers who need reliable talent, fast.', [], $locale)),
-                    'why_choose_eyebrow' => __('locale.About Us', [], $locale),
-                    'why_choose_heading' => __('locale.Why Choose Us', [], $locale),
-                    'mission_heading' => __('locale.Mission', [], $locale),
-                    'mission_text' => __('locale.To provide unmatched recruitment solutions that help our clients become more productive and profitable.', [], $locale),
-                    'vision_heading' => __('locale.Vision', [], $locale),
-                    'vision_text' => __('locale.To be globally known for an impactful, efficient and innovative Human Resources Consulting Partner.', [], $locale),
-                    'values_heading' => __('locale.Values', [], $locale),
-                    'values_text' => __('locale.Creating a self-sustaining, productive environment that gives the best experiences and opportunities of growth to our customers and employees alike.', [], $locale),
-                    'value_added_eyebrow' => __('locale.Why Choose Us', [], $locale),
-                    'value_added_heading' => __('locale.Value Added Services for World-Class Customer Experience', [], $locale),
-                    'value_added_1_heading' => __('locale.Providing Service Before Self-Interest', [], $locale),
-                    'value_added_1_text' => __('locale.We take care of everything before your visit so that you can focus on your business and growth by saving your valuable time.', [], $locale),
-                    'value_added_2_heading' => __('locale.We have always been at the forefront of providing value-added services', [], $locale),
-                    'value_added_2_text' => __('locale.Catering our clients with all the benefits and convenience.', [], $locale),
-                    'value_added_3_heading' => __('locale.Delightful Experience', [], $locale),
-                    'value_added_3_text' => __('locale.Taking into account the overall journey by building long term relationship with our clients.', [], $locale),
-                    'cta_heading' => __('locale.Have a question for our team?', [], $locale),
-                    'cta_text' => __("locale.We'd love to hear from you - get in touch and we'll respond as soon as we can.", [], $locale),
-                    'cta_button_text' => __('locale.Contact Us', [], $locale),
-                ];
-
-            case 'contact':
-                return [
-                    'header_title' => __('locale.Get in touch!', [], $locale),
-                    'header_subtitle' => __('locale.Have questions about hiring or working with Qamr International? Reach us directly using the details below.', [], $locale),
-                    // Same frontendwebsiteconfigs fields + hardcoded fallback
-                    // chain as worker.contact's own $contactIntro/$contactAddr/
-                    // $contactPhone/$contactEmail.
-                    'intro_text' => ($isArabic && !empty($frontwebsite->contact_us_ar ?? null))
-                        ? $frontwebsite->contact_us_ar
-                        : ($frontwebsite->contact_us_eng ?? __('locale.Fill out the form and our team will get back to you within 24 hours.', [], $locale)),
-                    'address' => ($isArabic && !empty($frontwebsite->contact_us_location_ar ?? null))
-                        ? $frontwebsite->contact_us_location_ar
-                        : ($frontwebsite->contact_us_location ?: __('locale.Mumbai, India', [], $locale)),
-                    'phone' => $frontwebsite->contact_us_phone ?: '+919969566388',
-                    'email' => $frontwebsite->contact_us_email ?: 'info@qamrintl.com',
-                    'branches_eyebrow' => __('locale.Our Office', [], $locale),
-                    'branches_heading' => __('locale.Location', [], $locale),
-                    'branches_subheading' => __('locale.Our branches across the region.', [], $locale),
-                ];
-
-            case 'privacy':
-                return [
-                    'title' => __('locale.Privacy Policy', [], $locale),
-                    'subtitle' => __('locale.How Qamr International collects, uses, discloses and protects information on the Worker Portal.', [], $locale),
-                    'body' => $this->renderDefaultLegalBody('worker.partials.privacy-policy-legal-content', $frontwebsite, $locale),
-                ];
-
-            case 'terms':
-                return [
-                    'title' => __('locale.Terms of Service', [], $locale),
-                    'subtitle' => __('locale.The terms that govern access to and use of the Qamr International Worker Portal.', [], $locale),
-                    'body' => $this->renderDefaultLegalBody('worker.partials.terms-of-service-legal-content', $frontwebsite, $locale),
-                ];
-        }
-
-        return [];
-    }
-
-    /**
-     * Renders the same worker.partials.*-legal-content partial the public
-     * Privacy/Terms pages @include, in a specific locale, to a plain HTML
-     * string - the Website Config "Full Page Content" textarea's default.
-     * Temporarily swaps the app locale (that partial's __() calls read it,
-     * not a parameter) and always restores it in a finally, since this
-     * runs mid-request while building the Partner's own admin page (which
-     * has its own, unrelated current locale).
-     */
-    private function renderDefaultLegalBody(string $view, $frontwebsite, string $locale): string
-    {
-        $previousLocale = App::getLocale();
-        App::setLocale($locale);
-
-        try {
-            return view($view, ['frontwebsite' => $frontwebsite])->render();
-        } finally {
-            App::setLocale($previousLocale);
-        }
+        return PartnerPageContent::defaultContent($page, $locale, $frontwebsite);
     }
 
     /**
@@ -1799,8 +1824,9 @@ class PartnerPortalController extends Controller
         $maxBytes = 2048 * 1024;
 
         $decoded = [];
+        $mimes = [];
 
-        foreach (['english_logo' => 'website_logo', 'arabic_logo' => 'website_logo_ar'] as $input => $column) {
+        foreach (['english_logo' => 'website_logo', 'arabic_logo' => 'website_logo_ar', 'favicon' => 'website_favicon'] as $input => $column) {
             $value = $request->input($input);
 
             if (!$value) {
@@ -1831,6 +1857,7 @@ class PartnerPortalController extends Controller
             }
 
             $decoded[$column] = $binary;
+            $mimes[$column] = strtolower($matches[1]);
         }
 
         if (empty($decoded)) {
@@ -1849,13 +1876,18 @@ class PartnerPortalController extends Controller
         }
 
         foreach ($decoded as $column => $binary) {
-            $suffix = $column === 'website_logo' ? 'en' : 'ar';
+            $suffix = ['website_logo' => 'en', 'website_logo_ar' => 'ar', 'website_favicon' => 'fav'][$column];
 
             if ($domain->{$column} && file_exists($uploadPath . '/' . $domain->{$column})) {
                 unlink($uploadPath . '/' . $domain->{$column});
             }
 
-            $name = time() . '_' . $suffix . '.png';
+            // Logos keep their existing .png naming; the favicon keeps its real
+            // extension so browsers get the right type for <link rel="icon">.
+            $extension = $column === 'website_favicon'
+                ? (['image/jpeg' => 'jpg', 'image/webp' => 'webp'][$mimes[$column]] ?? 'png')
+                : 'png';
+            $name = time() . '_' . $suffix . '.' . $extension;
             file_put_contents($uploadPath . '/' . $name, $binary);
             $domain->{$column} = $name;
         }
@@ -1868,7 +1900,104 @@ class PartnerPortalController extends Controller
             'data' => [
                 'english_logo' => $domain->website_logo ? asset('admin/assets/images/partner/' . $domain->website_logo) : null,
                 'arabic_logo' => $domain->website_logo_ar ? asset('admin/assets/images/partner/' . $domain->website_logo_ar) : null,
+                'favicon' => $domain->website_favicon ? asset('admin/assets/images/partner/' . $domain->website_favicon) : null,
             ],
+        ]);
+    }
+
+    /**
+     * WhatsApp tab - the floating WhatsApp button's number/icon/colors for
+     * the logged-in partner's public website + portal. Stored on this
+     * partner's own partner_page_contents 'whatsapp' row (unique per
+     * partner+page, same storage as Website Config); the icon file goes in
+     * the same admin/assets/images/partner/ folder as the Branding logos.
+     * An empty number falls back to the default number.
+     */
+    public function settingsWhatsappUpdate(Request $request)
+    {
+        $partner = Auth::guard('partner')->user();
+
+        $validator = Validator::make($request->all(), [
+            'whatsapp_number' => ['nullable', 'string', 'max:25', 'regex:/^\+?[0-9\s\-()]+$/'],
+            'bg_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'icon_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'label' => ['nullable', 'string', 'max:40'],
+            'icon' => ['nullable', 'string'],
+            'remove_icon' => ['nullable', 'boolean'],
+        ], [
+            'whatsapp_number.regex' => __('locale.Enter a valid WhatsApp number with country code.'),
+            'bg_color.*' => __('locale.Choose a valid background color.'),
+            'icon_color.*' => __('locale.Choose a valid text color.'),
+            'label.max' => __('locale.The button label may not be longer than 40 characters.'),
+        ]);
+
+        $number = preg_replace('/\D/', '', (string) $request->input('whatsapp_number'));
+
+        $validator->after(function ($validator) use ($number) {
+            if ($number !== '' && (strlen($number) < 8 || strlen($number) > 15)) {
+                $validator->errors()->add('whatsapp_number', __('locale.Enter a valid WhatsApp number with country code.'));
+            }
+        });
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $row = PartnerPageContent::where('partner_id', $partner->id)->where('page', PartnerPageContent::WHATSAPP)->first();
+        $oldIcon = $row->content['icon'] ?? null;
+        $icon = $request->boolean('remove_icon') ? null : $oldIcon;
+
+        $basepathstatus = Basepathstatus::first();
+        $uploadPath = ($basepathstatus && $basepathstatus->base_path_status == 1)
+            ? base_path('public/admin/assets/images/partner')
+            : base_path('public_html/admin/assets/images/partner');
+
+        if ($request->filled('icon')) {
+            if (!preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/', $request->input('icon'), $matches)) {
+                return response()->json(['status' => 'error', 'errors' => ['icon' => [__('locale.Invalid image data.')]]], 422);
+            }
+
+            $extension = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp'][strtolower($matches[1])] ?? null;
+            if (!$extension) {
+                return response()->json(['status' => 'error', 'errors' => ['icon' => [__('locale.Only JPG, PNG or WEBP images are allowed.')]]], 422);
+            }
+
+            $binary = base64_decode($matches[2], true);
+            if ($binary === false || strlen($binary) > 2048 * 1024) {
+                return response()->json(['status' => 'error', 'errors' => ['icon' => [__('locale.Image must not be larger than 2MB.')]]], 422);
+            }
+
+            if (!is_dir($uploadPath)) {
+                mkdir($uploadPath, 0755, true);
+            }
+
+            $icon = 'wa_' . $partner->id . '_' . time() . '.' . $extension;
+            file_put_contents($uploadPath . '/' . $icon, $binary);
+        }
+
+        PartnerPageContent::updateOrCreate(
+            ['partner_id' => $partner->id, 'page' => PartnerPageContent::WHATSAPP],
+            ['content' => [
+                'number' => $number !== '' ? $number : null,
+                'icon' => $icon,
+                'bg_color' => strtolower($request->input('bg_color')),
+                'icon_color' => strtolower($request->input('icon_color')),
+                // Blank = the default "Customer Support" label.
+                'label' => trim((string) $request->input('label')) !== '' ? trim(strip_tags((string) $request->input('label'))) : null,
+            ]]
+        );
+
+        // Old icon removed only once the row points at its replacement.
+        if ($oldIcon && $oldIcon !== $icon && file_exists($uploadPath . '/' . $oldIcon)) {
+            unlink($uploadPath . '/' . $oldIcon);
+        }
+
+        PartnerPageContent::forgetWhatsapp($partner->id);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => __('locale.WhatsApp settings updated successfully.'),
+            'data' => PartnerPageContent::effectiveWhatsapp($partner->id),
         ]);
     }
 

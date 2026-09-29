@@ -38,6 +38,7 @@ class Domain extends Model
 
         'website_logo',
         'website_logo_ar',
+        'website_favicon',
 
         'company_address',
         'company_address_ar',
@@ -198,5 +199,40 @@ class Domain extends Model
 
         return $file;
 
+    }
+
+    /**
+     * Public URL of the partner's Branding favicon, versioned with the
+     * file's modification time so browsers/CDN refetch it only when a new
+     * favicon is actually uploaded. Null when none is set or the file is
+     * missing, so callers fall back to their default icon.
+     */
+    public function faviconUrl(): ?string
+    {
+        if (empty($this->website_favicon)) {
+            return null;
+        }
+
+        $relative = 'admin/assets/images/partner/' . $this->website_favicon;
+        $version = @filemtime(public_path($relative));
+
+        if (!$version) {
+            return null;
+        }
+
+        return asset($relative) . '?v=' . $version;
+    }
+
+    /**
+     * Site-wide default favicon (the QamarHire icon, same file as
+     * qamarhire.com/user/img/favicon.png), used whenever a partner has no
+     * Branding favicon. Versioned the same way as faviconUrl().
+     */
+    public static function defaultFaviconUrl(): string
+    {
+        $relative = 'user/img/favicon.png';
+        $version = @filemtime(public_path($relative));
+
+        return asset($relative) . ($version ? '?v=' . $version : '');
     }
 }

@@ -44,7 +44,7 @@
                     go through the existing __('locale.*') translation
                     system the same way. --}}
                     <span class="w-tag">
-                        {{ $post->jobtype_id != '' ? (($post->gulfexperience == 1 ? __('locale.Indian Experience') . ' ' : ($post->gulfexperience == 2 ? __('locale.Ex-Abroad') . ' ' : '')) . optional($post->profession)->display_name) : '---' }}
+                        {{ $post->display_profession_label }}
                     </span>
                </div>
 
@@ -75,11 +75,10 @@
                     {{-- Reachable only once already authenticated as a partner
                     (this page sits behind worker.partner.auth), so unlike the
                     public resumes/details page there's no guest/login-modal
-                    branch needed here - just the same cv_execute gate and the
-                    same direct static-asset link, no download.cv controller
-                    round trip (that one is hard-wired to a web-guard User). --}}
+                    branch needed here. Same cv_execute gate; the link serves
+                    this partner's own B2B CV (PartnerPortalController::candidateCv). --}}
                     @if ($post->cv_execute == 1 && $post->cv_execute_file != '')
-                        <a href="{{ asset('admin/assets/images/pdf/' . $post->cv_execute_file) }}" target="_blank" class="w-btn w-btn-outline">
+                        <a href="{{ route('worker.partner.candidates.cv', $post->slug_text) }}" target="_blank" class="w-btn w-btn-outline">
                             {{ __('locale.Download CV') }}
                         </a>
                     @endif

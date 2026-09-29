@@ -7854,7 +7854,7 @@ class PdfGeneratorController extends Controller
             if (isset($cand_name_ar_cvsetting)) {
                 if($cand_name_ar_cvsetting->font_family == 'B'){
                     if(isset($basepathSt) && $basepathSt->base_path_status == 1){
-                        $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
+                        $candarpopins = base_path().'/public/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
                     }else{
                         $candarpopins = base_path().'/public_html/admin/assets/custom_fonts/IBM_Plex_Sans_Arabic/IBMPlexSansArabic-Medium.ttf';
                     }

@@ -40,6 +40,7 @@ class ResolvePartnerWebsiteDomain
         $brand = [
             'logo_en' => null,
             'logo_ar' => null,
+            'favicon' => null,
         ];
 
         $currentPartner = null;
@@ -75,6 +76,8 @@ class ResolvePartnerWebsiteDomain
 
             $brand['logo_en'] = $englishLogo ? asset('admin/assets/images/partner/' . $englishLogo) : null;
             $brand['logo_ar'] = $arabicLogo ? asset('admin/assets/images/partner/' . $arabicLogo) : null;
+            // Same Domain row as the logos; versioned by the file's mtime.
+            $brand['favicon'] = $record->faviconUrl();
 
             // Same already-loaded $record, just following its existing
             // partner() relation - not a second Domain lookup. This is the

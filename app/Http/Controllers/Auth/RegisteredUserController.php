@@ -38,11 +38,15 @@ class RegisteredUserController extends Controller
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
-        $user = User::create([
+        $user = new User([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
         ]);
+        // Server-side only: the website this registration came from (see
+        // App\Support\CustomerSite) - never taken from the request.
+        $user->partner_id = \App\Support\CustomerSite::partnerId();
+        $user->save();
 
         event(new Registered($user));
 

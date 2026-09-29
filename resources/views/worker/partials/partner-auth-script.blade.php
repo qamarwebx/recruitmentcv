@@ -12,13 +12,14 @@
         : null;
 @endphp
 <script src="{{ asset('worker/js/partner-auth.js') }}?v={{ @filemtime(public_path('worker/js/partner-auth.js')) ?: time() }}"
-    data-generate-otp-url="{{ url('/generate-otp2') }}"
-    data-validate-otp-url="{{ url('/validate-otp2') }}"
+    data-generate-otp-url="{{ route('worker.partner.otp.send') }}"
+    data-validate-otp-url="{{ route('worker.partner.otp.verify') }}"
     data-login-url="{{ route('worker.partner.login') }}"
     data-register-url="{{ route('worker.partner.register') }}"
     data-register-pending-url="{{ route('worker.partner.register-pending') }}"
     data-check-mobile-url="{{ route('worker.partner.check-mobile') }}"
     data-verify-mobile-url="{{ route('worker.partner.mobile.verify') }}"
+    data-password-login-url="{{ route('worker.partner.login.password') }}"
     data-open-login="{{ request('login') ? '1' : '0' }}"
     data-auth-message="{{ request('auth_message') }}"
     data-open-register="{{ $googleRegisterData ? '1' : '0' }}"
@@ -60,4 +61,9 @@
         'register' => __('locale.Register'),
         'errCheckDetails' => __('locale.Please check the details and try again.'),
         'pendingTitle' => __('locale.Registration Submitted'),
+        'continueLabel' => __('locale.Continue'),
+        'signingIn' => __('locale.Signing in…'),
+        'errPasswordRequired' => __('locale.Please enter your password.'),
+        'errPasswordMin' => __('locale.The password must be at least 8 characters.'),
+        'errPasswordMismatch' => __('locale.The passwords do not match.'),
     ]) }}"></script>

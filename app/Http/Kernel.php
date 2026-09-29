@@ -43,6 +43,9 @@ class Kernel extends HttpKernel
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\LanguageSwitcher::class,
              // \App\Http\Middleware\TrackVisitor::class,
+            // Public page views -> website_visitors (records after the response is sent).
+            \App\Http\Middleware\TrackWebsiteVisitor::class,
+            \App\Http\Middleware\EnforceCustomerSite::class,
         ],
 
         'api' => [
@@ -72,6 +75,7 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'blockURL' => \App\Http\Middleware\BlockUserURL::class,
         'worker.partner.auth' => \App\Http\Middleware\EnsureWorkerPartnerAuthenticated::class,
+        'worker.customer.auth' => \App\Http\Middleware\EnsureWorkerCustomerAuthenticated::class,
         'chat.access' => \App\Http\Middleware\EnsureChatAccess::class,
     ];
 }

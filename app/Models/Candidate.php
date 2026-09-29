@@ -10,6 +10,16 @@ class Candidate extends Model
     use HasFactory;
 
     /**
+     * candidates.gulfexperience codes => translation key (same codes as the
+     * CRM's customercosts.exp_type). Used by display_profession_label and the
+     * Partner Price Update page.
+     */
+    public const EXPERIENCE_TYPES = [
+        1 => 'locale.Indian Experience',
+        2 => 'locale.Ex-Abroad',
+    ];
+
+    /**
      * Locale-aware display name - arcand_name when the app locale is Arabic
      * and that field is actually set, else cand_name. Matches the same
      * fallback pattern already used by the Arabic front-end
@@ -23,6 +33,29 @@ class Candidate extends Model
         }
 
         return $this->cand_name;
+    }
+
+    /**
+     * Experience type + profession, e.g. "Indian Experience House Driver" /
+     * "Ex-Abroad House Driver" ("---" when no profession) - shown on the
+     * candidate detail pages and under the name on every candidate card.
+     * Locale-aware through __('locale.*') and Profession::display_name.
+     */
+    public function getDisplayProfessionLabelAttribute()
+    {
+        if ($this->jobtype_id == '') {
+            return '---';
+        }
+
+        $experience = '';
+        foreach (static::EXPERIENCE_TYPES as $code => $key) {
+            if ($this->gulfexperience == $code) {
+                $experience = __($key) . ' ';
+                break;
+            }
+        }
+
+        return $experience . optional($this->profession)->display_name;
     }
 
     public function getDisplayMaritalStatusAttribute()

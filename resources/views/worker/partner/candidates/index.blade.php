@@ -77,54 +77,17 @@
         <div class="w-candidate-grid w-cols-4 wp-fade-in" data-wp-view-panel="card">
             @foreach ($candidates as $candidate)
                 @php
-                    $imagePath = \App\Support\CandidatePhoto::url($candidate->photo_file);
-                    $totalExp = $candidate->experience ? array_sum(array_filter(explode(',', $candidate->experience), 'is_numeric')) : 0;
-                    $nation = $candidate->nation_id ? \App\Models\Country::find($candidate->nation_id) : null;
                     $partnerBooking = $partnerBookings->get($candidate->id);
                 @endphp
-                <div class="w-candidate-card">
-                    <a href="{{ route('worker.partner.candidates.show', $candidate->slug_text) }}" class="w-candidate-photo">
-                        <span class="w-candidate-badge">
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 7L2 14l10 5 10-5-10-5Z"/></svg>
-                            {{ __('locale.Verified') }}
-                        </span>
-                        <span class="w-candidate-exp">{{ $totalExp > 0 ? $totalExp . '+ ' . __('locale.Years Experience') : __('locale.Fresher') }}</span>
-                        <img src="{{ $imagePath }}" alt="{{ $candidate->display_name }}" loading="lazy" onerror="this.onerror=null;this.src='{{ \App\Support\CandidatePhoto::defaultUrl() }}';">
-                    </a>
-                    <div class="w-candidate-body">
-                        <div class="w-profile-name">
-                            <h3 style="margin:0;">{{ $candidate->display_name }}</h3>
-                            @if ($partnerBooking)
-                                <span class="w-verified">
-                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 7L2 14l10 5 10-5-10-5Z"/></svg>
-                                    {{ __('locale.Hired') }}
-                                </span>
-                            @endif
-                        </div>
-                        <div class="w-candidate-meta">
-                            @if (optional($candidate->profession)->display_name)
-                                <div>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                                    {{ $candidate->profession->display_name }}
-                                </div>
-                            @endif
-                            @if ($nation)
-                                <div>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20Z"/></svg>
-                                    {{ $nation->display_name }}
-                                </div>
-                            @endif
-                        </div>
-                        <div class="w-candidate-actions">
-                            <a href="{{ route('worker.partner.candidates.show', $candidate->slug_text) }}" class="w-btn w-btn-outline">{{ __('locale.View Profile') }}</a>
-                            @if ($partnerBooking)
-                                <a href="{{ route('worker.partner.orders.show', $partnerBooking->id) }}" class="w-btn w-btn-primary">{{ __('locale.View Order') }}</a>
-                            @else
-                                <a href="{{ route('worker.partner.candidates.show', $candidate->slug_text) }}" class="w-btn w-btn-primary">{{ __('locale.Hire Now') }}</a>
-                            @endif
-                        </div>
-                    </div>
-                </div>
+                {{-- Same shared card as the public pages; partner links, Hired badge
+                and View Order (when this partner already booked the candidate). --}}
+                @include('worker.partials.candidate-card', [
+                    'post' => $candidate,
+                    'cardUrl' => route('worker.partner.candidates.show', $candidate->slug_text),
+                    'cardHireUrl' => $partnerBooking ? route('worker.partner.orders.show', $partnerBooking->id) : null,
+                    'cardHireLabel' => $partnerBooking ? __('locale.View Order') : null,
+                    'cardHired' => (bool) $partnerBooking,
+                ])
             @endforeach
         </div>
 

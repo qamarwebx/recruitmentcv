@@ -43,6 +43,16 @@
                     </h3>
 
                     <form data-resume-filter-form data-endpoint="{{ route('worker.resumes') }}">
+
+                        <div class="w-filter-group">
+                            <label for="expcity_id">{{ __('locale.Experience Type') }}</label>
+                            <select name="expcity_id" id="expcity_id" class="w-select select2">
+                                <option value="">{{ __('locale.Any experience') }}</option>
+                                <option value="1" @selected(request('expcity_id') == 1)>{{ __('locale.Indian Experience') }}</option>
+                                <option value="2" @selected(request('expcity_id') == 2)>{{ __('locale.Gulf / Abroad Experience') }}</option>
+                            </select>
+                        </div>
+
                         <div class="w-filter-group">
                             <label for="proff_id">{{ __('locale.Profession') }}</label>
                             <select name="proff_id" id="proff_id" class="w-select select2">
@@ -60,15 +70,6 @@
                                 @foreach ($cities as $city)
                                     <option value="{{ $city->id }}" @selected(request('location_id') == $city->id)>{{ $city->display_name }}</option>
                                 @endforeach
-                            </select>
-                        </div>
-
-                        <div class="w-filter-group">
-                            <label for="expcity_id">{{ __('locale.Experience Type') }}</label>
-                            <select name="expcity_id" id="expcity_id" class="w-select select2">
-                                <option value="">{{ __('locale.Any experience') }}</option>
-                                <option value="1" @selected(request('expcity_id') == 1)>{{ __('locale.Indian Experience') }}</option>
-                                <option value="2" @selected(request('expcity_id') == 2)>{{ __('locale.Gulf / Abroad Experience') }}</option>
                             </select>
                         </div>
 

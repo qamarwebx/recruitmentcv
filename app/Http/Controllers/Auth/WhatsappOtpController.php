@@ -26,6 +26,9 @@ use App\Models\Metawhatsapplog;
 use App\Models\Staticmetanotification;
 use App\Models\Otpvalidationmetalist;
 use Jenssegers\Agent\Agent;
+use App\Support\OtpVerification;
+use App\Support\CustomerSite;
+use Illuminate\Support\Facades\DB;
 
 
 class WhatsappOtpController extends Controller
@@ -39,6 +42,8 @@ class WhatsappOtpController extends Controller
     }
     public function generateOtp(Request $request)
     {
+        OtpVerification::reset($request);
+
         $validator = Validator::make($request->all(), [
             'mobile' => 'required',
         ]);
@@ -81,6 +86,8 @@ class WhatsappOtpController extends Controller
     }
 
     public function generateOtp2(Request $request){
+
+        OtpVerification::reset($request);
 
         // Get Mobile No, Country Code from ajax request
         $mobile = $request->mobile;
@@ -1354,9 +1361,8 @@ class WhatsappOtpController extends Controller
         }
 
         $enteredOtp = $request->input('otp');
-        $OTP = $request->session()->get('OTP');
 
-        if ($OTP == $enteredOtp) {
+        if (OtpVerification::check($request, $enteredOtp)) {
             return response()->json(['message' => 'OTP is valid.'], 200);
         } else {
             return response()->json(['error' => 'Invalid OTP. Please try again.'], 422);
@@ -1364,12 +1370,9 @@ class WhatsappOtpController extends Controller
     }
 
     public function validateOtp2(Request $request){
-        $requestOtp = $request->otp;
-        $sessionOTP =  $request->session()->get('OTP');
-
         $responsedata = [];
 
-        if($requestOtp == $sessionOTP){
+        if (OtpVerification::check($request, $request->otp)) {
             $responsedata['message'] = "success";
         }else{
             $responsedata['message'] = "error";
@@ -1385,9 +1388,14 @@ class WhatsappOtpController extends Controller
             return response()->json(['message' => 'User is already logged in.'], 200);
         }
 
+        if (!OtpVerification::isVerified($request)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Please verify your mobile number first.')], 403);
+        }
+
         $mobile = $request->session()->get('Mobile');
         // $userProfile = Userprofile::where('mobile_no', $mobile)->first();
-        $userProfile = User::where('mobile_no', $mobile)->first();
+        // Only an account that belongs to THIS website (see CustomerSite).
+        $userProfile = CustomerSite::accounts()->where('mobile_no', $mobile)->first();
 
         // If Mobile Verified Not update then update
 
@@ -1409,6 +1417,7 @@ class WhatsappOtpController extends Controller
             }
 
             Auth::login($userProfile);
+            OtpVerification::consume($request);
             $request->session()->forget('Mobile');
             return response()->json(['message' => 'User logged in successfully.'], 200);
 
@@ -1424,8 +1433,13 @@ class WhatsappOtpController extends Controller
             return response()->json(['message' => 'User is already logged in.'], 200);
         }
 
+        if (!OtpVerification::isVerified($request)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Please verify your mobile number first.')], 403);
+        }
+
         $mobile = $request->session()->get('Mobile');
-        $userProfile = User::where('mobile_no', $mobile)->first();
+        // Only an account that belongs to THIS website (see CustomerSite).
+        $userProfile = CustomerSite::accounts()->where('mobile_no', $mobile)->first();
 
         $agent = new Agent();
         $ip = $request->ip();
@@ -1450,6 +1464,7 @@ class WhatsappOtpController extends Controller
             $userProfile->country_code = $country->country_code ?? null;
             $userProfile->save();
             Auth::login($userProfile);
+            OtpVerification::consume($request);
             $request->session()->forget('Mobile');
             return response()->json(['message' => 'User logged in successfully.'], 200);
         }
@@ -1465,11 +1480,22 @@ class WhatsappOtpController extends Controller
             'name' => 'required|string|max:255',
         ]);
 
+        if (!OtpVerification::isVerified($request)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Please verify your mobile number first.')], 403);
+        }
+
         $country = Country::find($request->session()->get('CountryId'));
+
+        $conflicts = CustomerSite::registrationConflicts(null, $country->country_code ?? $request->session()->get('CountryCode'), $request->session()->get('Mobile'));
+        if ($conflicts) {
+            return response()->json(['status' => 'error', 'message' => implode(' ', array_merge(...array_values($conflicts))), 'errors' => $conflicts], 422);
+        }
 
         // Create new user
         $user = new User();
         $user->name = $validatedData['name'];
+        // Server-side only: the website this registration came from.
+        $user->partner_id = CustomerSite::partnerId();
         $user->verification_status = '1';
         $user->mobile_no = $request->session()->get('Mobile');
         $user->country_id = $request->session()->get('CountryId');
@@ -1489,6 +1515,7 @@ class WhatsappOtpController extends Controller
 
         // Log in the newly registered user
         Auth::login($user);
+        OtpVerification::consume($request);
 
         return response()->json(['message' => 'User registered and logged in successfully.'], 200);
     }
@@ -1497,20 +1524,62 @@ class WhatsappOtpController extends Controller
     {
         $validatedData = $request->validate([
             'name' => 'required|string|max:255',
+            'email' => 'nullable|email|max:255',
         ]);
 
-        $country = Country::find($request->session()->get('CountryId'));
+        if (!OtpVerification::isVerified($request)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Please verify your mobile number first.')], 403);
+        }
 
-        // Create new user
-        $user = new User();
-        $user->name = $validatedData['name'];
-        $user->email = $request->email;
-        $user->verification_status = '1';
-        $user->mobile_no = $request->session()->get('Mobile');
-        $user->country_id = $request->session()->get('CountryId');
-        $user->country_code = $country->country_code ?? null;
-        $user->mobile_verified_at = date('Y-m-d H:i:s');
-        $user->save();
+        $email = strtolower(trim((string) $request->email)) ?: null;
+        $mobile = (string) $request->session()->get('Mobile');
+        $country = Country::find($request->session()->get('CountryId'));
+        $countryCode = $country->country_code ?? $request->session()->get('CountryCode');
+
+        // Serialize registrations for the same number on the same website so
+        // two simultaneous requests can't both pass the duplicate check
+        // (email is additionally protected by the users_email_unique index).
+        // One account per number across all sites, so one lock per number.
+        $lockName = 'customer_reg:' . CustomerSite::canonicalMobile($countryCode, $mobile);
+        DB::select('SELECT GET_LOCK(?, 10) AS l', [$lockName]);
+
+        try {
+            $conflicts = CustomerSite::registrationConflicts($email, $countryCode, $mobile);
+            if ($conflicts) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => implode(' ', array_merge(...array_values($conflicts))),
+                    'errors' => $conflicts,
+                ], 422);
+            }
+
+            // Create new user
+            $user = new User();
+            $user->name = $validatedData['name'];
+            $user->email = $email;
+            // Server-side only: the website this registration came from.
+            $user->partner_id = CustomerSite::partnerId();
+            $user->verification_status = '1';
+            $user->mobile_no = $mobile;
+            $user->country_id = $request->session()->get('CountryId');
+            $user->country_code = $countryCode;
+            $user->mobile_verified_at = date('Y-m-d H:i:s');
+
+            try {
+                $user->save();
+            } catch (\Illuminate\Database\QueryException $e) {
+                if (($e->errorInfo[1] ?? null) === 1062) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => __('locale.This email is already registered. Please login.'),
+                        'errors' => ['email' => [__('locale.This email is already registered. Please login.')]],
+                    ], 422);
+                }
+                throw $e;
+            }
+        } finally {
+            DB::select('SELECT RELEASE_LOCK(?) AS l', [$lockName]);
+        }
 
         $userId = $user->id;
 
@@ -1524,6 +1593,7 @@ class WhatsappOtpController extends Controller
 
         // Log in the newly registered user
         Auth::login($user);
+        OtpVerification::consume($request);
 
         return response()->json(['message' => 'User registered and logged in successfully.'], 200);
     }

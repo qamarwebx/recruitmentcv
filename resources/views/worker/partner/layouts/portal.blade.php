@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('title', 'Partner Portal') — Qamr Worker Portal</title>
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <link rel="icon" href="{{ asset('user/img/favicon.png') }}">
+    {{-- The signed-in partner's Branding favicon (Partner Website → Branding),
+    otherwise the default icon. Shared by every /partner/* page. --}}
+    <link rel="icon" href="{{ Auth::guard('partner')->user()?->domain?->faviconUrl() ?: \App\Models\Domain::defaultFaviconUrl() }}">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -95,8 +97,21 @@
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1m-1 4h1m4-4h1m-1 4h1M9 21v-4h6v4"/></svg>
                     <span>{{ __('locale.Employer') }}</span>
                 </a>
+                <a href="{{ route('worker.partner.payment') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.payment*') ? 'is-active' : '' }}">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>
+                    <span>{{ __('locale.Payment') }}</span>
+                </a>
+
+                <a href="{{ route('worker.partner.customers') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.customers*') ? 'is-active' : '' }}">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span>{{ __('locale.Customers') }}</span>
+                </a>
 
                 <div class="wp-nav-label">{{ __('locale.Account') }}</div>
+                <a href="{{ route('worker.partner.prices') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.prices*') ? 'is-active' : '' }}">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+                    <span>{{ __('locale.Price Update') }}</span>
+                </a>
                 <a href="{{ route('worker.partner.website') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.website*') ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                     <span>{{ __('locale.Website') }}</span>
@@ -131,10 +146,28 @@
                 <div class="wp-page-title">@yield('page-title')</div>
 
                 @if ($__partnerLiveUrl)
-                    <a href="{{ $__partnerLiveUrl }}" target="_blank" rel="noopener" class="wp-live-url" title="{{ $__partnerLiveUrl }}">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                        <span class="wp-live-url-text">{{ $__partnerLiveUrl }}</span>
-                    </a>
+                    <div class="wp-live-url-group">
+                        <a href="{{ $__partnerLiveUrl }}" target="_blank" rel="noopener" class="wp-live-url" title="{{ $__partnerLiveUrl }}">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                            <span class="wp-live-url-text">{{ $__partnerLiveUrl }}</span>
+                        </a>
+                        {{-- Copies the same dynamic Live URL shown above (portal.js initCopyLinks). --}}
+                        <button type="button" class="wp-live-url-copy" data-copy-text="{{ $__partnerLiveUrl }}"
+                            aria-label="{{ __('locale.Copy link') }}" title="{{ __('locale.Copy link') }}">
+                            <svg class="wp-copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            <svg class="wp-copied-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>
+                            <span class="wp-live-url-copied" role="status" aria-live="polite">{{ __('locale.Copied') }}</span>
+                        </button>
+                        {{-- Share the PUBLIC website URL (never this /partner/* page):
+                        native share sheet where available, otherwise copy
+                        (portal.js initShareLinks). --}}
+                        <button type="button" class="wp-live-url-copy wp-live-url-share"
+                            data-share-url="{{ $__partnerLiveUrl }}" data-share-title="{{ $__partnerLabel }}"
+                            aria-label="{{ __('locale.Share Website') }}" title="{{ __('locale.Share Website') }}">
+                            <svg class="wp-share-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+                            <span class="wp-live-url-copied" role="status" aria-live="polite">{{ __('locale.Link copied') }}</span>
+                        </button>
+                    </div>
                 @endif
 
                 <div class="wp-topbar-actions">
@@ -205,7 +238,7 @@
     page's Add/Change Number action (see partner-auth.js's
     window.WorkerPartnerAuth.openAddMobile). --}}
     @include('worker.partials.partner-auth-modal')
-    @include('worker.partials.whatsapp-float')
+    @include('worker.partials.whatsapp-float', ['waPartnerId' => Auth::guard('partner')->id()])
 
     <script src="{{ asset('worker/js/portal.js') }}?v={{ @filemtime(public_path('worker/js/portal.js')) ?: time() }}"></script>
     @include('worker.partials.partner-auth-script')

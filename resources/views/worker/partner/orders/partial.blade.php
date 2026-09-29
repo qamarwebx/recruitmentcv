@@ -98,12 +98,10 @@
                     @if ($order->candidate_slug)
                         <a href="{{ route('worker.partner.candidates.show', $order->candidate_slug) }}" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.View Candidate') }}</a>
                     @endif
-                    {{-- Same cv_execute gate and direct static-asset link as
-                    candidates/show.blade.php - no separate download route,
-                    reusing that exact condition/URL pattern rather than
-                    duplicating CV logic. --}}
+                    {{-- Same cv_execute gate and Download CV endpoint as
+                    candidates/show.blade.php (this partner's own B2B CV). --}}
                     @if ($order->cv_execute == 1 && $order->cv_execute_file != '')
-                        <a href="{{ asset('admin/assets/images/pdf/' . $order->cv_execute_file) }}" target="_blank" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.Download CV') }}</a>
+                        <a href="{{ $order->candidate_slug ? route('worker.partner.candidates.cv', $order->candidate_slug) : asset('admin/assets/images/pdf/' . $order->cv_execute_file) }}" target="_blank" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.Download CV') }}</a>
                     @endif
                     @if ((int) $order->booking_status !== 2)
                         <button type="button" class="w-btn w-btn-outline w-btn-sm" style="color:#dc2626;border-color:#fecaca;" data-cancel-order-trigger data-cancel-url="{{ route('worker.partner.orders.cancel', $order->id) }}" data-order-id="{{ $order->id }}">
@@ -192,7 +190,7 @@
                                             <a href="{{ route('worker.partner.candidates.show', $order->candidate_slug) }}" class="wp-menu-item">{{ __('locale.View Candidate') }}</a>
                                         @endif
                                         @if ($order->cv_execute == 1 && $order->cv_execute_file != '')
-                                            <a href="{{ asset('admin/assets/images/pdf/' . $order->cv_execute_file) }}" target="_blank" class="wp-menu-item">{{ __('locale.Download CV') }}</a>
+                                            <a href="{{ $order->candidate_slug ? route('worker.partner.candidates.cv', $order->candidate_slug) : asset('admin/assets/images/pdf/' . $order->cv_execute_file) }}" target="_blank" class="wp-menu-item">{{ __('locale.Download CV') }}</a>
                                         @endif
                                         @if ((int) $order->booking_status !== 2)
                                             <button type="button" class="wp-menu-item is-danger" data-cancel-order-trigger data-cancel-url="{{ route('worker.partner.orders.cancel', $order->id) }}" data-order-id="{{ $order->id }}">
