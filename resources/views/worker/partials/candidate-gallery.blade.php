@@ -2,9 +2,8 @@
     Candidate image/document/video gallery - shared by the public
     worker.resumes.details page and the Partner Portal's candidates.show
     page so both ever build/render this exactly once. Expects $post (the
-    Candidate model), $videoId/$testVideoId (explode($post->video_link/
-    trade_test_video_link, '/') or null - see either caller for how these
-    are computed). Renders only the <div data-gallery> block itself - the
+    Candidate model); videos come from App\Support\CandidateVideos.
+    Renders only the <div data-gallery> block itself - the
     caller keeps its own surrounding .w-gallery wrapper (and whatever else,
     e.g. a sibling .w-profile-card, lives inside it) unchanged.
 --}}
@@ -25,17 +24,20 @@
     if ($licUrl = \App\Support\CandidatePhoto::urlIfExists($post->lic_file)) {
         $slides[] = ['thumb' => $licUrl, 'html' => '<img src="' . $licUrl . '" alt="License document" ' . $imgFallback . '>'];
     }
-    if ($post->video_file) {
-        $src = asset('videos/' . $post->video_file);
-        $slides[] = ['thumb' => $imagePath, 'html' => '<video controls src="' . $src . '"></video>'];
-    }
-    if ($post->video_link) {
-        $thumb = isset($videoId[4]) ? 'https://img.youtube.com/vi/' . $videoId[4] . '/hqdefault.jpg' : $imagePath;
-        $slides[] = ['thumb' => $thumb, 'html' => '<iframe src="' . e($post->video_link) . '" allowfullscreen></iframe>'];
-    }
-    if ($post->trade_test_video_link) {
-        $thumb = isset($testVideoId[4]) ? 'https://img.youtube.com/vi/' . $testVideoId[4] . '/hqdefault.jpg' : $imagePath;
-        $slides[] = ['thumb' => $thumb, 'html' => '<iframe src="' . e($post->trade_test_video_link) . '" allowfullscreen></iframe>'];
+    // Videos last, in CRM order: Video Upload, Introduction Video, Trade
+    // Test Video (App\Support\CandidateVideos - only the ones that exist).
+    foreach (\App\Support\CandidateVideos::slides($post) as $video) {
+        $title = e($video['label']);
+        $src = e($video['src']);
+        $html = match ($video['kind']) {
+            // Inner link = fallback for browsers that can't play the file.
+            'file' => '<video controls preload="metadata" playsinline src="' . $src . '" title="' . $title . '">'
+                . '<a href="' . $src . '" target="_blank" rel="noopener">' . e(__('locale.Open Video')) . '</a></video>',
+            'embed' => '<iframe src="' . $src . '" title="' . $title . '" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy"></iframe>',
+            default => '<div class="w-gallery-video-link"><span>' . $title . '</span>'
+                . '<a href="' . $src . '" target="_blank" rel="noopener noreferrer" class="w-btn w-btn-primary w-btn-sm">' . e(__('locale.Open Video')) . '</a></div>',
+        };
+        $slides[] = ['thumb' => $video['thumb'], 'html' => $html, 'video' => $video['label']];
     }
 @endphp
 
@@ -65,8 +67,18 @@
     @if (count($slides) > 1)
         <div class="w-gallery-thumbs">
             @foreach ($slides as $i => $slide)
-                <button type="button" data-gallery-thumb data-slide-html="{{ $slide['html'] }}" class="{{ $i === 0 ? 'is-active' : '' }}">
-                    <img src="{{ $slide['thumb'] }}" alt="Thumbnail {{ $i + 1 }}" onerror="this.onerror=null;this.src='{{ $defaultAvatar }}';">
+                <button type="button" data-gallery-thumb data-slide-html="{{ $slide['html'] }}"
+                    class="{{ $i === 0 ? 'is-active' : '' }}{{ !empty($slide['video']) ? ' is-video' : '' }}"
+                    @if (!empty($slide['video'])) title="{{ $slide['video'] }}" aria-label="{{ $slide['video'] }}" @endif>
+                    @if ($slide['thumb'])
+                        <img src="{{ $slide['thumb'] }}" alt="{{ $slide['video'] ?? 'Thumbnail ' . ($i + 1) }}" onerror="this.onerror=null;this.src='{{ $defaultAvatar }}';">
+                    @endif
+                    @if (!empty($slide['video']))
+                        {{-- Play badge: marks the thumbnail as a video. --}}
+                        <span class="w-gallery-thumb-play" aria-hidden="true">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        </span>
+                    @endif
                 </button>
             @endforeach
         </div>

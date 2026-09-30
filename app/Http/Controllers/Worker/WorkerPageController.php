@@ -272,9 +272,6 @@ class WorkerPageController extends Controller
             return view('page_not_found');
         }
 
-        $videoId = $post->video_link ? explode('/', $post->video_link) : null;
-        $testVideoId = $post->trade_test_video_link ? explode('/', $post->trade_test_video_link) : null;
-
         $workPlaces = City::whereIn('id', explode(',', (string) $post->expcity_id))->get();
         $experienceCountries = Country::whereIn('id', explode(',', (string) $post->expcountry_id))->get();
 
@@ -344,8 +341,6 @@ class WorkerPageController extends Controller
             'isWishlisted' => $isWishlisted,
             'hire' => $hire,
             'post' => $post,
-            'videoId' => $videoId,
-            'testVideoId' => $testVideoId,
             'workPlaces' => $workPlaces,
             'experienceCountries' => $experienceCountries,
             'relatedPosts' => $relatedPosts,

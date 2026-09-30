@@ -529,13 +529,6 @@ class PartnerPortalController extends Controller
         $totalExperience = $post->experience ? array_sum(array_filter(explode(',', $post->experience), 'is_numeric')) : 0;
         $nation = Country::find($post->nation_id);
 
-        // Same computation as WorkerPageController::resumeDetails() - feeds
-        // the image/document gallery's YouTube-thumbnail slides, reusing that
-        // page's own worker.resumes.details gallery partial rather than a
-        // second copy of this slide-building logic.
-        $videoId = $post->video_link ? explode('/', $post->video_link) : null;
-        $testVideoId = $post->trade_test_video_link ? explode('/', $post->trade_test_video_link) : null;
-
         // Same source the existing "Choose Your Nearest Recruitment Office"
         // flow uses for its own worklocation dropdown (FrontEndController::
         // fullresumes()'s $expwpf) - the candidate's own preferred work
@@ -580,8 +573,6 @@ class PartnerPortalController extends Controller
             'existingBooking',
             'totalExperience',
             'nation',
-            'videoId',
-            'testVideoId',
             'hireWorkLocations',
             'religion',
             'region',

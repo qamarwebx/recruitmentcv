@@ -334,18 +334,19 @@ Route::get('/admin/auto-login', function (Request $request) {
 })->name('admin.auto-login');
 
 Route::get('/videos/{filename}', function ($filename) {
-    
+    // Uploaded videos (CRM videoFileStore -> storage/app/public/testimonials/
+    // videos). Streamed as a file response so browsers get byte ranges
+    // (206) - required for <video> playback/seeking, e.g. on iOS Safari.
+    $filename = basename($filename);
     $path = storage_path('app/public/testimonials/videos/' . $filename);
-   
-    if (!file_exists($path)) {
+
+    if (!is_file($path)) {
         abort(404, 'Video not found');
     }
 
-    $mimeType = \Illuminate\Support\Facades\File::mimeType($path);
-
-    return Response::make(file_get_contents($path), 200, [
-        'Content-Type' => $mimeType,
-        'Content-Disposition' => 'inline; filename="'.$filename.'"'
+    return response()->file($path, [
+        'Content-Type' => \Illuminate\Support\Facades\File::mimeType($path),
+        'Content-Disposition' => 'inline; filename="' . $filename . '"',
     ]);
 })->where('filename', '.*');
 

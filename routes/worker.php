@@ -136,6 +136,10 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
 
     // Customers = users with users.partner_id = the logged-in partner.
     // Ownership is enforced inside every controller action (404 otherwise).
+    // Website Visitor - this partner's own website_visitors records (same data as the CRM page).
+    Route::get('/website-visitors', [\App\Http\Controllers\Worker\PartnerWebsiteVisitorController::class, 'index'])->name('website-visitors');
+    Route::post('/website-visitors/filter/save', [\App\Http\Controllers\Worker\PartnerWebsiteVisitorController::class, 'saveFilter'])->name('website-visitors.filter.save');
+    Route::post('/website-visitors/filter/reset', [\App\Http\Controllers\Worker\PartnerWebsiteVisitorController::class, 'resetFilter'])->name('website-visitors.filter.reset');
     Route::get('/customers', [\App\Http\Controllers\Worker\PartnerCustomersController::class, 'index'])->name('customers');
     Route::post('/customers/store', [\App\Http\Controllers\Worker\PartnerCustomersController::class, 'store'])->name('customers.store');
     Route::get('/customers/{id}', [\App\Http\Controllers\Worker\PartnerCustomersController::class, 'show'])->whereNumber('id')->name('customers.show');
