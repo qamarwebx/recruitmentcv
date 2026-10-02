@@ -50,6 +50,8 @@ class DashboardController extends Controller
             ->select('booking.*','cand.cand_name','cand.experience','cand.exp_sal','cand.address','cand.jobtype_id','cand.photo_file','cand.slug_text','cand.cv_execute_file','cand.cv_execute','cand.pass_no')
             ->where('booking.user_id','=',Auth::user()->id)
             ->where('booking.booking_status','!=',2)
+            // Only the orders this site may show (CustomerSite::whereOrderVisible()).
+            ->where(fn ($visible) => \App\Support\CustomerSite::whereOrderVisible($visible, 'booking.partner_id'))
             ->get();
 
 
@@ -68,6 +70,8 @@ class DashboardController extends Controller
             ->select('booking.*','cand.cand_name','cand.experience','cand.exp_sal','cand.address','cand.jobtype_id','cand.photo_file','proff.ar_name as arname','cand.slug_text','cand.arcand_name','cand.cv_execute_file','cand.cv_execute','cand.pass_no')
             ->where('booking.user_id','=',Auth::user()->id)
             ->where('booking.booking_status','!=',2)
+            // Only the orders this site may show (CustomerSite::whereOrderVisible()).
+            ->where(fn ($visible) => \App\Support\CustomerSite::whereOrderVisible($visible, 'booking.partner_id'))
             ->get();
 
         return view('user.arabic.myorder',compact('posts','ordstatuses','countries', 'professions'));
@@ -75,8 +79,11 @@ class DashboardController extends Controller
 
     public function getDetails($id)
     {
-        // Only the logged-in customer's own booking.
-        $booking = Booking::where('id', $id)->where('user_id', Auth::id())->first();
+        // Only the logged-in customer's own booking, and only one this site
+        // may show (CustomerSite::whereOrderVisible()).
+        $booking = Booking::where('id', $id)->where('user_id', Auth::id())
+            ->where(fn ($visible) => \App\Support\CustomerSite::whereOrderVisible($visible, 'bookings.partner_id'))
+            ->first();
 
         if (!$booking) {
             return response()->json(['error' => 'Order not found'], 404);
@@ -598,7 +605,8 @@ class DashboardController extends Controller
 
         // Send OTP to Email
 
-        Mail::to($email)->send(new SendOTPVerification($data));
+        // The code goes in the email only (never the JSON response below).
+        Mail::to($email)->send(new SendOTPVerification($data + ['EmailOtp' => $otp]));
 
 
 
@@ -606,6 +614,30 @@ class DashboardController extends Controller
 
         return response()->json($data);
 
+    }
+
+    /**
+     * "Email changed" confirmation to the NEW address - only called after
+     * the OTP matched and the new email was saved, and only when the
+     * address actually changed (re-verifying the same one isn't a change).
+     * The OTP is single use, so a repeated request never gets here twice.
+     * Through the current site partner's SMTP (App\Support\CustomerMail).
+     */
+    private function sendEmailChangedMail(User $user, ?string $oldEmail): void
+    {
+        if (strcasecmp(trim((string) $oldEmail), trim((string) $user->email)) === 0) {
+            return;
+        }
+
+        $partnerId = \App\Support\CustomerSite::partnerId();
+
+        \App\Support\CustomerMail::send($partnerId, $user->email, new \App\Mail\CustomerEmailChanged([
+            'brand' => \App\Support\CustomerMail::brand($partnerId),
+            'customer_name' => $user->name,
+            'new_email' => $user->email,
+            'changed_at' => now()->format('d M Y, h:i A') . ' (GMT' . now()->format('P') . ')',
+            'account_url' => route('worker.account.profile'),
+        ]));
     }
 
     /** The code sent by getEmailOTPandUpdate(), for that same email. Single use. */
@@ -631,10 +663,12 @@ class DashboardController extends Controller
         }
         $email = $request->email;
         $userData = User::find(Auth::user()->id);
+        $oldEmail = $userData->email;
         $userData->email = $email;
         $userData->email_verified_at = date('Y-m-d H:i:s');
         $userData->status = true;
         $userData->save();
+        $this->sendEmailChangedMail($userData, $oldEmail);
         return response()->json(['message' => 'Email Verified Successfully!']);
     }
 
@@ -644,10 +678,12 @@ class DashboardController extends Controller
         }
         $email = $request->email;
         $userData = User::find(Auth::user()->id);
+        $oldEmail = $userData->email;
         $userData->email = $email;
         $userData->email_verified_at = date('Y-m-d H:i:s');
         $userData->status = true;
         $userData->save();
+        $this->sendEmailChangedMail($userData, $oldEmail);
         return response()->json(['message' => 'تم التحقق من البريد الإلكتروني بنجاح!']);
     }
 
@@ -1142,8 +1178,12 @@ class DashboardController extends Controller
         $id = $request->id;
 
         // Only the logged-in customer's own booking (previously any booking
-        // id, including other customers' and partners', could be cancelled).
-        $booking = Booking::where('id', $id)->where('user_id', Auth::id())->first();
+        // id, including other customers' and partners', could be cancelled),
+        // and only one this site may show (CustomerSite::whereOrderVisible())
+        // - another website partner's order can't be cancelled from here.
+        $booking = Booking::where('id', $id)->where('user_id', Auth::id())
+            ->where(fn ($visible) => \App\Support\CustomerSite::whereOrderVisible($visible, 'bookings.partner_id'))
+            ->first();
         if (!$booking) {
             return response()->json(['message' => 'Order not found'], 404);
         }

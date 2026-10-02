@@ -3,8 +3,12 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>@yield('title', 'Qamr Worker Portal — Hire Verified, Work-Ready Candidates')</title>
-    <meta name="description" content="@yield('meta_description', 'Browse verified, work-ready candidate resumes and hire dependable talent through Qamr International\'s Worker Portal.')">
+    {{-- Every page's own title/meta, with the global Qamr brand swapped for
+    the partner's Company Profile name on a partner subdomain (SiteBrand;
+    main site unchanged). yieldContent() returns escaped text, and SiteBrand
+    escapes what it inserts, so {!! !!} is safe here. --}}
+    <title>{!! \App\Support\SiteBrand::brandEscapedText($__env->yieldContent('title', 'Qamr Worker Portal — Hire Verified, Work-Ready Candidates')) !!}</title>
+    <meta name="description" content="{!! \App\Support\SiteBrand::brandEscapedText($__env->yieldContent('meta_description', 'Browse verified, work-ready candidate resumes and hire dependable talent through Qamr International\'s Worker Portal.')) !!}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     {{-- Partner favicon on a partner subdomain (ResolvePartnerWebsiteDomain),
     otherwise the site default favicon. --}}

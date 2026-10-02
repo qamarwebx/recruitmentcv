@@ -14,11 +14,21 @@
 @section('content')
     @php
         $initials = collect(explode(' ', trim($partner->rec_off_name ?: $partner->owner_name ?: 'P')))->map(fn($w) => mb_substr($w, 0, 1))->take(2)->implode('');
-        $domainStatusLabels = [
+        // Domain tab "Status" = the partner's CRM approval/status
+        // (Partner::accountStatus()), not domains.status (the older
+        // custom-domain flow's own field, never updated for subdomains).
+        $accountStatus = $partner->accountStatus();
+        $accountStatusLabels = [
             'pending' => __('locale.Pending'),
             'active' => __('locale.Active'),
             'inactive' => __('locale.Inactive'),
-            'suspended' => __('locale.Suspended'),
+            'rejected' => __('locale.Rejected'),
+        ];
+        $accountStatusBadges = ['active' => 'success', 'pending' => 'warning', 'inactive' => 'neutral', 'rejected' => 'danger'];
+        $accountStatusNotes = [
+            'pending' => __('locale.Your registration is pending approval.'),
+            'inactive' => __('locale.Your partner account is inactive. Please contact the administrator.'),
+            'rejected' => __('locale.Your registration has been rejected.'),
         ];
 
         // Website Config save handlers redirect back with ?open={page} so
@@ -43,6 +53,7 @@
         <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="branding">{{ __('locale.Branding') }}</button>
         <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="whatsapp">{{ __('locale.WhatsApp') }}</button>
         <button type="button" class="wp-settings-tab-btn {{ $activeTopTab === 'website-config' ? 'is-active' : '' }}" data-settings-tab-btn="website-config">{{ __('locale.Website Config') }}</button>
+        <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="smtp">{{ __('locale.SMTP') }}</button>
         <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="domain">{{ __('locale.Domain') }}</button>
     </div>
 
@@ -99,7 +110,8 @@
             </h2>
             <div class="w-form-alert" style="display:none;" data-settings-alert="branding"></div>
             <form data-settings-form="branding">
-                <div class="wp-info-grid" style="grid-template-columns:repeat(2,1fr);">
+                {{-- English Logo / Arabic Logo / Favicon side by side, wrapping on narrow screens. --}}
+                <div class="wp-branding-grid">
                     <div class="w-form-row">
                         <label class="w-form-label">{{ __('locale.English Logo') }}</label>
                         <div class="wp-logo-upload">
@@ -125,6 +137,18 @@
                     </div>
                 </div>
                 <div class="form-text" style="color:var(--w-ink-500);font-size:0.82rem;margin-bottom:16px;">{{ __('locale.JPG, PNG or WEBP, up to 2MB.') }}</div>
+                {{-- Company Profile name under the logo in this Partner Portal's
+                sidebar (English / Arabic name per page language). Saved with
+                this form (partner_page_contents 'branding' row). --}}
+                @php $appendCompanyName = \App\Models\PartnerPageContent::brandingFor(Auth::guard('partner')->id())['append_company_name']; @endphp
+                <div class="w-form-row">
+                    <label class="wp-switch">
+                        <input type="checkbox" role="switch" name="append_company_name" value="1" data-append-company-name @checked($appendCompanyName)>
+                        <span class="wp-switch-track" aria-hidden="true"></span>
+                        <span class="wp-switch-text">{{ __('locale.Append Company Name') }}</span>
+                    </label>
+                    <p class="wp-field-hint">{{ __('locale.Shows your Company Profile name under the logo in the dashboard sidebar.') }}</p>
+                </div>
                 <button type="submit" class="w-btn w-btn-primary" data-settings-submit>{{ __('locale.Save Changes') }}</button>
             </form>
         </div>
@@ -141,9 +165,7 @@
                 {{ __('locale.WhatsApp') }}
             </h2>
             <div class="w-form-alert" style="display:none;" data-settings-alert="whatsapp"></div>
-            <form data-settings-form="whatsapp"
-                  data-wa-default-bg="{{ $whatsappDefaults['bg_color'] }}"
-                  data-wa-default-icon-color="{{ $whatsappDefaults['icon_color'] }}">
+            <form data-settings-form="whatsapp">
                 <div class="wp-info-grid">
                     <div class="w-form-row">
                         <label class="w-form-label" for="wa-number">{{ __('locale.WhatsApp Number') }}</label>
@@ -151,38 +173,6 @@
                                value="{{ $whatsapp['is_custom'] && $whatsapp['number'] !== $whatsappDefaults['number'] ? '+' . $whatsapp['number'] : '' }}"
                                placeholder="+{{ $whatsappDefaults['number'] }}">
                         <div class="wp-field-hint">{{ __('locale.Include the country code, e.g. +966 5X XXX XXXX. Leave empty to use the default number.') }}</div>
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.WhatsApp Icon') }}</label>
-                        <div class="wp-logo-upload">
-                            <span class="wp-wa-icon-preview" data-wa-icon-preview>
-                                @if ($whatsapp['icon_url'])
-                                    <img src="{{ $whatsapp['icon_url'] }}" alt="">
-                                @else
-                                    @include('worker.partials.whatsapp-glyph')
-                                @endif
-                            </span>
-                            <div class="wp-wa-icon-actions">
-                                <input type="file" class="w-input" accept="image/png,image/jpeg,image/webp" data-wa-icon-input>
-                                <button type="button" class="w-btn w-btn-outline w-btn-sm" data-wa-icon-reset {{ $whatsapp['icon_url'] ? '' : 'hidden' }}>{{ __('locale.Use default icon') }}</button>
-                            </div>
-                        </div>
-                        <div class="wp-field-hint">{{ __('locale.JPG, PNG or WEBP, up to 2MB.') }} {{ __('locale.Square image recommended, e.g. 64 × 64 px.') }}</div>
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="wa-bg-color">{{ __('locale.Background Color') }}</label>
-                        <div class="wp-color-field">
-                            <input type="color" id="wa-bg-color" value="{{ $whatsapp['bg_color'] }}" data-wa-color="bg_color" aria-label="{{ __('locale.Background Color') }}">
-                            <input type="text" name="bg_color" class="w-input" dir="ltr" maxlength="7" value="{{ $whatsapp['bg_color'] }}" data-wa-color-text="bg_color" pattern="#[0-9a-fA-F]{6}">
-                        </div>
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="wa-icon-color">{{ __('locale.Text Color') }}</label>
-                        <div class="wp-color-field">
-                            <input type="color" id="wa-icon-color" value="{{ $whatsapp['icon_color'] }}" data-wa-color="icon_color" aria-label="{{ __('locale.Text Color') }}">
-                            <input type="text" name="icon_color" class="w-input" dir="ltr" maxlength="7" value="{{ $whatsapp['icon_color'] }}" data-wa-color-text="icon_color" pattern="#[0-9a-fA-F]{6}">
-                        </div>
-                        <div class="wp-field-hint">{{ __('locale.Colour of the button label. The WhatsApp icon uses the background colour on a white circle.') }}</div>
                     </div>
                     <div class="w-form-row">
                         <label class="w-form-label" for="wa-label">{{ __('locale.Button Label') }}</label>
@@ -202,7 +192,6 @@
                 </div>
 
                 <button type="submit" class="w-btn w-btn-primary" data-settings-submit>{{ __('locale.Save Changes') }}</button>
-                <template data-wa-glyph>@include('worker.partials.whatsapp-glyph')</template>
             </form>
         </div>
     </div>
@@ -225,19 +214,18 @@
                 <label class="w-form-label">{{ __('locale.Your RecruitmentCV Subdomain') }}</label>
                 <div class="wp-domain-preview">
                     <input type="text" value="{{ $domain->sub_domain }}" placeholder="{{ __('locale.Not configured yet') }}" disabled readonly>
-                    <span>.recruitmentcv.com</span>
+                    <span>.{{ \App\Support\RecruitmentDomain::root() }}</span>
                 </div>
                 <div class="form-text" style="color:var(--w-ink-500);font-size:0.82rem;margin-top:8px;">{{ __('locale.Your subdomain is managed automatically and cannot be changed here.') }}</div>
             </div>
             <div class="w-form-row">
                 <span class="w-form-label">{{ __('locale.Status') }}</span>
-                @php $domainStatus = $domain->status ?: 'pending'; @endphp
                 <div>
-                    <span class="wp-badge is-{{ $domainStatus === 'active' ? 'success' : ($domainStatus === 'suspended' ? 'danger' : 'warning') }}">
-                        {{ $domainStatusLabels[$domainStatus] ?? ucfirst($domainStatus) }}
+                    <span class="wp-badge is-{{ $accountStatusBadges[$accountStatus] }}" data-domain-account-status="{{ $accountStatus }}">
+                        {{ $accountStatusLabels[$accountStatus] }}
                     </span>
-                    @if ($domainStatus !== 'active')
-                        <span style="color:var(--w-ink-500);font-size:0.82rem;margin-inline-start:8px;">{{ __('locale.A new or changed subdomain needs admin approval before it goes live.') }}</span>
+                    @if (isset($accountStatusNotes[$accountStatus]))
+                        <span style="color:var(--w-ink-500);font-size:0.82rem;margin-inline-start:8px;">{{ $accountStatusNotes[$accountStatus] }}</span>
                     @endif
                 </div>
             </div>
@@ -245,7 +233,7 @@
                 <div class="w-form-row">
                     <span class="w-form-label">{{ __('locale.Provisioning Status') }}</span>
                     <div>
-                        <span class="wp-badge is-{{ $domain->hostinger_status === 'failed' ? 'danger' : ($domain->hostinger_status === 'created' ? 'success' : 'warning') }}">
+                        <span class="wp-badge is-{{ $domain->hostinger_status === 'failed' ? 'danger' : (in_array($domain->hostinger_status, ['success', 'created'], true) ? 'success' : 'warning') }}">
                             {{ ucfirst($domain->hostinger_status) }}
                         </span>
                         @if (!empty($domain->hostinger_error))
@@ -254,7 +242,7 @@
                     </div>
                 </div>
             @endif
-            @if ($domainStatus === 'active' && !empty($domain->sub_domain))
+            @if ($domain->isLiveSubdomain())
                 <div class="w-form-row">
                     <span class="w-form-label">{{ __('locale.Live URL') }}</span>
                     <div>
@@ -262,6 +250,99 @@
                     </div>
                 </div>
             @endif
+        </div>
+    </div>
+
+    {{-- SMTP - this partner's own sender for emails to their customers
+    (PartnerSmtpSetting, PartnerPortalController::settingsSmtpUpdate()).
+    Optional: until one is active, the default RecruitmentCV sender is used
+    and its non-secret values are shown. The password is write-only - never
+    rendered; blank keeps the saved one. --}}
+    @php
+        $smtpActive = $smtp && $smtp->isUsable();
+        $smtpValue = fn ($field) => $smtp ? $smtp->{$field} : ($smtpDefaults[$field] ?? null);
+        $smtpHasPassword = $smtp && filled($smtp->getRawOriginal('password'));
+    @endphp
+    <div class="wp-settings-tab-pane" data-settings-tab-pane="smtp">
+        <div class="w-info-card wp-fade-in">
+            <h2>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
+                {{ __('locale.SMTP') }}
+            </h2>
+            <p class="wp-field-hint wp-smtp-intro">{{ __('locale.Emails to your customers (order confirmations, email changes) are sent with these settings. Optional - when inactive, the default RecruitmentCV email settings are used.') }}</p>
+            <div class="wp-smtp-current">
+                <span class="w-form-label">{{ __('locale.Currently sending with') }}</span>
+                <span class="wp-badge {{ $smtpActive ? 'is-success' : 'is-neutral' }}" data-smtp-current
+                      data-label-custom="{{ __('locale.Your SMTP') }}" data-label-default="{{ __('locale.Default RecruitmentCV email settings') }}">
+                    {{ $smtpActive ? __('locale.Your SMTP') : __('locale.Default RecruitmentCV email settings') }}
+                </span>
+            </div>
+            <div class="w-form-alert" style="display:none;" data-settings-alert="smtp"></div>
+            <form data-settings-form="smtp" autocomplete="off">
+                <div class="wp-info-grid">
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="smtp-mailer">{{ __('locale.Mailer') }}</label>
+                        <select id="smtp-mailer" name="mailer" class="w-select">
+                            @foreach (\App\Models\PartnerSmtpSetting::MAILERS as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="smtp-host">{{ __('locale.Host') }}</label>
+                        <input type="text" id="smtp-host" name="host" class="w-input" dir="ltr" maxlength="255" placeholder="smtp.example.com"
+                               value="{{ $smtpValue('host') }}">
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="smtp-port">{{ __('locale.Port') }}</label>
+                        <select id="smtp-port" name="port" class="w-select" dir="ltr">
+                            @foreach (\App\Models\PartnerSmtpSetting::PORTS as $port)
+                                <option value="{{ $port }}" @selected((int) $smtpValue('port') === $port)>{{ $port }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="smtp-encryption">{{ __('locale.Encryption') }}</label>
+                        <select id="smtp-encryption" name="encryption" class="w-select">
+                            @foreach (\App\Models\PartnerSmtpSetting::ENCRYPTIONS as $value => $label)
+                                <option value="{{ $value }}" @selected((string) $smtpValue('encryption') === (string) $value)>{{ $value === '' ? __('locale.None') : $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="smtp-username">{{ __('locale.Username') }}</label>
+                        <input type="text" id="smtp-username" name="username" class="w-input" dir="ltr" maxlength="255" autocomplete="off"
+                               value="{{ $smtp->username ?? '' }}">
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="smtp-password">{{ __('locale.Password') }}</label>
+                        <input type="password" id="smtp-password" name="password" class="w-input" dir="ltr" maxlength="255" autocomplete="new-password"
+                               value="" placeholder="{{ $smtpHasPassword ? __('locale.Saved - leave blank to keep') : '' }}"
+                               data-placeholder-saved="{{ __('locale.Saved - leave blank to keep') }}">
+                        <div class="wp-field-hint">{{ __('locale.Stored encrypted and never shown again.') }}</div>
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="smtp-from-address">{{ __('locale.From Email') }}</label>
+                        <input type="email" id="smtp-from-address" name="from_address" class="w-input" dir="ltr" maxlength="255"
+                               value="{{ $smtpValue('from_address') }}">
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="smtp-from-name">{{ __('locale.From Name') }}</label>
+                        <input type="text" id="smtp-from-name" name="from_name" class="w-input" maxlength="255"
+                               value="{{ $smtpValue('from_name') }}">
+                    </div>
+                    <div class="w-form-row">
+                        <label class="w-form-label" for="smtp-status">{{ __('locale.Status') }}</label>
+                        <select id="smtp-status" name="status" class="w-select">
+                            <option value="1" @selected($smtp && $smtp->status)>{{ __('locale.Active') }}</option>
+                            <option value="0" @selected(!$smtp || !$smtp->status)>{{ __('locale.Inactive') }}</option>
+                        </select>
+                        <div class="wp-field-hint">{{ __('locale.Active checks the connection and login before saving.') }}</div>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-btn w-btn-primary" data-settings-submit>{{ __('locale.Save Changes') }}</button>
+            </form>
         </div>
     </div>
 
@@ -279,7 +360,8 @@
             company: "{{ route('worker.partner.settings.company') }}",
             logo: "{{ route('worker.partner.settings.logo') }}",
             domain: "{{ route('worker.partner.settings.domain') }}",
-            whatsapp: "{{ route('worker.partner.settings.whatsapp') }}"
+            whatsapp: "{{ route('worker.partner.settings.whatsapp') }}",
+            smtp: "{{ route('worker.partner.settings.smtp') }}"
         };
         window.WorkerBranchesUpdateUrl = "{{ route('worker.partner.website-config.branches.update') }}";
         window.WorkerBranchesConfirmDelete = "{{ __('locale.Are you sure you want to delete this branch?') }}";

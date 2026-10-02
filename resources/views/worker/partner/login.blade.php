@@ -13,7 +13,6 @@
                 same x-brand-logo component the public header uses). --}}
                 <div class="w-partner-auth-page-brand">
                     <x-brand-logo mode="light" class="w-partner-auth-page-logo" alt="{{ __('locale.Partner Portal') }}" />
-                    <span class="w-eyebrow">{{ __('locale.Partner Portal') }}</span>
                 </div>
                 <p>{{ __('locale.Sign in or register your recruitment office to manage candidates and orders.') }}</p>
             </div>
@@ -28,4 +27,9 @@
             ])
         </div>
     </section>
+@endsection
+
+@section('page-script')
+    {{-- English <-> Arabic on this page without a reload (keeps the form state). --}}
+    <script src="{{ asset('worker/js/partner-login-language.js') }}?v={{ @filemtime(public_path('worker/js/partner-login-language.js')) ?: time() }}"></script>
 @endsection

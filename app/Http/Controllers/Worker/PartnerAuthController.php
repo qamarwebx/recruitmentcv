@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use App\Support\OtpVerification;
 use App\Support\PartnerMobile;
@@ -82,6 +83,19 @@ class PartnerAuthController extends Controller
         // original Register attempt was abandoned before OTP and the same
         // number is now being verified through Login instead.
         if (!$partner->mobile_verified_at) {
+            // A self-registration row that was never verified (still
+            // pending approval): anything identity-related on it was saved
+            // before anyone proved they own this number (older
+            // registerPending() stored password / Google identity / email
+            // before OTP). Drop it now, so none of it can survive into an
+            // approved account - the verified owner sets their own through
+            // register(). Admin-created partners (already approved) keep
+            // their admin-set values.
+            if ((int) $partner->registration_status === 0) {
+                $partner->password = null;
+                $partner->google_id = null;
+                $partner->email = null;
+            }
             $partner->mobile_verified_at = now();
             $partner->save();
         }
@@ -97,6 +111,7 @@ class PartnerAuthController extends Controller
         Auth::guard('partner')->login($partner);
         OtpVerification::consume($request);
         $request->session()->forget('Mobile');
+        $request->session()->regenerate();
 
         // Partner::portalBaseUrl() sends them to their OWN configured
         // subdomain if they have one (regardless of which host - base
@@ -110,31 +125,40 @@ class PartnerAuthController extends Controller
     }
 
     /**
-     * "Login with Password" (same modal/page as the OTP login above): mobile
-     * + country code + password, checked against partners.password (bcrypt,
-     * the same column the CRM's partner password update writes). Same
-     * partner lookup, same registration_status gates and same redirect as
-     * login(); additionally the number must already have been OTP-verified
-     * once (mobile_verified_at), so a password never replaces mobile
-     * verification. Rate-limited per number + IP like the site's Breeze
-     * LoginRequest (5 attempts).
+     * Login with Password. The identifier is a mobile number (country code
+     * + number, existing PartnerMobile lookup) or a username / email address
+     * (findByAccountIdentifier()) - identifier_type only picks which lookup
+     * runs; the partner is always resolved here, server-side. Checked
+     * against partners.password (bcrypt, the column the CRM also writes);
+     * same rate limits and verified/approved rules for both, and a password
+     * never replaces the one-time mobile OTP verification.
      */
     public function passwordLogin(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $byAccount = $request->input('identifier_type') === 'account';
+
+        $validator = Validator::make($request->all(), $byAccount ? [
+            'identifier' => 'required|string|max:255',
+            'password' => 'required|string|max:255',
+        ] : [
             'country_code' => 'required|string|max:5',
             'mobile' => 'required|string|max:20',
             'password' => 'required|string|max:255',
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['status' => 'error', 'message' => __('locale.Please enter your mobile number and password.')], 422);
+            return response()->json(['status' => 'error', 'message' => $byAccount
+                ? __('locale.Please enter your username or email address and password.')
+                : __('locale.Please enter your mobile number and password.')], 422);
         }
 
         // Own limiter keys (not the route throttle middleware, whose
         // guest key is shared by every throttled route on the domain):
-        // 5 failures per number + IP, and 30 attempts per IP overall.
-        $throttleKey = 'partner-password-login:' . sha1(preg_replace('/\D/', '', $request->country_code . $request->mobile) . '|' . $request->ip());
+        // 5 failures per identifier + IP, and 30 attempts per IP overall.
+        $identifierKey = $byAccount
+            ? 'account:' . strtolower(trim((string) $request->identifier))
+            : preg_replace('/\D/', '', $request->country_code . $request->mobile);
+        $throttleKey = 'partner-password-login:' . sha1($identifierKey . '|' . $request->ip());
         $ipKey = 'partner-password-login-ip:' . sha1($request->ip());
 
         foreach ([[$throttleKey, 5], [$ipKey, 30]] as [$key, $max]) {
@@ -147,16 +171,51 @@ class PartnerAuthController extends Controller
         }
         RateLimiter::hit($ipKey);
 
-        $partner = PartnerMobile::find($request->country_code, $request->mobile);
+        $partner = $byAccount
+            ? $this->findByAccountIdentifier($request->identifier)
+            : PartnerMobile::find($request->country_code, $request->mobile);
 
         if (!$partner || empty($partner->password) || !Hash::check($request->password, $partner->password)) {
             RateLimiter::hit($throttleKey);
 
-            return response()->json(['status' => 'error', 'message' => __('locale.The mobile number or password is incorrect.')], 422);
+            return response()->json(['status' => 'error', 'message' => $byAccount
+                ? __('locale.The username, email or password is incorrect.')
+                : __('locale.The mobile number or password is incorrect.')], 422);
         }
 
         RateLimiter::clear($throttleKey);
 
+        return $this->completePartnerLogin($request, $partner);
+    }
+
+    /**
+     * The Partner a username or email address identifies: partners.email
+     * when it contains "@", otherwise partners.username. Neither column is
+     * unique in the database, so only an EXACT single match counts - an
+     * ambiguous identifier never logs in to (or sends a code for) any of
+     * the matching accounts.
+     */
+    private function findByAccountIdentifier(?string $identifier): ?Partner
+    {
+        $identifier = trim((string) $identifier);
+        if ($identifier === '') {
+            return null;
+        }
+
+        $matches = Partner::where(str_contains($identifier, '@') ? 'email' : 'username', $identifier)->limit(2)->get();
+
+        return $matches->count() === 1 ? $matches->first() : null;
+    }
+
+    /**
+     * Shared final step for password and email-OTP login, once the partner
+     * is identified and authenticated: the existing rules (OTP-verified
+     * mobile, approved registration), then the partner guard login with a
+     * regenerated session, and the partner's own site
+     * (Partner::portalBaseUrl()) as the redirect.
+     */
+    private function completePartnerLogin(Request $request, Partner $partner)
+    {
         if (!$partner->mobile_verified_at) {
             return response()->json(['status' => 'error', 'message' => __('locale.Please log in with OTP once to verify your mobile number.')], 403);
         }
@@ -178,12 +237,234 @@ class PartnerAuthController extends Controller
     }
 
     /**
-     * Password + confirmation for Partner registration - required for a
+     * Login with OTP by username / email: the partner is resolved here and
+     * a 6-digit code is emailed ONLY to that partner's own, already-verified
+     * email (email_verified_at) - never to an address typed by the visitor.
+     * The response is identical whether or not an account matched or could
+     * receive a code, so it reveals nothing; a non-match still gets a
+     * session entry that can never verify. Rate-limited per identifier +
+     * IP by ThrottlePartnerOtpSend (route middleware).
+     */
+    public function emailOtpSend(Request $request)
+    {
+        $validator = Validator::make($request->all(), ['identifier' => 'required|string|max:255']);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Please enter your username or email address.')], 422);
+        }
+
+        $partner = $this->findByAccountIdentifier($request->identifier);
+        $canReceive = $partner && filled($partner->email) && $partner->email_verified_at;
+
+        $this->issueEmailCode($request, 'partner_email_login', $canReceive ? $partner : null, 'login');
+
+        return response()->json(['message' => 'otpsend']);
+    }
+
+    /** Verifies the emailed login code against the partner resolved at send time. */
+    public function emailOtpVerify(Request $request)
+    {
+        $partner = $this->consumeEmailCode($request, 'partner_email_login', true);
+        if (!$partner instanceof Partner) {
+            return $partner;
+        }
+
+        return $this->completePartnerLogin($request, $partner);
+    }
+
+    /**
+     * Forgot Password, step 1: a 6-digit reset code to the Partner whose
+     * registered email (partners.email - never username, mobile or a
+     * customer account) is exactly the one submitted. Same email-code
+     * scheme, mailer and per-address/IP limits as the email login code;
+     * the reply is the same generic notice whether or not a Partner matched.
+     */
+    public function passwordResetSend(Request $request)
+    {
+        $validator = Validator::make($request->all(), ['email' => 'required|string|email|max:255']);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Please enter a valid email address.')], 422);
+        }
+
+        $email = trim((string) $request->email);
+        $matches = Partner::where('email', $email)->limit(2)->get();
+        $partner = $matches->count() === 1 ? $matches->first() : null;
+
+        // Signed in (e.g. Partner Account -> Forgot Password): only the
+        // signed-in partner's own account - same generic reply otherwise.
+        $signedInId = Auth::guard('partner')->id();
+        if ($partner && $signedInId && $partner->id !== $signedInId) {
+            $partner = null;
+        }
+
+        // A new request always starts over (drops any earlier verified state).
+        $request->session()->forget('partner_password_reset_verified');
+        $this->issueEmailCode($request, 'partner_password_reset', $partner, 'reset');
+
+        return response()->json([
+            'message' => 'otpsend',
+            'notice' => __('locale.If this email is registered, an OTP has been sent.'),
+        ]);
+    }
+
+    /**
+     * Forgot Password, step 2: checks the code. Success only marks this
+     * session as allowed to set a new password for the Partner resolved at
+     * send time (for a limited time) - it never logs anyone in.
+     */
+    public function passwordResetVerify(Request $request)
+    {
+        $limits = config('partner.password_reset');
+        $ipKey = 'partner-password-reset-verify:' . sha1((string) $request->ip());
+        if (RateLimiter::tooManyAttempts($ipKey, (int) $limits['verify_per_ip'])) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Too many attempts. Please try again later.')], 429);
+        }
+        RateLimiter::hit($ipKey, (int) $limits['verify_minutes'] * 60);
+
+        $partner = $this->consumeEmailCode($request, 'partner_password_reset', false);
+        if (!$partner instanceof Partner) {
+            return $partner;
+        }
+
+        $request->session()->put('partner_password_reset_verified', [
+            'partner_id' => $partner->id,
+            'email' => $partner->email,
+            'expires_at' => now()->addMinutes((int) $limits['update_minutes'])->timestamp,
+        ]);
+
+        return response()->json(['status' => 'verified', 'message' => __('locale.OTP verified successfully.')]);
+    }
+
+    /**
+     * Forgot Password, step 3: the new password (existing policy +
+     * confirmation, same rule as Partner Account -> Change Password) for
+     * the Partner this session verified - never a partner id from the
+     * browser. Only partners.password changes; the verified state is
+     * dropped, so the code / verification cannot be used again. No login:
+     * the Partner signs in normally afterwards.
+     */
+    public function passwordResetUpdate(Request $request)
+    {
+        $verified = $request->session()->get('partner_password_reset_verified');
+
+        if (!$verified || now()->timestamp > $verified['expires_at']) {
+            $request->session()->forget('partner_password_reset_verified');
+
+            return response()->json(['status' => 'error', 'message' => __('locale.Your password reset session has expired. Please start again.')], 422);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'password' => ['required', 'confirmed', Password::defaults()],
+        ], [], ['password' => __('locale.New Password')]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+
+        $partner = Partner::find($verified['partner_id']);
+        $signedInId = Auth::guard('partner')->id();
+        if (!$partner || strcasecmp((string) $partner->email, (string) $verified['email']) !== 0
+            || ($signedInId && $partner->id !== $signedInId)) {
+            $request->session()->forget('partner_password_reset_verified');
+
+            return response()->json(['status' => 'error', 'message' => __('locale.Your password reset session has expired. Please start again.')], 422);
+        }
+
+        $partner->password = Hash::make($request->password);
+        $partner->save();
+        $request->session()->forget(['partner_password_reset_verified', 'partner_password_reset']);
+
+        return response()->json(['status' => 'success', 'message' => __('locale.Password updated successfully.')]);
+    }
+
+    /**
+     * Shared email-code issuer (email login + Forgot Password): a 6-digit
+     * code emailed to $partner's stored email through the RecruitmentCV
+     * mailer (global Website SMTP, else .env) and the branded
+     * partner-email-verification template; only its hash goes into the
+     * session under $key, with the partner/email it was sent to, an expiry
+     * and an attempt counter. $partner null (no match) or a failed send
+     * still stores an entry - one that can never verify.
+     */
+    private function issueEmailCode(Request $request, string $key, ?Partner $partner, string $purpose): void
+    {
+        $minutes = (int) config('partner.email_code.minutes');
+        $code = (string) random_int(100000, 999999);
+        $sent = false;
+
+        if ($partner && filled($partner->email)) {
+            try {
+                \App\Models\WebsiteSmtpSetting::mailerOrDefault()->to($partner->email)->send(new \App\Mail\SendOTPVerification([
+                    'name' => $partner->owner_name ?: $partner->rec_off_name,
+                    'company' => $partner->rec_off_name,
+                    'EmailOtp' => $code,
+                    'email' => $partner->email,
+                    'purpose' => $purpose,
+                    'expires_minutes' => $minutes,
+                    'view' => 'emails.partner-email-verification',
+                    'subject' => $purpose === 'reset' ? 'Your partner password reset code' : 'Your partner login code: ' . $code,
+                ]));
+                $sent = true;
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Partner email code not sent', ['partner_id' => $partner->id, 'purpose' => $purpose, 'exception' => get_class($e)]);
+            }
+        }
+
+        $request->session()->put($key, [
+            'partner_id' => $sent ? $partner->id : null,
+            'email' => $sent ? $partner->email : null,
+            'code' => Hash::make($code),
+            'expires_at' => now()->addMinutes($minutes)->timestamp,
+            'attempts' => 0,
+        ]);
+    }
+
+    /**
+     * Checks the submitted code against the session entry $key and returns
+     * the Partner it was sent to, or the JSON error to send back. One-time:
+     * the entry is removed on success, on expiry and after too many wrong
+     * codes. The Partner must still have the same email the code went to
+     * (and, for login, still verified).
+     */
+    private function consumeEmailCode(Request $request, string $key, bool $requireVerifiedEmail): Partner|\Illuminate\Http\JsonResponse
+    {
+        $pending = $request->session()->get($key);
+        $otp = trim((string) $request->otp);
+        $expired = response()->json(['status' => 'error', 'message' => __('locale.The verification code has expired. Please request a new one.')], 422);
+
+        if (!$pending || now()->timestamp > $pending['expires_at']) {
+            $request->session()->forget($key);
+
+            return $expired;
+        }
+
+        if ($otp === '' || !Hash::check($otp, $pending['code']) || !$pending['partner_id']) {
+            $pending['attempts']++;
+            if ($pending['attempts'] >= (int) config('partner.email_code.attempts')) {
+                $request->session()->forget($key);
+
+                return response()->json(['status' => 'error', 'message' => __('locale.Too many incorrect codes. Please request a new one.')], 422);
+            }
+            $request->session()->put($key, $pending);
+
+            return response()->json(['status' => 'error', 'message' => __('locale.The verification code is incorrect.')], 422);
+        }
+
+        $request->session()->forget($key);
+
+        $partner = Partner::find($pending['partner_id']);
+        if (!$partner || ($requireVerifiedEmail && !$partner->email_verified_at) || strcasecmp((string) $partner->email, (string) $pending['email']) !== 0) {
+            return $expired;
+        }
+
+        return $partner;
+    }
+
+    /**
+     * Password for Partner registration (single field, no confirmation) - required for a
      * normal (mobile) registration, optional for the Google flow.
      */
     private function passwordRules(Request $request): array
     {
-        return ['password' => [$request->filled('google_token') ? 'nullable' : 'required', 'confirmed', Password::defaults()]];
+        return ['password' => [$request->filled('google_token') ? 'nullable' : 'required', Password::defaults()]];
     }
 
     /**
@@ -207,6 +488,29 @@ class PartnerAuthController extends Controller
             'exists' => $exists,
             'message' => $exists ? __('locale.An account with this mobile number already exists.') : null,
         ]);
+    }
+
+    /**
+     * Is this number already a real Partner account - OTP-verified, or
+     * approved/rejected by an admin (admin-created partners can be approved
+     * without a verified mobile)? Such a row is never overwritten by a
+     * registration request; the owner logs in instead.
+     */
+    private function mobileHasAccount(?string $countryCode, string $mobile): bool
+    {
+        return PartnerMobile::query($countryCode, $mobile)
+            ->where(fn ($q) => $q->whereNotNull('mobile_verified_at')->orWhere('registration_status', '!=', 0))
+            ->exists();
+    }
+
+    /** The unverified, still-pending self-registration row for this number (or null). */
+    private function pendingRegistrationRow(?string $countryCode, string $mobile): ?Partner
+    {
+        return PartnerMobile::query($countryCode, $mobile)
+            ->whereNull('mobile_verified_at')
+            ->where('registration_status', 0)
+            ->orderBy('id')
+            ->first();
     }
 
     /**
@@ -239,11 +543,11 @@ class PartnerAuthController extends Controller
             return response()->json(['status' => 'error', 'message' => __('locale.Please verify your mobile number first.')], 422);
         }
 
-        // Only an already-OTP-verified partner counts as a real duplicate -
-        // a still-pending row for this same number (e.g. Resend OTP, or a
-        // retry after abandoning an earlier attempt) is reused below
-        // instead of being treated as a conflict.
-        if (PartnerMobile::query($request->session()->get('CountryCode'), $mobile)->whereNotNull('mobile_verified_at')->exists()) {
+        // Only a real account (verified, or approved/rejected by an admin)
+        // is a conflict - a still-pending row for this same number (e.g.
+        // Resend OTP, or a retry after abandoning an earlier attempt) is
+        // reused below instead.
+        if ($this->mobileHasAccount($request->session()->get('CountryCode'), $mobile)) {
             return response()->json(['status' => 'error', 'message' => __('locale.An account with this mobile number already exists.')], 422);
         }
 
@@ -263,13 +567,15 @@ class PartnerAuthController extends Controller
         $countryId = $request->session()->get('CountryId');
         $country = $countryId ? Country::find($countryId) : null;
 
-        $partner = PartnerMobile::query($request->session()->get('CountryCode'), $mobile)->whereNull('mobile_verified_at')->orderBy('id')->first() ?? new Partner();
+        // Requesting an OTP is NOT proof of owning this number, so only the
+        // non-sensitive "registration attempt" details are kept here. No
+        // password, Google identity or email (Google login matches partners
+        // by email) - those are saved only by register(), after the OTP is
+        // verified; the password/Google fields above are only validated
+        // now so the form reports errors before the OTP step.
+        $partner = $this->pendingRegistrationRow($request->session()->get('CountryCode'), $mobile) ?? new Partner();
         $partner->rec_off_name = $request->company_name;
         $partner->owner_name = $googleData['name'] ?? $request->full_name;
-        $partner->email = $googleData['email'] ?? $request->email;
-        if ($googleData) {
-            $partner->google_id = $googleData['google_id'];
-        }
         if (!$partner->exists) {
             $partner->owner_mobile_no = $mobile;
         }
@@ -278,9 +584,6 @@ class PartnerAuthController extends Controller
         $partner->status = 1;
         $partner->portal_status = 0;
         $partner->registration_status = 0;
-        if ($request->filled('password')) {
-            $partner->password = Hash::make($request->password);
-        }
         // mobile_verified_at intentionally NOT set - still pending OTP
         // verification. register() sets it once that actually succeeds.
         $partner->save();
@@ -330,7 +633,9 @@ class PartnerAuthController extends Controller
             return response()->json(['status' => 'error', 'message' => __('locale.Please verify your mobile number first.')], 422);
         }
 
-        if (PartnerMobile::query($request->session()->get('CountryCode'), $mobile)->whereNotNull('mobile_verified_at')->exists()) {
+        // An existing real account (verified, or approved/rejected) is never
+        // re-registered over - its owner logs in instead.
+        if ($this->mobileHasAccount($request->session()->get('CountryCode'), $mobile)) {
             return response()->json(['status' => 'error', 'message' => __('locale.An account with this mobile number already exists.')], 422);
         }
 
@@ -359,13 +664,14 @@ class PartnerAuthController extends Controller
         $countryId = $request->session()->get('CountryId');
         $country = $countryId ? Country::find($countryId) : null;
 
-        $partner = PartnerMobile::query($request->session()->get('CountryCode'), $mobile)->whereNull('mobile_verified_at')->orderBy('id')->first() ?? new Partner();
+        $partner = $this->pendingRegistrationRow($request->session()->get('CountryCode'), $mobile) ?? new Partner();
         $partner->rec_off_name = $request->company_name;
         $partner->owner_name = $googleData['name'] ?? $request->full_name;
-        $partner->email = $googleData['email'] ?? $request->email;
-        if ($googleData) {
-            $partner->google_id = $googleData['google_id'];
-        }
+        // Credentials / login identity come ONLY from this OTP-verified
+        // submission - nothing saved on the row before verification
+        // survives (an absent value is cleared, not kept).
+        $partner->email = $googleData['email'] ?? ($request->email ?: null);
+        $partner->google_id = $googleData ? $googleData['google_id'] : null;
         if (!$partner->exists) {
             $partner->owner_mobile_no = $mobile;
         }
@@ -374,13 +680,27 @@ class PartnerAuthController extends Controller
         $partner->status = 1;
         $partner->portal_status = 0;
         $partner->registration_status = 0;
-        // Set again here (not only in registerPending()): that row was saved
-        // before the number was verified, so the password that sticks is
-        // the one submitted by whoever actually passed OTP.
-        if ($request->filled('password')) {
-            $partner->password = Hash::make($request->password);
-        }
+        // Only the password submitted by whoever actually passed OTP (none
+        // for a Google-only registration) - never one from before.
+        $partner->password = $request->filled('password') ? Hash::make($request->password) : null;
         $partner->mobile_verified_at = now();
+
+        // Username = the local part of the final (OTP-verified) email, e.g.
+        // qamarwebx@gmail.com -> qamarwebx - only for a row that has none
+        // yet. Same uniqueness rule as the CRM's username check
+        // (PartnerController::edcheckusername: not used by another partner);
+        // if it is taken it is left empty for an admin to set, never
+        // overwritten or reshaped.
+        if (blank($partner->username) && filled($partner->email)) {
+            $username = Str::before(strtolower(trim($partner->email)), '@');
+            $taken = Partner::where('username', $username)
+                ->when($partner->exists, fn ($q) => $q->whereKeyNot($partner->getKey()))
+                ->exists();
+            if ($username !== '' && !$taken) {
+                $partner->username = $username;
+            }
+        }
+
         $partner->save();
 
         // Match the existing admin-created-partner pattern (PartnerController::store)
@@ -405,9 +725,18 @@ class PartnerAuthController extends Controller
 
     public function logout(Request $request)
     {
+        // Partner logout only. The session is shared by every
+        // *.recruitmentcv.com site and may also hold a Customer login (`web`
+        // guard), so it is not invalidated/flushed: only the partner login
+        // (the partner guard's own session key and remember cookie) and the
+        // partner-only flow data are removed, then the session id is
+        // regenerated (fixation-safe). The CSRF token is kept so other open
+        // tabs keep working.
         Auth::guard('partner')->logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        $request->session()->forget(['partner_email_change', 'partner_google_intent', 'new_partner']);
+        // New session id, old one destroyed; data (incl. the CSRF token) kept
+        // - regenerate() would also rotate the token.
+        $request->session()->migrate(true);
 
         // Partner Login on the SAME host the partner logged out from (route()
         // uses the current request's host - e.g. raha.recruitmentcv.com).
@@ -447,6 +776,7 @@ class PartnerAuthController extends Controller
         }
 
         Auth::guard('partner')->login($partner);
+        $request->session()->regenerate();
 
         return redirect()->route('worker.partner.candidates');
     }

@@ -1,4 +1,13 @@
 @php
+    // Partner website (SiteBrand::legalOperator(), passed in as $legalOperator
+    // by the public page and the Website Config editor): the partner
+    // operates the site on the RecruitmentCV platform provided by Qamr
+    // International, so the sentences naming the legal party use the
+    // partner variant. Null on the main site - the original Qamr-only text.
+    $legal = $legalOperator ?? null;
+    $legalText = fn (string $qamrKey, string $partnerKey) => $legal ? __('locale.' . $partnerKey, $legal) : __('locale.' . $qamrKey);
+@endphp
+@php
     $legalAddr = $frontwebsite->bottom_contact_us_addr ?? null;
     $legalPhone = $frontwebsite->bottom_contact_us_phone ?? ($frontwebsite->contact_us_phone ?? null);
     $legalEmail = $frontwebsite->bottom_contact_us_email ?? null;
@@ -30,12 +39,12 @@
 
 <div class="w-info-card" id="acceptance">
     <h2>1. {{ __('locale.Acceptance of Terms') }}</h2>
-    <p>{{ __('locale.These Terms of Service ("Terms") govern access to and use of the Qamr International Worker Portal at worker.qamarhire.com (the "Portal") by recruitment partners, employers and authorized users ("Partner", "you"). By registering for, accessing or using the Portal, you agree to be bound by these Terms and our Privacy Policy. If you do not agree, please do not use the Portal.') }}</p>
+    <p>{{ $legalText('These Terms of Service ("Terms") govern access to and use of the Qamr International Worker Portal at worker.qamarhire.com (the "Portal") by recruitment partners, employers and authorized users ("Partner", "you"). By registering for, accessing or using the Portal, you agree to be bound by these Terms and our Privacy Policy. If you do not agree, please do not use the Portal.', 'These Terms of Service ("Terms") govern access to and use of the Worker Portal at :site, operated by :operator on the RecruitmentCV platform provided by Qamr International (the "Portal"), by recruitment partners, employers and authorized users ("Partner", "you"). By registering for, accessing or using the Portal, you agree to be bound by these Terms and our Privacy Policy. If you do not agree, please do not use the Portal.') }}</p>
 </div>
 
 <div class="w-info-card" id="eligibility">
     <h2>2. {{ __('locale.Eligibility & Partner Registration') }}</h2>
-    <p>{{ __('locale.The Portal is intended for businesses and individuals seeking to hire candidates through Qamr International. To use Partner features, you must register with accurate company and contact information, verify your mobile number, and be approved by our team; access to the Partner Portal is granted only once your registration status is approved. We may decline or revoke registration at our discretion.') }}</p>
+    <p>{{ $legalText('The Portal is intended for businesses and individuals seeking to hire candidates through Qamr International. To use Partner features, you must register with accurate company and contact information, verify your mobile number, and be approved by our team; access to the Partner Portal is granted only once your registration status is approved. We may decline or revoke registration at our discretion.', 'The Portal is intended for businesses and individuals seeking to hire candidates through :operator. To use Partner features, you must register with accurate company and contact information, verify your mobile number, and be approved by our team; access to the Partner Portal is granted only once your registration status is approved. We may decline or revoke registration at our discretion.') }}</p>
 </div>
 
 <div class="w-info-card" id="account-security">
@@ -85,7 +94,7 @@
 
 <div class="w-info-card" id="intellectual-property">
     <h2>10. {{ __('locale.Intellectual Property') }}</h2>
-    <p>{{ __('locale.All content, branding, software and materials made available on the Portal, other than candidate-submitted information, are owned by or licensed to Qamr International and may not be copied, modified or used without our prior written consent.') }}</p>
+    <p>{{ $legalText('All content, branding, software and materials made available on the Portal, other than candidate-submitted information, are owned by or licensed to Qamr International and may not be copied, modified or used without our prior written consent.', 'All content, branding, software and materials made available on the Portal, other than candidate-submitted information, are owned by or licensed to :operator or Qamr International, as the provider of the RecruitmentCV platform, and may not be copied, modified or used without prior written consent.') }}</p>
 </div>
 
 <div class="w-info-card" id="third-party-services">
@@ -100,17 +109,17 @@
 
 <div class="w-info-card" id="limitation-of-liability">
     <h2>13. {{ __('locale.Limitation of Liability') }}</h2>
-    <p>{{ __('locale.To the maximum extent permitted by law, Qamr International shall not be liable for any indirect, incidental, special or consequential damages arising from your use of the Portal or reliance on candidate information, including losses arising from hiring decisions.') }}</p>
+    <p>{{ $legalText('To the maximum extent permitted by law, Qamr International shall not be liable for any indirect, incidental, special or consequential damages arising from your use of the Portal or reliance on candidate information, including losses arising from hiring decisions.', 'To the maximum extent permitted by law, neither :operator nor Qamr International (as the provider of the RecruitmentCV platform) shall be liable for any indirect, incidental, special or consequential damages arising from your use of the Portal or reliance on candidate information, including losses arising from hiring decisions.') }}</p>
 </div>
 
 <div class="w-info-card" id="indemnification">
     <h2>14. {{ __('locale.Indemnification') }}</h2>
-    <p>{{ __('locale.You agree to indemnify and hold Qamr International harmless from any claims, damages or expenses arising from your misuse of the Portal, breach of these Terms, or violation of applicable law.') }}</p>
+    <p>{{ $legalText('You agree to indemnify and hold Qamr International harmless from any claims, damages or expenses arising from your misuse of the Portal, breach of these Terms, or violation of applicable law.', 'You agree to indemnify and hold :operator and Qamr International harmless from any claims, damages or expenses arising from your misuse of the Portal, breach of these Terms, or violation of applicable law.') }}</p>
 </div>
 
 <div class="w-info-card" id="suspension-termination">
     <h2>15. {{ __('locale.Suspension & Termination') }}</h2>
-    <p>{{ __('locale.We may suspend or terminate your access to the Portal at any time, with or without notice, if we reasonably believe you have violated these Terms, provided false information, or engaged in conduct harmful to Qamr International, candidates or other users.') }}</p>
+    <p>{{ $legalText('We may suspend or terminate your access to the Portal at any time, with or without notice, if we reasonably believe you have violated these Terms, provided false information, or engaged in conduct harmful to Qamr International, candidates or other users.', 'We may suspend or terminate your access to the Portal at any time, with or without notice, if we reasonably believe you have violated these Terms, provided false information, or engaged in conduct harmful to :operator, Qamr International, candidates or other users.') }}</p>
 </div>
 
 <div class="w-info-card" id="governing-law">

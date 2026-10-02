@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
@@ -27,7 +28,9 @@ class EventServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        //
+        // Partner Portal "Account Details" prompt: every successful partner
+        // login (any login path) starts a new once-per-login cycle.
+        Event::listen(Login::class, [\App\Support\PartnerAccountPrompt::class, 'startCycle']);
     }
 
     /**

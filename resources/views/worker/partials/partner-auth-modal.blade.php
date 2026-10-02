@@ -37,14 +37,14 @@
                     @include('worker.partials.language-switcher', ['switchRoute' => 'worker.lang.switch'])
                 </div>
             @endif
-            <p class="w-modal-subtitle" data-partner-auth-subtitle>{{ __('locale.Sign in with your phone number to continue.') }}</p>
+            <p class="w-modal-subtitle" data-partner-auth-subtitle>{{ __('locale.Sign in to your partner account') }}</p>
 
             <div class="w-form-alert" data-partner-auth-alert hidden></div>
 
             {{-- Step 1: mobile number (+ company/full name when registering) --}}
             <div data-partner-step="mobile">
                 {{-- Register-only fields, split around the shared Mobile Number row:
-                Full Name, Company, [Mobile], Email, Password, Confirm Password. --}}
+                Full Name, Company, [Mobile], Email, Password (with show/hide). --}}
                 <div data-partner-register-fields hidden>
                     <div class="w-form-row">
                         <label class="w-form-label">{{ __('locale.Full Name') }}</label>
@@ -55,12 +55,22 @@
                         <input type="text" class="w-input" placeholder="e.g. Al Noor Recruitment Office" data-partner-reg-company>
                     </div>
                 </div>
-                <div class="w-form-row">
-                    <label class="w-form-label">{{ __('locale.Mobile Number') }}</label>
-                    <div class="w-form-phone-row">
+                {{-- Identifier: mobile number (every mode) or, in Login only, a
+                username / email address - switched by the link below without a
+                reload (partner-auth.js: identifierType). --}}
+                <div class="w-form-row w-auth-identifier" data-partner-identifier-row>
+                    <label class="w-form-label" data-partner-identifier-label>{{ __('locale.Mobile Number') }}</label>
+                    <div class="w-form-phone-row" data-partner-mobile-wrap>
                         @include('worker.partials.country-code-select', ['attr' => 'data-partner-country-code'])
-                        <input type="tel" class="w-input" placeholder="{{ __('locale.Mobile Number') }}" data-partner-mobile inputmode="numeric">
+                        <input type="tel" class="w-input" placeholder="{{ __('locale.Enter mobile number') }}" data-partner-mobile inputmode="numeric" autocomplete="tel-national">
                     </div>
+                    <div class="w-input-icon" data-partner-account-wrap hidden>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><path d="m3 6.5 9 6.5 9-6.5"/></svg>
+                        <input type="text" class="w-input" placeholder="{{ __('locale.Enter username or email address') }}" data-partner-account autocomplete="username" autocapitalize="off" spellcheck="false">
+                    </div>
+                    <button type="button" class="w-auth-identifier-toggle" data-partner-identifier-toggle
+                        data-label-to-account="{{ __('locale.Use a username or email address instead') }}"
+                        data-label-to-mobile="{{ __('locale.Use a mobile number instead') }}">{{ __('locale.Use a username or email address instead') }}</button>
                 </div>
                 <div data-partner-register-fields hidden>
                     <div class="w-form-row">
@@ -69,26 +79,39 @@
                     </div>
                     <div class="w-form-row">
                         <label class="w-form-label">{{ __('locale.Password') }}</label>
-                        <input type="password" class="w-input" autocomplete="new-password" placeholder="{{ __('locale.Password') }}" data-partner-reg-password>
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.Confirm Password') }}</label>
-                        <input type="password" class="w-input" autocomplete="new-password" placeholder="{{ __('locale.Confirm Password') }}" data-partner-reg-password-confirm>
+                        <div class="w-input-password">
+                            <input type="password" class="w-input" autocomplete="new-password" placeholder="{{ __('locale.Password') }}" data-partner-reg-password>
+                            @include('worker.partials.password-toggle')
+                        </div>
                     </div>
                 </div>
-                {{-- Order: Mobile -> Password (Login with Password only) ->
-                method switch -> button. Register/add-mobile always use OTP
-                (partner-auth.js hides the password row and switch there). --}}
+                {{-- Login only: method choice -> password (Password only) ->
+                Continue. Register/add-mobile always use OTP (partner-auth.js
+                hides the method choice and password row there). --}}
+                <div class="w-auth-login-using" data-partner-login-method>
+                    <span class="w-form-label">{{ __('locale.Login using') }}</span>
+                    <div class="w-auth-radios" role="radiogroup">
+                        <label class="w-auth-radio">
+                            <input type="radio" name="partner_login_method" value="otp" data-partner-method checked>
+                            <span class="w-auth-radio-mark" aria-hidden="true"></span>
+                            <span class="w-auth-radio-text"><strong>{{ __('locale.OTP') }}</strong> <small data-partner-otp-destination
+                                data-label-mobile="{{ __('locale.(Send code to mobile)') }}"
+                                data-label-account="{{ __('locale.(Send code to email)') }}">{{ __('locale.(Send code to mobile)') }}</small></span>
+                        </label>
+                        <label class="w-auth-radio">
+                            <input type="radio" name="partner_login_method" value="password" data-partner-method>
+                            <span class="w-auth-radio-mark" aria-hidden="true"></span>
+                            <span class="w-auth-radio-text"><strong>{{ __('locale.Password') }}</strong></span>
+                        </label>
+                    </div>
+                </div>
                 <div class="w-form-row" data-partner-password-row hidden>
                     <label class="w-form-label">{{ __('locale.Password') }}</label>
-                    <input type="password" class="w-input" autocomplete="current-password" placeholder="{{ __('locale.Password') }}" data-partner-password>
+                    <input type="password" class="w-input" autocomplete="current-password" placeholder="{{ __('locale.Enter your password') }}" data-partner-password>
+                    <button type="button" class="w-auth-forgot-link" data-partner-forgot-open>{{ __('locale.Forgot Password?') }}</button>
                 </div>
-                <div class="w-auth-method" role="tablist" data-partner-login-method>
-                    <button type="button" class="w-auth-method-btn is-active" role="tab" aria-selected="true" data-partner-method="otp">{{ __('locale.Login with OTP') }}</button>
-                    <button type="button" class="w-auth-method-btn" role="tab" aria-selected="false" data-partner-method="password">{{ __('locale.Login with Password') }}</button>
-                </div>
-                <button type="button" class="w-btn w-btn-primary w-btn-block" data-partner-send-otp>{{ __('locale.Send OTP') }}</button>
-                <button type="button" class="w-btn w-btn-primary w-btn-block" data-partner-password-login hidden>{{ __('locale.Continue') }}</button>
+                <button type="button" class="w-btn w-btn-primary w-btn-block w-btn-continue" data-partner-send-otp>{{ __('locale.Continue') }}</button>
+                <button type="button" class="w-btn w-btn-primary w-btn-block w-btn-continue" data-partner-password-login hidden>{{ __('locale.Continue') }}</button>
 
                 <div class="w-auth-divider" data-partner-google-wrap>
                     <span>{{ __('locale.OR') }}</span>
@@ -125,16 +148,57 @@
 
             {{-- Step 2: OTP verification --}}
             <div data-partner-step="otp" hidden>
-                <p class="w-form-hint">{{ __('locale.Enter the 4-digit code sent to') }} <strong data-partner-mobile-display></strong></p>
+                <p class="w-form-hint"><span data-partner-otp-hint>{{ __('locale.Enter the 4-digit code sent to') }}</span> <strong data-partner-mobile-display></strong></p>
                 <div class="w-form-row">
-                    <input type="text" class="w-input w-input-otp" maxlength="4" inputmode="numeric" placeholder="••••" data-partner-otp>
+                    <input type="text" class="w-input w-input-otp" maxlength="4" inputmode="numeric" autocomplete="one-time-code" placeholder="••••" data-partner-otp>
                 </div>
                 <button type="button" class="w-btn w-btn-primary w-btn-block" data-partner-verify-otp>{{ __('locale.Verify & Continue') }}</button>
                 <div class="w-form-resend">
                     <span data-partner-resend-timer>{{ __('locale.Resend available in') }} <strong data-partner-countdown>60</strong>s</span>
                     <a href="javascript:void(0)" data-partner-resend-btn hidden>{{ __('locale.Resend OTP') }}</a>
                 </div>
-                <button type="button" class="w-form-back" data-partner-back-to-mobile>&larr; {{ __('locale.Change number') }}</button>
+                <button type="button" class="w-form-back" data-partner-back-to-mobile>&larr; <span data-partner-back-label>{{ __('locale.Change number') }}</span></button>
+            </div>
+
+            {{-- Forgot Password ("Forgot Password?" under the Login password):
+            registered email -> the shared OTP step above (partner-auth.js
+            otpChannel 'reset') -> new password -> done. Server side:
+            PartnerAuthController::passwordReset*(); nothing here logs in. --}}
+            <div data-partner-step="forgot" hidden>
+                <div class="w-form-row">
+                    <label class="w-form-label">{{ __('locale.Email Address') }}</label>
+                    <div class="w-input-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><path d="m3 6.5 9 6.5 9-6.5"/></svg>
+                        <input type="email" class="w-input" placeholder="{{ __('locale.Enter your registered email address') }}" data-partner-forgot-email autocomplete="email" autocapitalize="off" spellcheck="false">
+                    </div>
+                </div>
+                <button type="button" class="w-btn w-btn-primary w-btn-block" data-partner-forgot-send>{{ __('locale.Send verification code') }}</button>
+                <button type="button" class="w-form-back" data-partner-forgot-back>&larr; <span data-partner-forgot-back-label>{{ __('locale.Back to login') }}</span></button>
+            </div>
+
+            <div data-partner-step="forgot-password" hidden>
+                <div class="w-form-alert is-success">{{ __('locale.OTP verified successfully.') }}</div>
+                <div class="w-form-row">
+                    <label class="w-form-label">{{ __('locale.New Password') }}</label>
+                    <div class="w-input-password">
+                        <input type="password" class="w-input" autocomplete="new-password" placeholder="{{ __('locale.New Password') }}" data-partner-reset-password>
+                        @include('worker.partials.password-toggle')
+                    </div>
+                </div>
+                <div class="w-form-row">
+                    <label class="w-form-label">{{ __('locale.Confirm Password') }}</label>
+                    <div class="w-input-password">
+                        <input type="password" class="w-input" autocomplete="new-password" placeholder="{{ __('locale.Confirm Password') }}" data-partner-reset-password-confirm>
+                        @include('worker.partials.password-toggle')
+                    </div>
+                </div>
+                <button type="button" class="w-btn w-btn-primary w-btn-block" data-partner-reset-submit>{{ __('locale.Update Password') }}</button>
+            </div>
+
+            <div data-partner-step="forgot-done" hidden>
+                <div class="w-form-alert is-success">{{ __('locale.Password updated successfully.') }}</div>
+                <p class="w-form-hint">{{ __('locale.You can now log in with your new password.') }}</p>
+                <button type="button" class="w-btn w-btn-primary w-btn-block w-btn-continue" data-partner-reset-done>{{ __('locale.Continue to Login') }}</button>
             </div>
 
             {{-- Step 3: registration (fallback - only when someone tried to Login with an unregistered number) --}}
@@ -154,11 +218,10 @@
                 </div>
                 <div class="w-form-row">
                     <label class="w-form-label">{{ __('locale.Password') }}</label>
-                    <input type="password" class="w-input" autocomplete="new-password" placeholder="{{ __('locale.Password') }}" data-partner-password-new>
-                </div>
-                <div class="w-form-row">
-                    <label class="w-form-label">{{ __('locale.Confirm Password') }}</label>
-                    <input type="password" class="w-input" autocomplete="new-password" placeholder="{{ __('locale.Confirm Password') }}" data-partner-password-new-confirm>
+                    <div class="w-input-password">
+                        <input type="password" class="w-input" autocomplete="new-password" placeholder="{{ __('locale.Password') }}" data-partner-password-new>
+                        @include('worker.partials.password-toggle')
+                    </div>
                 </div>
                 <button type="button" class="w-btn w-btn-primary w-btn-block" data-partner-register-submit>{{ __('locale.Register') }}</button>
             </div>
@@ -175,7 +238,9 @@
             closes it. --}}
             <div data-partner-step="pending" hidden>
                 <div class="w-form-alert is-success" data-partner-pending-message></div>
-                <a href="https://wa.me/919004006272" target="_blank" rel="noopener" class="w-btn w-btn-outline w-btn-block">
+                {{-- RecruitmentCV/Qamr support: the central WhatsApp settings
+                (CRM -> Website -> WhatsApp), same as the Partner Portal button. --}}
+                <a href="{{ \App\Models\PartnerPageContent::effectiveWhatsapp(null)['link'] }}" target="_blank" rel="noopener" class="w-btn w-btn-outline w-btn-block">
                     {{ __('locale.Contact Support') }}
                 </a>
             </div>

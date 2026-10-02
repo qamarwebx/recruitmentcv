@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Domain;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -97,6 +98,52 @@ class CustomerSite
         }
 
         return $errors;
+    }
+
+    /**
+     * Which of a customer's orders the current partner website may show
+     * (orders list, order notifications, order details, cancellation):
+     *   - orders with THIS site's partner;
+     *   - orders with no office, or with an office that has no active
+     *     partner website of its own (legacy/CRM offices - they can't be
+     *     seen anywhere else) - shown as "Handled by our team";
+     * but never orders with ANOTHER partner that has its own active website
+     * (those belong on that partner's site). "Active website" = the same
+     * rule ResolvePartnerWebsiteDomain serves sites by
+     * (Domain::scopeLiveSubdomain()) + the partner still existing.
+     * $partnerColumn is the orders' partner_id column in $query, e.g.
+     * 'booking.partner_id'. Works on query and Eloquent builders.
+     */
+    public static function whereOrderVisible($query, string $partnerColumn)
+    {
+        $sitePartnerId = self::partnerId();
+
+        return $query->where(function ($visible) use ($sitePartnerId, $partnerColumn) {
+            if ($sitePartnerId !== null) {
+                $visible->where($partnerColumn, $sitePartnerId);
+            }
+            $visible->orWhereNull($partnerColumn);
+            // ... or no partner that still exists AND has a live website.
+            $visible->addWhereExistsQuery(
+                Domain::query()
+                    ->liveSubdomain()
+                    ->join('partners', 'partners.id', '=', 'domains.partner_id')
+                    ->whereColumn('domains.partner_id', $partnerColumn)
+                    ->selectRaw('1')
+                    ->toBase(),
+                'or',
+                true
+            );
+        });
+    }
+
+    /**
+     * A visible order that is NOT this site's own partner's order - shown
+     * with the neutral "Handled by our team" label (no office name).
+     */
+    public static function isHandledByTeam($orderPartnerId): bool
+    {
+        return (int) $orderPartnerId !== (int) self::partnerId() || $orderPartnerId === null;
     }
 
     /**

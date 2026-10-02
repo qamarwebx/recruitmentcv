@@ -28,20 +28,69 @@
     </div>
 
     <div class="wp-grid-2">
-        <div class="w-info-card wp-fade-in">
-            <h2>
+        {{-- Read-only by default (values shown like Account Information);
+        "Edit" shows the existing form, which saves through the same
+        accountUpdate route. A failed save comes back in edit mode with the
+        typed values; a successful one lands back here in view mode. --}}
+        @php
+            $accountFields = ['owner_name', 'username', 'rec_off_name', 'licence_number', 'country_id', 'city_id'];
+            $accountEditing = $errors->hasAny($accountFields);
+            $accountCountry = optional($countries->firstWhere('id', $partner->country_id))->display_name;
+            $accountCity = optional($cities->firstWhere('id', $partner->city_id))->display_name;
+        @endphp
+        <div class="w-info-card wp-fade-in" data-account-details @if ($accountEditing) data-account-editing @endif>
+            <h2 class="wp-card-head-with-action">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
                 {{ __('locale.Edit Account Details') }}
+                <button type="button" class="w-btn w-btn-outline w-btn-sm wp-card-head-action" data-account-edit aria-controls="partner-account-form" @if ($accountEditing) hidden @endif>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                    {{ __('locale.Edit') }}
+                </button>
             </h2>
-            <form action="{{ route('worker.partner.account.update') }}" method="POST">
+            <div class="wp-info-grid" data-account-view @if ($accountEditing) hidden @endif>
+                <div class="wp-info-item">
+                    <span>{{ __('locale.Full Name') }}</span>
+                    <strong>{{ $partner->owner_name ?: '---' }}</strong>
+                </div>
+                <div class="wp-info-item">
+                    <span>{{ __('locale.Username') }}</span>
+                    <strong dir="ltr">{{ $partner->username ?: '---' }}</strong>
+                </div>
+                <div class="wp-info-item">
+                    <span>{{ __('locale.Company / Recruitment Office Name') }}</span>
+                    <strong>{{ $partner->rec_off_name ?: '---' }}</strong>
+                </div>
+                <div class="wp-info-item">
+                    <span>{{ __('locale.Recruitment Licence Number') }}</span>
+                    <strong>{{ $partner->licence_number ?: '---' }}</strong>
+                </div>
+                <div class="wp-info-item">
+                    <span>{{ __('locale.Country') }}</span>
+                    <strong>{{ $accountCountry ?: '---' }}</strong>
+                </div>
+                <div class="wp-info-item">
+                    <span>{{ __('locale.City') }}</span>
+                    <strong>{{ $accountCity ?: '---' }}</strong>
+                </div>
+            </div>
+            <form action="{{ route('worker.partner.account.update') }}" method="POST" id="partner-account-form" data-account-form @unless ($accountEditing) hidden @endunless>
                 @csrf
                  <div class="w-form-row">
                     <label class="w-form-label">{{ __('locale.Full Name') }}</label>
                     <input type="text" name="owner_name" class="w-input" value="{{ old('owner_name', $partner->owner_name) }}" required>
                 </div>
+                {{-- Used to sign in (Login with Password / OTP by username). --}}
+                <div class="w-form-row">
+                    <label class="w-form-label" for="partner-username">{{ __('locale.Username') }}</label>
+                    <input type="text" name="username" id="partner-username" class="w-input" dir="ltr" value="{{ old('username', $partner->username) }}" maxlength="120" autocomplete="username" autocapitalize="off" spellcheck="false" required>
+                </div>
                 <div class="w-form-row">
                     <label class="w-form-label">{{ __('locale.Company / Recruitment Office Name') }}</label>
                     <input type="text" name="rec_off_name" class="w-input" value="{{ old('rec_off_name', $partner->rec_off_name) }}" required>
+                </div>
+                <div class="w-form-row">
+                    <label class="w-form-label" for="partner-licence-number">{{ __('locale.Recruitment Licence Number') }}</label>
+                    <input type="text" name="licence_number" id="partner-licence-number" class="w-input" value="{{ old('licence_number', $partner->licence_number) }}" maxlength="100" autocomplete="off">
                 </div>
                 <div class="w-form-row">
                     <label class="w-form-label">{{ __('locale.Country') }}</label>
@@ -61,7 +110,10 @@
                         @endforeach
                     </select>
                 </div>
-                <button type="submit" class="w-btn w-btn-primary">{{ __('locale.Save Changes') }}</button>
+                <div class="wp-form-actions">
+                    <button type="submit" class="w-btn w-btn-primary">{{ __('locale.Save Changes') }}</button>
+                    <button type="button" class="w-btn w-btn-outline" data-account-cancel>{{ __('locale.Cancel') }}</button>
+                </div>
             </form>
         </div>
 
@@ -103,28 +155,47 @@
                         <span>{{ __('locale.Member Since') }}</span>
                         <strong>{{ $partner->created_at ? $partner->created_at->format('d M Y') : '---' }}</strong>
                     </div>
-                    <div class="wp-info-item">
-                        <span>{{ __('locale.Verification') }}</span>
-                        <strong>{{ $partner->mobile_verified_at || $partner->google_id ? __('locale.Verified') : __('locale.Not verified') }}</strong>
-                    </div>
                 </div>
             </div>
 
-            {{-- Password for "Login with Password": New + Confirm only. Never shows the stored one. --}}
+            {{-- Password for "Login with Password": Old (only when one is set) +
+            New + Confirm, each with show/hide. Never shows the stored one.
+            "Forgot Password?" opens the login page's Forgot Password flow
+            (shared partner-auth modal) for this partner's registered email. --}}
+            @php $hasPassword = !empty($partner->password); @endphp
             <div class="w-info-card wp-fade-in">
                 <h2>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                     {{ __('locale.Change Password') }}
                 </h2>
+                <div class="w-form-alert is-success" data-account-password-reset-success hidden>{{ __('locale.Password updated successfully.') }}</div>
                 <form action="{{ route('worker.partner.account.password') }}" method="POST">
                     @csrf
+                    @if ($hasPassword)
+                        <div class="w-form-row">
+                            <label class="w-form-label" for="partner-old-password">{{ __('locale.Old Password') }}</label>
+                            <div class="w-input-password">
+                                <input type="password" name="current_password" id="partner-old-password" class="w-input" placeholder="{{ __('locale.Old Password') }}" autocomplete="current-password" required>
+                                @include('worker.partials.password-toggle')
+                            </div>
+                            @if (filled($partner->email))
+                                <button type="button" class="w-auth-forgot-link" data-account-forgot-password data-email="{{ $partner->email }}">{{ __('locale.Forgot Password?') }}</button>
+                            @endif
+                        </div>
+                    @endif
                     <div class="w-form-row">
                         <label class="w-form-label" for="partner-new-password">{{ __('locale.New Password') }}</label>
-                        <input type="password" name="password" id="partner-new-password" class="w-input" autocomplete="new-password" minlength="8" required>
+                        <div class="w-input-password">
+                            <input type="password" name="password" id="partner-new-password" class="w-input" placeholder="{{ __('locale.New Password') }}" autocomplete="new-password" minlength="8" required>
+                            @include('worker.partials.password-toggle')
+                        </div>
                     </div>
                     <div class="w-form-row">
                         <label class="w-form-label" for="partner-confirm-password">{{ __('locale.Confirm Password') }}</label>
-                        <input type="password" name="password_confirmation" id="partner-confirm-password" class="w-input" autocomplete="new-password" minlength="8" required>
+                        <div class="w-input-password">
+                            <input type="password" name="password_confirmation" id="partner-confirm-password" class="w-input" placeholder="{{ __('locale.Confirm Password') }}" autocomplete="new-password" minlength="8" required>
+                            @include('worker.partials.password-toggle')
+                        </div>
                     </div>
                     <p class="wp-field-hint" style="margin:0 0 14px;">{{ __('locale.At least 8 characters.') }}</p>
                     <button type="submit" class="w-btn w-btn-primary">{{ __('locale.Update Password') }}</button>
@@ -184,6 +255,52 @@
         ]) }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            // Edit Account Details: view mode <-> the existing form.
+            var details = document.querySelector('[data-account-details]');
+            if (details) {
+                var view = details.querySelector('[data-account-view]');
+                var form = details.querySelector('[data-account-form]');
+                var editBtn = details.querySelector('[data-account-edit]');
+                var setEditing = function (editing) {
+                    view.hidden = editing;
+                    form.hidden = !editing;
+                    editBtn.hidden = editing;
+                };
+                editBtn.addEventListener('click', function () {
+                    setEditing(true);
+                    var first = form.querySelector('input[type="text"]');
+                    if (first) first.focus();
+                });
+                details.querySelector('[data-account-cancel]').addEventListener('click', function () {
+                    // Came back from a failed save: the form holds the typed
+                    // values - reload for the saved ones.
+                    if (details.hasAttribute('data-account-editing')) {
+                        window.location.assign(window.location.pathname);
+                        return;
+                    }
+                    form.reset();
+                    if (window.jQuery) window.jQuery(form).find('select.select2').trigger('change.select2');
+                    setEditing(false);
+                });
+            }
+
+            // Change Password -> "Forgot Password?": shared Forgot Password flow
+            // (partner-auth.js); on success the card shows the confirmation.
+            var forgot = document.querySelector('[data-account-forgot-password]');
+            if (forgot) {
+                forgot.addEventListener('click', function () {
+                    if (!window.WorkerPartnerAuth || !window.WorkerPartnerAuth.openForgotPassword) return;
+                    window.WorkerPartnerAuth.openForgotPassword(forgot.getAttribute('data-email'), function () {
+                        var done = document.querySelector('[data-account-password-reset-success]');
+                        document.querySelectorAll('#partner-old-password, #partner-new-password, #partner-confirm-password').forEach(function (input) {
+                            input.value = '';
+                        });
+                        done.hidden = false;
+                        done.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    });
+                });
+            }
+
             var trigger = document.querySelector('[data-add-mobile-trigger]');
             if (!trigger) return;
             trigger.addEventListener('click', function () {

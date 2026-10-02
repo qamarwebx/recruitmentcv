@@ -1,6 +1,6 @@
 {{-- The one candidate card, used everywhere cards are shown (home, /resumes,
 related candidates on the detail page, Partner Portal candidates). Order:
-photo (Verified + experience badges), name, experience + profession label
+photo (experience badge), name + blue verified mark, experience + profession label
 (Candidate::display_profession_label, same as the detail page), age,
 profession, View Profile / Hire Now.
 
@@ -21,24 +21,20 @@ the profile), $cardHired (shows the "Hired" badge next to the name). --}}
 @endphp
 <div class="w-candidate-card">
     <a href="{{ $detailsUrl }}" class="w-candidate-photo">
-        <span class="w-candidate-badge">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 7L2 14l10 5 10-5-10-5Z"/></svg>
-            {{ __('locale.Verified') }}
-        </span>
         <span class="w-candidate-exp">{{ $totalExp > 0 ? $totalExp . '+ ' . __('locale.Years Experience') : __('locale.Fresher') }}</span>
         <img src="{{ $imagePath }}" alt="{{ $post->display_name }}" loading="lazy" onerror="this.onerror=null;this.src='{{ $defaultAvatar }}';">
     </a>
     <div class="w-candidate-body">
         @if (!empty($cardHired))
             <div class="w-profile-name">
-                <h3 style="margin:0;">{{ $post->display_name }}</h3>
+                <h3 style="margin:0;">{{ $post->display_name }}@include('worker.partials.candidate-verified-icon')</h3>
                 <span class="w-verified">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 7L2 14l10 5 10-5-10-5Z"/></svg>
                     {{ __('locale.Hired') }}
                 </span>
             </div>
         @else
-            <h3>{{ $post->display_name }}</h3>
+            <h3>{{ $post->display_name }}@include('worker.partials.candidate-verified-icon')</h3>
         @endif
         <div class="w-candidate-meta">
             <div>

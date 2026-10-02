@@ -13,7 +13,10 @@
                 <span>{{ __('locale.Privacy Policy') }}</span>
             </div>
             <h1>{{ $privacyContent['title'] ?? __('locale.Privacy Policy') }}</h1>
-            <p>{{ $privacyContent['subtitle'] ?? __('locale.How Qamr International collects, uses, discloses and protects information on the Worker Portal.') }}</p>
+            @php $legalOperator = \App\Support\SiteBrand::currentLegalOperator(); @endphp
+            <p>{{ $privacyContent['subtitle'] ?? ($legalOperator
+                ? __('locale.How :operator collects, uses, discloses and protects information on this website, provided on the RecruitmentCV platform by Qamr International.', $legalOperator)
+                : __('locale.How Qamr International collects, uses, discloses and protects information on the Worker Portal.')) }}</p>
         </div>
     </section>
 
@@ -32,7 +35,7 @@
     <section class="w-section">
         <div class="w-container">
             <div class="w-legal w-fade" style="max-width:900px;margin-inline:auto;">
-                @include('worker.partials.privacy-policy-legal-content')
+                @include('worker.partials.privacy-policy-legal-content', ['legalOperator' => $legalOperator])
             </div>
         </div>
     </section>

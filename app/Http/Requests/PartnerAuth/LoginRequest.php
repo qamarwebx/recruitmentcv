@@ -50,6 +50,23 @@ class LoginRequest extends FormRequest
         }
 
         RateLimiter::clear($this->throttleKey());
+
+        // Same conditions as the Partner password / Google login: a
+        // Partner session only for an OTP-verified mobile AND an approved
+        // registration - an email+password alone (e.g. saved before any
+        // OTP verification) is never enough.
+        $partner = Auth::guard('partner')->user();
+        $message = !$partner->mobile_verified_at
+            ? __('locale.Please verify your mobile number first.')
+            : ((int) $partner->registration_status === 2
+                ? __('locale.Your registration has been rejected.')
+                : ((int) $partner->registration_status !== 1 ? __('locale.Your registration is pending approval.') : null));
+
+        if ($message !== null) {
+            Auth::guard('partner')->logout();
+
+            throw ValidationException::withMessages(['email' => $message]);
+        }
     }
 
     /**

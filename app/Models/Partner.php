@@ -53,6 +53,26 @@ class Partner extends Authenticatable
      * owner_mobile_no is empty, so checking mobile_verified_at alone is
      * NOT sufficient - both flags must be checked together, every time.
      */
+    /**
+     * Partner Account -> Edit Account Details fields that are still empty
+     * (form field names): Full Name, Company / Recruitment Office Name,
+     * Recruitment Licence Number, Country, City. Drives the once-per-login
+     * "Account Details" prompt (App\Support\PartnerAccountPrompt).
+     */
+    public function missingAccountDetails(): array
+    {
+        $missing = [];
+        foreach (['owner_name', 'rec_off_name', 'licence_number', 'country_id', 'city_id'] as $field) {
+            $value = $this->{$field};
+            $isId = str_ends_with($field, '_id');
+            if (blank($value) || ($isId && (int) $value <= 0)) {
+                $missing[] = $field;
+            }
+        }
+
+        return $missing;
+    }
+
     public function hasVerifiedMobile(): bool
     {
         return !empty($this->owner_mobile_no) && !is_null($this->mobile_verified_at);
@@ -104,11 +124,31 @@ class Partner extends Authenticatable
     }
 
     /**
+     * The partner's account status as the CRM sets it (Admin -> Partner):
+     * registration_status (Registration Request: 0 pending, 1 approved,
+     * 2 rejected - also what EnsureWorkerPartnerAuthenticated gates the
+     * Portal on) and status (Partner Status: 1 active, 0 inactive).
+     * Derived only - no separate status is stored. Portal Status
+     * (portal_status) is not part of it: it only lists the partner as an
+     * office on the main site's booking flow.
+     *
+     * @return string 'pending' | 'rejected' | 'inactive' | 'active'
+     */
+    public function accountStatus(): string
+    {
+        return match ((int) $this->registration_status) {
+            1 => (int) $this->status === 1 ? 'active' : 'inactive',
+            2 => 'rejected',
+            default => 'pending',
+        };
+    }
+
+    /**
      * Where THIS partner's Portal pages should live after login - their
-     * own active *.recruitmentcv.com subdomain (same domain()/sub_domain
-     * the Settings "Domain" tab and CRM's Website tab both write - see
+     * own *.recruitmentcv.com subdomain (same domain()/sub_domain the
+     * Settings "Domain" tab and CRM's Website tab both write - see
      * ResolvePartnerWebsiteDomain, which resolves the other direction:
-     * subdomain -> Partner) if one is configured and admin-approved,
+     * subdomain -> Partner) when it is live (Domain::isLiveSubdomain()),
      * otherwise the app's own default URL.
      *
      * Deliberately computed ONLY from this Partner's own domain() row -
@@ -125,8 +165,11 @@ class Partner extends Authenticatable
     {
         $domain = $this->domain;
 
-        if ($domain && $domain->status === 'active' && !empty($domain->sub_domain)) {
-            return 'https://' . $domain->sub_domain . '.recruitmentcv.com';
+        // Same "is this subdomain live" rule ResolvePartnerWebsiteDomain
+        // serves sites by - a live subdomain whose status is still the
+        // default 'pending' is a working site to land on.
+        if ($domain && $domain->isLiveSubdomain()) {
+            return 'https://' . $domain->full_domain;
         }
 
         return rtrim(config('app.url'), '/');

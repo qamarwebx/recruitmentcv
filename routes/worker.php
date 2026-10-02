@@ -43,7 +43,9 @@ Route::get('/lang/{locale}', [PartnerLanguageController::class, 'SwitchLang'])->
 // customer `guest` middleware, which would 302 a browser that is logged in
 // as a customer and break partner OTP - customer and partner auth are
 // separate guards and must not block each other.
-Route::post('/partner/otp/send', [\App\Http\Controllers\Auth\WhatsappOtpController::class, 'generateOtp2'])->name('worker.partner.otp.send');
+Route::post('/partner/otp/send', [\App\Http\Controllers\Auth\WhatsappOtpController::class, 'generateOtp2'])
+    ->middleware(\App\Http\Middleware\ThrottlePartnerOtpSend::class) // per mobile + per IP, config/partner.php
+    ->name('worker.partner.otp.send');
 Route::post('/partner/otp/verify', [\App\Http\Controllers\Auth\WhatsappOtpController::class, 'validateOtp2'])->name('worker.partner.otp.verify');
 
 // Dedicated Partner login/register page (the legacy email/password
@@ -52,6 +54,17 @@ Route::get('/partner/login', [PartnerAuthController::class, 'loginPage'])->name(
 Route::post('/partner/login-otp', [PartnerAuthController::class, 'login'])->name('worker.partner.login');
 // Login with Password (mobile + country code + password) - same modal/page as OTP login.
 Route::post('/partner/login-password', [PartnerAuthController::class, 'passwordLogin'])->name('worker.partner.login.password');
+// Login with OTP by username / email: code emailed to that partner's verified email.
+Route::post('/partner/login-email-otp/send', [PartnerAuthController::class, 'emailOtpSend'])
+    ->middleware(\App\Http\Middleware\ThrottlePartnerOtpSend::class) // per identifier + per IP, config/partner.php
+    ->name('worker.partner.login.email-otp.send');
+Route::post('/partner/login-email-otp/verify', [PartnerAuthController::class, 'emailOtpVerify'])->name('worker.partner.login.email-otp.verify');
+// Forgot Password (Partner Login): email code -> verify -> new password.
+Route::post('/partner/password-reset/send', [PartnerAuthController::class, 'passwordResetSend'])
+    ->middleware(\App\Http\Middleware\ThrottlePartnerOtpSend::class)
+    ->name('worker.partner.password-reset.send');
+Route::post('/partner/password-reset/verify', [PartnerAuthController::class, 'passwordResetVerify'])->name('worker.partner.password-reset.verify');
+Route::post('/partner/password-reset/update', [PartnerAuthController::class, 'passwordResetUpdate'])->name('worker.partner.password-reset.update');
 Route::post('/partner/register-otp', [PartnerAuthController::class, 'register'])->name('worker.partner.register');
 // Fired right after Send OTP succeeds (register mode only) - saves the
 // submitted details immediately, before the OTP is ever verified, so an
@@ -187,6 +200,7 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
     Route::post('/settings/logo', [PartnerPortalController::class, 'settingsLogoUpdate'])->name('settings.logo');
     Route::post('/settings/domain', [PartnerPortalController::class, 'settingsDomainUpdate'])->name('settings.domain');
     Route::post('/settings/whatsapp', [PartnerPortalController::class, 'settingsWhatsappUpdate'])->name('settings.whatsapp');
+    Route::post('/settings/smtp', [PartnerPortalController::class, 'settingsSmtpUpdate'])->name('settings.smtp');
 
     // Attaches+verifies a mobile number for the already-logged-in partner
     // (Hire Now gate, Profile page "Add/Change Number") - reuses the same

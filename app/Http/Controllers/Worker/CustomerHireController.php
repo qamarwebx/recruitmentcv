@@ -4,13 +4,18 @@ namespace App\Http\Controllers\Worker;
 
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\Controller;
+use App\Mail\CustomerBookingConfirmation;
 use App\Models\Booking;
 use App\Models\Candidate;
+use App\Models\Embassy;
+use App\Models\Expecworkcity;
 use App\Models\Partner;
 use App\Models\Websiteconfig;
+use App\Support\CustomerMail;
 use App\Support\CustomerSite;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
@@ -115,8 +120,9 @@ class CustomerHireController extends Controller
         }
 
         $settings = Websiteconfig::first();
+        $booking = null;
 
-        return DB::transaction(function () use ($request, $customer, $candidate, $partnerId, $settings) {
+        $response = DB::transaction(function () use ($request, $customer, $candidate, $partnerId, $settings, &$booking) {
             // Lock this customer's live orders while checking the limits, so a
             // double click can't create two.
             $liveOrders = Booking::where('user_id', $customer->id)->where('booking_status', '!=', 2)->lockForUpdate()->get(['id', 'cand_id', 'reference_no']);
@@ -152,5 +158,43 @@ class CustomerHireController extends Controller
                 'orders_url' => route('worker.account.orders'),
             ]);
         });
+
+        // Only for an order this request actually created (a retry/double
+        // click gets the 'duplicate' response above and no $booking), and
+        // only after the transaction has committed.
+        if ($booking) {
+            $this->sendConfirmation($booking, $customer, $candidate);
+        }
+
+        return $response;
+    }
+
+    /**
+     * Order confirmation email to the customer, through the booking
+     * partner's SMTP (App\Support\CustomerMail). Once per booking, even if
+     * this is somehow reached twice for the same order.
+     */
+    private function sendConfirmation(Booking $booking, $customer, Candidate $candidate): void
+    {
+        if (!Cache::add('customer-booking-confirmation-mail:' . $booking->id, 1, now()->addDays(7))) {
+            return;
+        }
+
+        $workCity = Expecworkcity::find($booking->worklocation);
+        $embassy = Embassy::find($booking->embassy_id);
+
+        CustomerMail::send((int) $booking->partner_id, $customer->email, new CustomerBookingConfirmation([
+            'brand' => CustomerMail::brand((int) $booking->partner_id),
+            'customer_name' => $customer->name,
+            'candidate_name' => $candidate->display_name,
+            'candidate_profession' => $candidate->display_profession_label,
+            'candidate_age' => $candidate->age,
+            'candidate_url' => route('worker.resume.details', $candidate->slug_text),
+            'reference_no' => $booking->reference_no,
+            'booking_date' => $booking->created_at ? $booking->created_at->format('d M Y, h:i A') . ' (GMT' . $booking->created_at->format('P') . ')' : null,
+            'work_city' => $workCity ? (app()->getLocale() === 'ar' && !empty($workCity->arname) ? $workCity->arname : $workCity->name) : null,
+            'embassy' => $embassy ? $embassy->embassy : null,
+            'orders_url' => route('worker.account.orders'),
+        ]));
     }
 }

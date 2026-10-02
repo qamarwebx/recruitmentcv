@@ -18,7 +18,7 @@
                         <img class="w-account-item-photo" src="{{ \App\Support\CandidatePhoto::url($item->photo_file) }}" alt="{{ $candName }}" onerror="this.onerror=null;this.src='{{ \App\Support\CandidatePhoto::defaultUrl() }}';">
                         <div class="w-account-item-main">
                             <div class="w-account-item-title">
-                                <a href="{{ route('worker.resume.details', $item->slug_text) }}">{{ $candName }}</a>
+                                <a href="{{ route('worker.resume.details', $item->slug_text) }}">{{ $candName }}@include('worker.partials.candidate-verified-icon')</a>
                             </div>
                             <div class="w-account-item-sub">
                                 {{ $profession }}@if ($item->age) · {{ $item->age }} {{ __('locale.yrs old') }}@endif

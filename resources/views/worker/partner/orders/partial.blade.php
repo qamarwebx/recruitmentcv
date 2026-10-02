@@ -3,6 +3,15 @@
         <strong>{{ $orders->total() }}</strong> {{ $orders->total() == 1 ? __('locale.order available') : __('locale.orders available') }}
     </p>
 
+    <div class="wp-listing-toolbar-actions">
+    {{-- Same segmented style as Card View / Table View; order-filters.js
+    reloads the results for the chosen one (view mode is kept). --}}
+    <div class="wp-view-switch" role="tablist" aria-label="Order status">
+        @foreach (['active' => __('locale.Active Order'), 'cancelled' => __('locale.Cancelled Order')] as $state => $stateLabel)
+            <button type="button" class="wp-view-btn {{ $orderState === $state ? 'is-active' : '' }}" data-order-state-btn="{{ $state }}" aria-pressed="{{ $orderState === $state ? 'true' : 'false' }}">{{ $stateLabel }}</button>
+        @endforeach
+    </div>
+
     <div class="wp-view-switch" data-wp-view-switch role="tablist" aria-label="Order view">
         <button type="button" class="wp-view-btn" data-wp-view-btn="card" aria-pressed="true">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
@@ -12,6 +21,7 @@
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
             {{ __('locale.Table View') }}
         </button>
+    </div>
     </div>
 </div>
 
@@ -28,7 +38,7 @@
                 <div class="wp-order-card-head">
                     <img src="{{ $imagePath }}" alt="{{ $candName }}" onerror="this.onerror=null;this.src='{{ \App\Support\CandidatePhoto::defaultUrl() }}';">
                     <div>
-                        <span class="wp-order-card-name">{{ $candName }}</span>
+                        <span class="wp-order-card-name"><span class="wp-order-card-name-text">{{ $candName }}</span>@include('worker.partials.candidate-verified-icon')</span>
                         <span class="wp-order-card-sub">{{ $profession }}</span>
                     </div>
                     <span class="wp-order-card-ref">#{{ $order->reference_no }}</span>
@@ -147,9 +157,9 @@
                                 <div style="display:flex;align-items:center;gap:10px;">
                                     <img src="{{ $imagePath }}" alt="{{ $candName }}" style="width:34px;height:34px;border-radius:9px;object-fit:cover;flex-shrink:0;" onerror="this.onerror=null;this.src='{{ \App\Support\CandidatePhoto::defaultUrl() }}';">
                                     @if ($order->candidate_slug)
-                                        <a href="{{ route('worker.partner.candidates.show', $order->candidate_slug) }}" class="wp-cell-title wp-cell-link">{{ $candName }}</a>
+                                        <a href="{{ route('worker.partner.candidates.show', $order->candidate_slug) }}" class="wp-cell-title wp-cell-link">{{ $candName }}@include('worker.partials.candidate-verified-icon')</a>
                                     @else
-                                        <span class="wp-cell-title">{{ $candName }}</span>
+                                        <span class="wp-cell-title">{{ $candName }}@include('worker.partials.candidate-verified-icon')</span>
                                     @endif
                                 </div>
                             </td>

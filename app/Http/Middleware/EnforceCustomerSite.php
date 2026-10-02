@@ -8,13 +8,15 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * Strict per-website customer accounts. The session cookie is shared across
- * every *.recruitmentcv.com host, so a customer logged in on one website
- * would otherwise also count as logged in on every other one. A customer
- * (`web` guard) whose users.partner_id doesn't match the site of this request
- * (resolved by the global ResolvePartnerWebsiteDomain) is logged out of the
- * customer guard here. Only the `web` guard is touched - a partner session
- * is unaffected.
+ * Customer accounts are "one account, all partner sites": a customer
+ * (`web` guard) can use the same account on every Partner website.
+ * users.partner_id only records the website the customer registered on - it
+ * never restricts which Partner website they may use. The session cookie is
+ * shared across every *.recruitmentcv.com host, so one customer login is
+ * valid on all Partner sites (see App\Support\CustomerSite::owns()). The
+ * only restriction enforced here is the main-site one below; only the `web`
+ * guard is ever touched - Partner authentication (`partner` guard) is
+ * completely separate and never affected.
  *
  * The main recruitmentcv.com site is the PARTNER entry point only: customer
  * login/registration requests are refused there and no customer session is
@@ -52,6 +54,8 @@ class EnforceCustomerSite
             return $next($request);
         }
 
+        // Partner website: any customer account may be used here
+        // (CustomerSite::owns() is the single place that rule lives).
         if ($guard->check() && !CustomerSite::owns($guard->user())) {
             $guard->logout();
         }

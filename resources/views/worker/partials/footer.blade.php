@@ -1,28 +1,21 @@
 @php
-    $footerAddr = $frontwebsite->bottom_contact_us_addr ?? null;
-    $footerPhone = $frontwebsite->bottom_contact_us_phone ?? ($frontwebsite->contact_us_phone ?? null);
-    $footerEmail = $frontwebsite->bottom_contact_us_email ?? null;
-    $socials = [
-        'Facebook' => $frontwebsite->bottom_contact_us_fb_link ?? null,
-        'Twitter' => $frontwebsite->bottom_contact_us_twitter_link ?? null,
-        'Instagram' => $frontwebsite->bottom_contact_us_instagram_link ?? null,
-        'LinkedIn' => $frontwebsite->bottom_contact_us_linkedin_link ?? null,
-    ];
+    // Partner subdomain: that partner's Company Profile (field-by-field
+    // fallback to the global footer values); main site: global values as
+    // before. See App\Support\SiteBrand::footer().
+    $footer = \App\Support\SiteBrand::footer($frontwebsite ?? null);
+    $footerAddr = $footer['address'];
+    $footerPhone = $footer['phone'];
+    $footerEmail = $footer['email'];
+    $socials = $footer['socials'];
 @endphp
 <footer class="w-footer">
     <div class="w-container">
         <div class="w-footer-grid">
             <div class="w-footer-brand">
                 <a href="{{ route('worker.home') }}" class="w-logo">
-                    <x-brand-logo mode="dark" alt="Qamr International" />
+                    <x-brand-logo mode="dark" alt="{{ \App\Support\SiteBrand::name() }}" />
                 </a>
-                <p>
-                    @if (app()->getLocale() === 'ar' && !empty($frontwebsite->about_us_ar ?? null))
-                        {{ $frontwebsite->about_us_ar }}
-                    @else
-                        {{ $frontwebsite->about_us_eng ?? __('locale.Connecting verified, work-ready candidates with employers who need reliable talent, fast.') }}
-                    @endif
-                </p>
+                <p>{{ $footer['about'] }}</p>
                 <div class="w-social-row">
                     @foreach ($socials as $label => $link)
                         @if (!empty($link))
@@ -81,8 +74,8 @@
         </div>
 
         <div class="w-footer-bottom">
-            <span>&copy; {{ date('Y') }} Qamr International. {{ __('locale.All rights reserved.') }}</span>
-            <span>{{ __('locale.Worker Portal') }} &middot; recruitmentcv.com</span>
+            <span>&copy; {{ date('Y') }} {{ $footer['copyright'] }}. {{ __('locale.All rights reserved.') }}</span>
+            <span>{{ __('locale.Worker Portal') }} &middot; {{ $footer['tagline_host'] }}</span>
         </div>
     </div>
 </footer>

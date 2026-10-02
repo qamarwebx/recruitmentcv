@@ -60,5 +60,12 @@ return [
         'base_url' => env('EMAIL_QAMR_BASE_URL', 'https://email.qamr.in'),
     ],
 
+    // Root domain partner websites live under ({sub}.{root}) - same env/key
+    // name as the CRM's services.hostinger.recruitmentcv_domain. Read only
+    // through App\Support\RecruitmentDomain.
+    'hostinger' => [
+        'recruitmentcv_domain' => env('HOSTINGER_RECRUITMENTCV_DOMAIN', 'recruitmentcv.com'),
+    ],
+
 
 ];

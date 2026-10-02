@@ -49,6 +49,7 @@
                             <tr>
                                 <td>
                                     <a href="{{ route('worker.partner.customers.show', $customer->id) }}"><strong>{{ $customer->name ?: '---' }}</strong></a>
+                                    <br>@include('worker.partner.customers.relation-badge')
                                 </td>
                                 <td>
                                     {{ $customer->mobile_no ? '+' . ltrim((string) $customer->country_code, '+') . ' ' . $customer->mobile_no : '---' }}
@@ -74,7 +75,7 @@
                                 <td>
                                     <div class="wp-customer-actions">
                                         <a href="{{ route('worker.partner.customers.show', $customer->id) }}" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.View Details') }}</a>
-                                        @include('worker.partner.customers.row-actions', ['customer' => $customer])
+                                        @include('worker.partner.customers.row-actions', ['customer' => $customer, 'partnerId' => $partnerId])
                                     </div>
                                 </td>
                             </tr>
@@ -89,7 +90,7 @@
         <div class="wp-empty">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <h3>{{ __('locale.No customers found') }}</h3>
-            <p>{{ __('locale.Customers who register on your website will appear here.') }}</p>
+            <p>{{ __('locale.Customers who register on your website or order from you will appear here.') }}</p>
         </div>
     @endif
 

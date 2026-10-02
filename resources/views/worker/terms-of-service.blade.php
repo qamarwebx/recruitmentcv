@@ -13,7 +13,10 @@
                 <span>{{ __('locale.Terms of Service') }}</span>
             </div>
             <h1>{{ $termsContent['title'] ?? __('locale.Terms of Service') }}</h1>
-            <p>{{ $termsContent['subtitle'] ?? __('locale.The terms that govern access to and use of the Qamr International Worker Portal.') }}</p>
+            @php $legalOperator = \App\Support\SiteBrand::currentLegalOperator(); @endphp
+            <p>{{ $termsContent['subtitle'] ?? ($legalOperator
+                ? __('locale.The terms that govern access to and use of the Worker Portal operated by :operator on the RecruitmentCV platform provided by Qamr International.', $legalOperator)
+                : __('locale.The terms that govern access to and use of the Qamr International Worker Portal.')) }}</p>
         </div>
     </section>
 
@@ -32,7 +35,7 @@
     <section class="w-section">
         <div class="w-container">
             <div class="w-legal w-fade" style="max-width:900px;margin-inline:auto;">
-                @include('worker.partials.terms-of-service-legal-content')
+                @include('worker.partials.terms-of-service-legal-content', ['legalOperator' => $legalOperator])
             </div>
         </div>
     </section>

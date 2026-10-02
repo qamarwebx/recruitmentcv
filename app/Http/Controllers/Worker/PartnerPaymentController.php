@@ -82,6 +82,15 @@ class PartnerPaymentController extends Controller
             ->whereIn('id', explode(',', (string) $invoice->empcand_id))
             ->get();
 
+        // Some older invoices' empcand_id rows have since been deleted from
+        // the CRM (employercandidates/employerpluses). When that happens,
+        // fall back to the invoice's own snapshot columns - same fallback
+        // the CRM's InvoiceController::show/generatedInvoicePDF use, reused
+        // here instead of duplicating the logic.
+        if ($empcands->isEmpty() && $invoice->empcand_id) {
+            $empcands = app(InvoiceController::class)->buildInvoiceLineItemsFromSnapshot($invoice);
+        }
+
         return view('worker.partner.payment.show', compact('invoice', 'empcands'));
     }
 

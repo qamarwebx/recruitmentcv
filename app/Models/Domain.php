@@ -142,7 +142,7 @@ class Domain extends Model
             return null;
         }
 
-        return $this->sub_domain . '.' . config('services.hostinger.recruitmentcv_domain', 'recruitmentcv.com');
+        return \App\Support\RecruitmentDomain::partnerHost($this->sub_domain);
     }
 
     /*
@@ -154,6 +154,26 @@ class Domain extends Model
     public function scopeActive($query)
     {
         return $query->where('status', 'active');
+    }
+
+    /**
+     * A *.recruitmentcv.com subdomain that is actually live: provisioned
+     * (hostinger_status 'success', maintained automatically by
+     * HostingerSubdomainService) and not disabled via its two kill-switch
+     * status values. `status` itself is NOT the signal - it belongs to the
+     * older custom-domain flow and stays 'pending' for these subdomains.
+     * The one rule used by ResolvePartnerWebsiteDomain (which subdomains
+     * serve a site) and Partner::portalBaseUrl() (where a partner lands
+     * after login).
+     */
+    public function scopeLiveSubdomain($query)
+    {
+        // Table-qualified so it also works when joined (e.g. with partners,
+        // which has its own `status` column).
+        return $query->whereNotNull('domains.sub_domain')
+            ->where('domains.sub_domain', '!=', '')
+            ->where('domains.hostinger_status', 'success')
+            ->whereNotIn('domains.status', ['inactive', 'suspended']);
     }
 
     public function scopeDnsVerified($query)
@@ -175,6 +195,14 @@ class Domain extends Model
     public function isActive()
     {
         return $this->status === 'active';
+    }
+
+    /** Instance form of scopeLiveSubdomain(). */
+    public function isLiveSubdomain(): bool
+    {
+        return !empty($this->sub_domain)
+            && $this->hostinger_status === 'success'
+            && !in_array($this->status, ['inactive', 'suspended'], true);
     }
 
     public function isDnsVerified()
@@ -234,5 +262,54 @@ class Domain extends Model
         $version = @filemtime(public_path($relative));
 
         return asset($relative) . ($version ? '?v=' . $version : '');
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Branding files (admin/assets/images/partner/)
+    |--------------------------------------------------------------------------
+    | One physical folder shared by every partner and by both apps (the CRM's
+    | Website tab and the RecruitmentCV Partner Portal's Branding tab - kept
+    | identical in both codebases). Filenames used to be time()-only, so two
+    | uploads in the same second collided and overwrote/deleted each other.
+    */
+
+    /** Columns of a domains row that hold a Branding file in that folder. */
+    public const BRANDING_FILE_COLUMNS = ['website_logo', 'website_logo_ar', 'website_favicon'];
+
+    /**
+     * Collision-free name for a NEW Branding upload of this domain row:
+     * "{domain id}_{timestamp}_{random}_{suffix}.{extension}", e.g.
+     * "21_1790800000_k3j9x0q2ab_en.png". Existing files keep their names.
+     */
+    public function newBrandingFileName(string $suffix, string $extension): string
+    {
+        return $this->getKey() . '_' . time() . '_' . strtolower(\Illuminate\Support\Str::random(10)) . '_' . $suffix . '.' . $extension;
+    }
+
+    /**
+     * Deletes a replaced Branding file from $directory only when NO row
+     * still references that exact filename - any domain's logo/Arabic
+     * logo/favicon, or a partner's logo/website_logo (same folder). Call it
+     * after the replacement has been saved. Returns whether it was deleted.
+     */
+    public static function deleteBrandingFileIfUnreferenced(string $directory, ?string $file): bool
+    {
+        $file = basename((string) $file);
+
+        if ($file === '' || $file === '.' || $file === '..') {
+            return false;
+        }
+
+        $inUse = static::where(function ($query) use ($file) {
+            foreach (static::BRANDING_FILE_COLUMNS as $column) {
+                $query->orWhere($column, $file);
+            }
+        })->exists()
+            || Partner::where('logo', $file)->orWhere('website_logo', $file)->exists();
+
+        $path = rtrim($directory, '/') . '/' . $file;
+
+        return !$inUse && is_file($path) && unlink($path);
     }
 }

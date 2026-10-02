@@ -1,4 +1,13 @@
 @php
+    // Partner website (SiteBrand::legalOperator(), passed in as $legalOperator
+    // by the public page and the Website Config editor): the partner
+    // operates the site on the RecruitmentCV platform provided by Qamr
+    // International, so the sentences naming the legal party use the
+    // partner variant. Null on the main site - the original Qamr-only text.
+    $legal = $legalOperator ?? null;
+    $legalText = fn (string $qamrKey, string $partnerKey) => $legal ? __('locale.' . $partnerKey, $legal) : __('locale.' . $qamrKey);
+@endphp
+@php
     $legalAddr = $frontwebsite->bottom_contact_us_addr ?? null;
     $legalPhone = $frontwebsite->bottom_contact_us_phone ?? ($frontwebsite->contact_us_phone ?? null);
     $legalEmail = $frontwebsite->bottom_contact_us_email ?? null;
@@ -26,7 +35,7 @@
 
 <div class="w-info-card" id="introduction">
     <h2>1. {{ __('locale.Introduction') }}</h2>
-    <p>{{ __('locale.This Privacy Policy explains how Qamr International ("Qamr", "we", "us", "our") collects, uses, discloses and protects information in connection with the Worker Portal available at worker.qamarhire.com (the "Portal"), used by recruitment partners and employers ("Partners") to browse candidate profiles and manage hiring.') }}</p>
+    <p>{{ $legalText('This Privacy Policy explains how Qamr International ("Qamr", "we", "us", "our") collects, uses, discloses and protects information in connection with the Worker Portal available at worker.qamarhire.com (the "Portal"), used by recruitment partners and employers ("Partners") to browse candidate profiles and manage hiring.', 'This Privacy Policy explains how :operator ("we", "us", "our"), which operates this website on the RecruitmentCV platform provided by Qamr International ("Qamr"), collects, uses, discloses and protects information in connection with the Worker Portal available at :site (the "Portal"), used by recruitment partners and employers ("Partners") to browse candidate profiles and manage hiring.') }}</p>
     <p>{{ __('locale.By accessing or using the Portal, you agree to the collection and use of information as described in this Privacy Policy. If you do not agree with this policy, please do not use the Portal.') }}</p>
 </div>
 
@@ -55,7 +64,7 @@
 
 <div class="w-info-card" id="candidate-confidentiality">
     <h2>4. {{ __('locale.Candidate Information & Confidentiality') }}</h2>
-    <p>{{ __('locale.Candidate resumes and profile details displayed on the Portal are provided to Partners solely to evaluate and hire candidates. Partners must not copy, share, publish or use candidate information for any purpose other than legitimate recruitment through Qamr International, and must handle such information confidentially and in accordance with applicable data protection laws.') }}</p>
+    <p>{{ $legalText('Candidate resumes and profile details displayed on the Portal are provided to Partners solely to evaluate and hire candidates. Partners must not copy, share, publish or use candidate information for any purpose other than legitimate recruitment through Qamr International, and must handle such information confidentially and in accordance with applicable data protection laws.', 'Candidate resumes and profile details displayed on the Portal are provided to Partners solely to evaluate and hire candidates. Partners must not copy, share, publish or use candidate information for any purpose other than legitimate recruitment through :operator, and must handle such information confidentially and in accordance with applicable data protection laws.') }}</p>
 </div>
 
 <div class="w-info-card" id="otp-verification">

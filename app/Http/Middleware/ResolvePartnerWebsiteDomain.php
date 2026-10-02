@@ -34,19 +34,23 @@ class ResolvePartnerWebsiteDomain
 {
     public function handle(Request $request, Closure $next)
     {
-        $host = strtolower($request->getHost());
-        $host = preg_replace('#^www\.#', '', $host);
-
         $brand = [
             'logo_en' => null,
             'logo_ar' => null,
             'favicon' => null,
+            // Partner Company Profile for public titles/meta/footer
+            // (App\Support\SiteBrand); null = main site, global branding.
+            'company' => null,
         ];
 
         $currentPartner = null;
 
-        if ($host !== 'recruitmentcv.com' && str_ends_with($host, '.recruitmentcv.com')) {
-            $label = substr($host, 0, -strlen('.recruitmentcv.com'));
+        // "{label}.{root}" (root = configured RecruitmentCV domain, see
+        // App\Support\RecruitmentDomain); null for the root itself or any
+        // other host.
+        $label = \App\Support\RecruitmentDomain::subdomainFromHost($request->getHost());
+
+        if ($label !== null) {
 
             // Gated on hostinger_status, not the legacy status column: status
             // (pending/active/inactive/suspended) belongs to the older
@@ -60,14 +64,15 @@ class ResolvePartnerWebsiteDomain
             // still honored for its two explicit kill-switch values, in case
             // a partner's subdomain is ever deliberately disabled that way.
             $record = Domain::where('sub_domain', $label)
-                ->where('hostinger_status', 'success')
-                ->whereNotIn('status', ['inactive', 'suspended'])
+                ->liveSubdomain()
                 ->first();
 
-            if (!$record) {
-                // Never falls back to the default site or another partner -
-                // an unconfigured/not-yet-provisioned/disabled subdomain is a
-                // hard 404.
+            // Never falls back to the default site or another partner - an
+            // unconfigured/not-yet-provisioned/disabled subdomain is a hard
+            // 404, and so is a live subdomain whose partner no longer exists
+            // (e.g. the partner was deleted but its domains row remains):
+            // with no partner it would otherwise be served as the main site.
+            if (!$record || !$record->partner) {
                 abort(404);
             }
 
@@ -78,6 +83,10 @@ class ResolvePartnerWebsiteDomain
             $brand['logo_ar'] = $arabicLogo ? asset('admin/assets/images/partner/' . $arabicLogo) : null;
             // Same Domain row as the logos; versioned by the file's mtime.
             $brand['favicon'] = $record->faviconUrl();
+            // Same row = the partner's Company Profile (Partner Portal ->
+            // Website -> Company Profile); raw values, the locale and the
+            // per-field global fallback are applied by SiteBrand at render.
+            $brand['company'] = \App\Support\SiteBrand::companyFromDomain($record);
 
             // Same already-loaded $record, just following its existing
             // partner() relation - not a second Domain lookup. This is the

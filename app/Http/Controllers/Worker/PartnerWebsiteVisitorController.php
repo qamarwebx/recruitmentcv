@@ -49,6 +49,9 @@ class PartnerWebsiteVisitorController extends Controller
 
         $query = $this->filtered($filters, $search);
         $uniqueVisitors = (clone $query)->distinct()->count('visitor_hash');
+        // Chart View: built from this same filtered query (all matching
+        // visits, not just this page), so chart and table always agree.
+        $chart = $this->chartData($query, $filters);
 
         $visits = $query
             ->select(['id', 'host', 'path', 'referrer', 'ip_address', 'user_id', 'browser', 'platform', 'device', 'visited_at'])
@@ -59,13 +62,95 @@ class PartnerWebsiteVisitorController extends Controller
             ->withQueryString();
 
         if ($request->ajax()) {
-            return view('worker.partner.website-visitors.partial', compact('visits', 'uniqueVisitors'));
+            return view('worker.partner.website-visitors.partial', compact('visits', 'uniqueVisitors', 'chart'));
         }
 
         $browsers = $this->visits()->whereNotNull('browser')->distinct()->orderBy('browser')->pluck('browser');
         $devices = self::DEVICES;
 
-        return view('worker.partner.website-visitors.index', compact('visits', 'uniqueVisitors', 'filters', 'search', 'browsers', 'devices'));
+        return view('worker.partner.website-visitors.index', compact('visits', 'uniqueVisitors', 'chart', 'filters', 'search', 'browsers', 'devices'));
+    }
+
+    /**
+     * Chart View aggregates over the filtered visits ($query is cloned per
+     * aggregate, never modified): visits + unique visitors over time (daily,
+     * or monthly past ~3 months; gaps filled with 0 across the filter's date
+     * range or the data's own span), and top pages / devices / traffic
+     * sources (referrer host, "Direct" when none; the tail folded into
+     * "Other"). Labels are visitor data - the chart script escapes them.
+     */
+    private function chartData($query, array $filters): array
+    {
+        $rows = (clone $query)
+            ->selectRaw('visited_on as d, COUNT(*) as visits, COUNT(DISTINCT visitor_hash) as uniques')
+            ->groupBy('visited_on')->orderBy('visited_on')->get();
+
+        if ($filters['by_custom_date']) {
+            [$from, $to] = array_map(fn ($d) => Carbon::createFromFormat('m/d/Y', trim($d))->startOfDay(), explode(' - ', $filters['by_custom_date']));
+            if ($from->gt($to)) {
+                [$from, $to] = [$to, $from];
+            }
+        } elseif ($rows->isNotEmpty()) {
+            [$from, $to] = [Carbon::parse($rows->first()->d), Carbon::parse($rows->last()->d)];
+        } else {
+            $from = $to = null;
+        }
+
+        $labels = $visits = $uniques = [];
+        $monthly = $from && $from->diffInDays($to) > 92;
+        if ($monthly) {
+            $byMonth = (clone $query)
+                ->selectRaw("DATE_FORMAT(visited_on, '%Y-%m') as m, COUNT(*) as visits, COUNT(DISTINCT visitor_hash) as uniques")
+                ->groupBy('m')->get()->keyBy('m');
+            for ($month = $from->copy()->startOfMonth(); $month->lte($to); $month->addMonth()) {
+                $row = $byMonth->get($month->format('Y-m'));
+                $labels[] = $month->translatedFormat('M Y');
+                $visits[] = (int) ($row->visits ?? 0);
+                $uniques[] = (int) ($row->uniques ?? 0);
+            }
+        } elseif ($from) {
+            $byDay = $rows->keyBy(fn ($r) => Carbon::parse($r->d)->toDateString());
+            for ($day = $from->copy(); $day->lte($to); $day->addDay()) {
+                $row = $byDay->get($day->toDateString());
+                $labels[] = $day->translatedFormat('d M');
+                $visits[] = (int) ($row->visits ?? 0);
+                $uniques[] = (int) ($row->uniques ?? 0);
+            }
+        }
+
+        $top = function ($counts, int $limit) {
+            $counts = collect($counts)->sortDesc();
+            $shown = $counts->take($limit);
+            $rest = $counts->slice($limit)->sum();
+            if ($rest > 0) {
+                $shown[__('locale.Other')] = $rest;
+            }
+
+            return ['labels' => $shown->keys()->map(fn ($k) => (string) $k)->values()->all(), 'values' => $shown->values()->map(fn ($v) => (int) $v)->all()];
+        };
+
+        $pages = (clone $query)->selectRaw('path, COUNT(*) as c')->groupBy('path')->pluck('c', 'path');
+
+        $devices = [];
+        foreach ((clone $query)->selectRaw('device, COUNT(*) as c')->groupBy('device')->get() as $row) {
+            $label = isset(self::DEVICES[$row->device]) ? __('locale.' . self::DEVICES[$row->device]) : __('locale.Unknown');
+            $devices[$label] = ($devices[$label] ?? 0) + (int) $row->c;
+        }
+
+        $sources = [];
+        foreach ((clone $query)->selectRaw('referrer, COUNT(*) as c')->groupBy('referrer')->get() as $row) {
+            $host = $row->referrer ? strtolower((string) parse_url($row->referrer, PHP_URL_HOST)) : '';
+            $label = $host !== '' ? preg_replace('/^www\./', '', $host) : __('locale.Direct');
+            $sources[$label] = ($sources[$label] ?? 0) + (int) $row->c;
+        }
+
+        return [
+            'granularity' => $monthly ? 'monthly' : 'daily',
+            'trend' => ['labels' => $labels, 'visits' => $visits, 'uniques' => $uniques],
+            'pages' => $top($pages, 7),
+            'devices' => $top($devices, 3),
+            'sources' => $top($sources, 6),
+        ];
     }
 
     public function saveFilter(Request $request)

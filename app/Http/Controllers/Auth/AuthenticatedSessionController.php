@@ -41,23 +41,40 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        // Customer logout only. The session is shared by every
+        // *.recruitmentcv.com site (SESSION_DOMAIN) and also carries the
+        // Partner login (`partner` guard), so it is NOT invalidated/flushed:
+        // only the customer login (the web guard's own session key and
+        // remember cookie) and the customer-only flow data are removed, then
+        // the session id is regenerated (fixation-safe). The CSRF token is
+        // kept so other open tabs keep working.
         Auth::guard('web')->logout();
 
-        $request->session()->invalidate();
+        $request->session()->forget([
+            'EmailOtp', 'emaiAddr',                                  // email change
+            'PendingMobileCountryId', 'PendingMobileCountryCode',   // mobile change
+            'new_user', 'customer_google_site', 'loginStatus2525', 'url.intended',
+        ]);
 
-        $request->session()->regenerateToken();
+        // New session id, old one destroyed; data (incl. the CSRF token) kept
+        // - regenerate() would also rotate the token.
+        $request->session()->migrate(true);
 
-        // return redirect('/');
+        // Back to the page the customer logged out from - only ever a path
+        // on this same site (never an absolute/protocol-relative URL, so no
+        // open redirect); anything else, or nothing, goes to the site root.
+        $page = (string) $request->input('current_page');
+        $isLocalPath = $page !== ''
+            && str_starts_with($page, '/')
+            && !str_starts_with($page, '//')
+            && !preg_match('#[\\\\\r\n]#', $page);
 
-        if($request['current_page'] == "/ar/my-order" || $request['current_page'] == '/ar/my-profile'){
+        if ($page === '/ar/my-order' || $page === '/ar/my-profile') {
             return redirect('/ar');
-        }elseif($request['current_page'] == "/my-order" || $request['current_page'] == '/my-profile'){
+        } elseif ($page === '/my-order' || $page === '/my-profile') {
             return redirect('/');
-        }else{
-            return redirect($request['current_page']);
         }
 
-
-
+        return redirect($isLocalPath ? $page : '/');
     }
 }

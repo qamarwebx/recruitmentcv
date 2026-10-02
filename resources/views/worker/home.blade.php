@@ -44,21 +44,6 @@
                         <a href="tel:{{ $contactPhone }}" class="w-btn w-btn-ghost-light">{{ __('locale.Call') }} {{ $contactPhone }}</a>
                     @endif
                 </div>
-
-                <div class="w-hero-trust">
-                    <div>
-                        <strong>{{ number_format($totalResumes) }}+</strong>
-                        <span>{{ __('locale.Verified candidates') }}</span>
-                    </div>
-                    <div>
-                        <strong>{{ number_format($totalProfessions) }}+</strong>
-                        <span>{{ __('locale.Job categories') }}</span>
-                    </div>
-                    <div>
-                        <strong>{{ number_format($totalCities) }}+</strong>
-                        <span>{{ __('locale.Work locations') }}</span>
-                    </div>
-                </div>
             </div>
 
             <div class="w-hero-card">

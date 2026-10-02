@@ -36,6 +36,7 @@ public/worker/js/partner-customers.js. --}}
                     <label class="w-form-label">{{ __('locale.Email') }}</label>
                     <input type="email" class="w-input" name="email" maxlength="255">
                 </div>
+                <div class="wp-field-hint" data-customer-locked-hint hidden style="margin:-6px 0 14px;">{{ __('locale.Only the customer can change their mobile number and email, from their own account.') }}</div>
                 <div class="w-form-row">
                     <label class="w-form-label">{{ __('locale.Company Name') }}</label>
                     <input type="text" class="w-input" name="company_name" maxlength="255">

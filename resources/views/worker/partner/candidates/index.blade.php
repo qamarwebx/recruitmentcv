@@ -116,7 +116,7 @@
                                 <td>
                                     <div style="display:flex;align-items:center;gap:10px;">
                                         <img src="{{ $imagePath }}" alt="{{ $candidate->display_name }}" style="width:38px;height:38px;border-radius:9px;object-fit:cover;flex-shrink:0;" onerror="this.onerror=null;this.src='{{ \App\Support\CandidatePhoto::defaultUrl() }}';">
-                                        <span class="wp-cell-title">{{ $candidate->display_name }}</span>
+                                        <span class="wp-cell-title">{{ $candidate->display_name }}@include('worker.partials.candidate-verified-icon')</span>
                                         @if ($partnerBooking)
                                             <span class="w-verified">{{ __('locale.Hired') }}</span>
                                         @endif

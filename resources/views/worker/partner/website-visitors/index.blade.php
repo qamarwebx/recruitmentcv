@@ -4,6 +4,7 @@
 @section('page-title', __('locale.Website Visitor'))
 
 @section('page-style')
+    <link rel="stylesheet" href="{{ asset('admin/assets/vendor/libs/apex-charts/apex-charts.css') }}">
     {{-- Same vendor widgets + overrides as the Orders page. --}}
     <link rel="stylesheet" href="{{ asset('admin/assets/vendor/libs/bootstrap-daterangepicker/bootstrap-daterangepicker.css') }}">
     <link rel="stylesheet" href="{{ asset('admin/assets/vendor/libs/select2/select2.css') }}">
@@ -108,4 +109,8 @@
     <script src="{{ asset('worker/js/order-filters.js') }}?v={{ @filemtime(public_path('worker/js/order-filters.js')) ?: time() }}"></script>
     <script src="{{ asset('worker/js/order-vendor-init.js') }}?v={{ @filemtime(public_path('worker/js/order-vendor-init.js')) ?: time() }}"></script>
     <script src="{{ asset('worker/js/partner-website-visitors.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-visitors.js')) ?: time() }}"></script>
+    {{-- Chart View (project's vendored ApexCharts). --}}
+    <script src="{{ asset('admin/assets/vendor/libs/apex-charts/apexcharts.js') }}"></script>
+    <script src="{{ asset('worker/js/partner-visitor-charts.js') }}?v={{ @filemtime(public_path('worker/js/partner-visitor-charts.js')) ?: time() }}"
+        data-visitor-chart-i18n="{{ json_encode(['visits' => __('locale.Visits'), 'uniques' => __('locale.Unique visitors')]) }}"></script>
 @endsection

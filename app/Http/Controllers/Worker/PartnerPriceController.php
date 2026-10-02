@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Worker;
 use App\Http\Controllers\Controller;
 use App\Models\Candidate;
 use App\Models\PartnerPrice;
-use App\Models\Profession;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -24,18 +23,18 @@ class PartnerPriceController extends Controller
         return Auth::guard('partner')->id();
     }
 
+    /**
+     * Every Experience Type + Profession with this partner's saved price or
+     * the default (PartnerPrice::effectiveForPartner()). Saving a default
+     * row creates the partner's row through store(); a saved row updates
+     * through update() - defaults are never written just to be shown.
+     */
     public function index()
     {
-        $prices = PartnerPrice::with('profession:id,eng_name,ar_name')
-            ->where('partner_id', $this->partnerId())
-            ->orderBy('proff_id')
-            ->orderBy('exp_type')
-            ->get();
-
-        $professions = Profession::orderBy('eng_name')->get(['id', 'eng_name', 'ar_name']);
+        $prices = PartnerPrice::effectiveForPartner($this->partnerId());
         $experienceTypes = Candidate::EXPERIENCE_TYPES;
 
-        return view('worker.partner.prices', compact('prices', 'professions', 'experienceTypes'));
+        return view('worker.partner.prices', compact('prices', 'experienceTypes'));
     }
 
     public function store(Request $request)
@@ -64,7 +63,7 @@ class PartnerPriceController extends Controller
             throw $e;
         }
 
-        return redirect()->route('worker.partner.prices')->with('success', __('locale.Price added successfully.'));
+        return redirect()->route('worker.partner.prices')->with('success', __('locale.Price updated successfully.'));
     }
 
     public function update(Request $request, $id)

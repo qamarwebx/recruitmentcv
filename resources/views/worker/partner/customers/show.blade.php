@@ -17,7 +17,7 @@
         <div class="w-info-grid">
             <div class="w-info-item">
                 <span>{{ __('locale.Full Name') }}</span>
-                <strong>{{ $customer->name ?: '---' }}</strong>
+                <strong>{{ $customer->name ?: '---' }} @include('worker.partner.customers.relation-badge')</strong>
             </div>
             <div class="w-info-item">
                 <span>{{ __('locale.Mobile Number') }}</span>
@@ -59,9 +59,13 @@
                 <strong>{{ $customer->created_at ? $customer->created_at->format('d M Y') : '---' }}</strong>
             </div>
         </div>
-        <div class="wp-customer-actions" style="margin-top:18px;">
-            @include('worker.partner.customers.row-actions', ['customer' => $customer])
-        </div>
+        @if ((int) $customer->partner_id === (int) $partnerId)
+            <div class="wp-customer-actions" style="margin-top:18px;">
+                @include('worker.partner.customers.row-actions', ['customer' => $customer, 'partnerId' => $partnerId])
+            </div>
+        @else
+            <p class="wp-field-hint" style="margin:14px 0 0;">{{ __('locale.This customer registered on another website. You can view them and your orders only.') }}</p>
+        @endif
     </div>
 
     <div class="w-info-card wp-fade-in">

@@ -20,6 +20,10 @@ use Illuminate\Support\Facades\Auth;
  * a Pending/Rejected partner, but a partner who was Approved when they logged
  * in and is later moved to Pending/Rejected by an admin would otherwise keep
  * their existing session and stay able to browse the portal.
+ *
+ * And, on a partner subdomain, only lets the partner that owns that
+ * subdomain use the portal there - any other logged-in partner is sent to
+ * the same page on their own site (see handle()).
  */
 class EnsureWorkerPartnerAuthenticated
 {
@@ -43,6 +47,37 @@ class EnsureWorkerPartnerAuthenticated
             $request->session()->regenerateToken();
 
             return redirect()->route('worker.partner.login.page', ['login' => 1, 'auth_message' => $message]);
+        }
+
+        // The session cookie is shared by every *.recruitmentcv.com host, so
+        // a logged-in partner could otherwise open their portal under ANOTHER
+        // partner's subdomain. On a partner subdomain (the host's partner,
+        // resolved once by the global ResolvePartnerWebsiteDomain), the
+        // portal only runs for that same partner; anyone else is sent to the
+        // same /partner/... page on their OWN site (Partner::portalBaseUrl()).
+        // The main domain (no host partner) is unchanged.
+        $hostPartner = app()->bound('currentPartner') ? app('currentPartner') : null;
+
+        if ($hostPartner && (int) $hostPartner->id !== (int) $partner->id) {
+            $ownBase = $partner->portalBaseUrl();
+
+            // Never redirect to this same host (no loop) - if the partner's
+            // own base resolves here, something is inconsistent: refuse.
+            if (strcasecmp((string) parse_url($ownBase, PHP_URL_HOST), $request->getHost()) === 0) {
+                abort(403);
+            }
+
+            $target = $ownBase . $request->getRequestUri();
+
+            // Only page loads are redirected. A form/AJAX submit made on the
+            // wrong host is refused rather than replayed elsewhere.
+            if (!$request->isMethod('GET') && !$request->isMethod('HEAD')) {
+                return $request->expectsJson()
+                    ? response()->json(['status' => 'error', 'message' => __('locale.Please continue on your own partner website.'), 'redirect' => $ownBase . route('worker.partner.dashboard', [], false)], 403)
+                    : redirect()->away($ownBase . route('worker.partner.dashboard', [], false));
+            }
+
+            return redirect()->away($target);
         }
 
         $response = $next($request);

@@ -18,6 +18,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\Basepathstatus;
 use App\Models\Invoiceaccountdet;
 use App\Models\InvoiceAdminSaveFilter;
+use App\Models\Profession;
 use ArPHP\I18N\Arabic;
 use NumberToWords\NumberToWords;
 
@@ -132,14 +133,72 @@ class InvoiceController extends Controller
         $invoice = Invoice::find($id);
         $invoice_payment = PaymentInvoice::where('invoice_id','=',$id)->get();
         $empcands = Employercandidate::wherein('id',explode(",",$invoice->empcand_id))->get();
+        if ($empcands->isEmpty() && $invoice->empcand_id) {
+            $empcands = $this->buildInvoiceLineItemsFromSnapshot($invoice);
+        }
         $partners = Partner::where('status','1')->orderBy('rec_off_name')->get();
         $staffs = Admin::where('status', 1)->orderBy('name')->where('status',1)->get();
         return view('admin.invoice.show',compact('invoice','empcands','partners','staffs'));
     }
 
+    /**
+     * Fallback line items for invoices whose empcand_id now points to
+     * deleted Employercandidate/Employerplus/Candidate rows. Rebuilt from
+     * the comma-separated snapshot columns stored on the invoice itself at
+     * creation time, shaped to match what the show/PDF views already read
+     * off a real Employercandidate (->emp->*, ->cand->*, ->proff->*).
+     * Public so other controllers (e.g. Worker\PartnerPaymentController)
+     * can reuse it instead of duplicating this logic.
+     */
+    public function buildInvoiceLineItemsFromSnapshot(Invoice $invoice)
+    {
+        $candidateNames = explode(',', $invoice->candidate_name ?? '');
+        $candidatePassNos = explode(',', $invoice->candidate_pass_no ?? '');
+        $employerNames = explode(',', $invoice->employer_name ?? '');
+        $employerArNames = explode(',', $invoice->employer_ar_name ?? '');
+        $employerVisaNos = explode(',', $invoice->employer_visa_no ?? '');
+        $employerIdNos = explode(',', $invoice->employer_id_no ?? '');
+        $professionIds = explode(',', $invoice->profession_id ?? '');
+
+        $professions = Profession::whereIn('id', array_unique(array_filter($professionIds)))->get()->keyBy('id');
+
+        $items = collect();
+
+        for ($i = 0; $i < count($candidateNames); $i++) {
+            $emp = new \stdClass();
+            $emp->employer_name = $employerNames[$i] ?? '';
+            $emp->employer_ar_name = $employerArNames[$i] ?? '';
+            $emp->visa_no = $employerVisaNos[$i] ?? '';
+            $emp->id_no = $employerIdNos[$i] ?? '';
+
+            $cand = new \stdClass();
+            $cand->cand_name = $candidateNames[$i] ?? '';
+            $cand->pass_no = $candidatePassNos[$i] ?? '';
+
+            $proff = $professions->get($professionIds[$i] ?? null);
+            if (!$proff) {
+                $proff = new \stdClass();
+                $proff->eng_name = '';
+                $proff->ar_name = '';
+            }
+
+            $item = new \stdClass();
+            $item->emp = $emp;
+            $item->cand = $cand;
+            $item->proff = $proff;
+
+            $items->push($item);
+        }
+
+        return $items;
+    }
+
     public function generatedInvoicePDF($id){
         $invoice = Invoice::find($id);
         $empcands = Employercandidate::wherein('id',explode(",",$invoice->empcand_id))->get();
+        if ($empcands->isEmpty() && $invoice->empcand_id) {
+            $empcands = $this->buildInvoiceLineItemsFromSnapshot($invoice);
+        }
         $basepathSt = Basepathstatus::first();
 
         $bankdetail = Invoiceaccountdet::find($invoice->invoiceaccountdet_id);

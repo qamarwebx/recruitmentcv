@@ -41,6 +41,7 @@
         'errOtpNotSent' => __('locale.We could not send the OTP. Please try again in a moment.'),
         'errOtpIncorrect' => __('locale.Incorrect OTP. Please try again.'),
         'errTechnical' => __('locale.A technical error occurred. Please try again shortly.'),
+        'errSessionExpired' => __('locale.Your session has expired. Please refresh the page and try again.'),
         'errCheckDetails' => __('locale.Please check the details and try again.'),
         'sending' => __('locale.Sending…'),
         'sendOtp' => __('locale.Send OTP'),
@@ -139,4 +140,6 @@
         </div>
     </div>
 </div>
+{{-- Shared CSRF token/retry helper (loads once; also used by the other auth script). --}}
+<script src="{{ asset('worker/js/worker-csrf.js') }}?v={{ @filemtime(public_path('worker/js/worker-csrf.js')) ?: time() }}"></script>
 <script src="{{ asset('worker/js/customer-auth.js') }}?v={{ @filemtime(public_path('worker/js/customer-auth.js')) ?: time() }}"></script>

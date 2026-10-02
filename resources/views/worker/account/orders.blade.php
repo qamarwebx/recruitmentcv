@@ -15,15 +15,19 @@
                         $profession = ($isAr && !empty($order->profession_ar)) ? $order->profession_ar : ($order->profession_eng ?? '---');
                         $orderStatus = ($isAr && !empty($order->ar_status)) ? $order->ar_status : ($order->ord_status ?: '---');
                         $isCancelled = (int) $order->booking_status === 2;
+                        // Visible but not this site's own partner's order (an office
+                        // without its own website, or no office): neutral label only,
+                        // never another office's name (CustomerSite::whereOrderVisible()).
+                        $handledByTeam = \App\Support\CustomerSite::isHandledByTeam($order->partner_id);
                     @endphp
                     <div class="w-account-item">
                         <img class="w-account-item-photo" src="{{ \App\Support\CandidatePhoto::url($order->photo_file) }}" alt="{{ $candName }}" onerror="this.onerror=null;this.src='{{ \App\Support\CandidatePhoto::defaultUrl() }}';">
                         <div class="w-account-item-main">
                             <div class="w-account-item-title">
                                 @if ($order->candidate_slug)
-                                    <a href="{{ route('worker.resume.details', $order->candidate_slug) }}">{{ $candName }}</a>
+                                    <a href="{{ route('worker.resume.details', $order->candidate_slug) }}">{{ $candName }}@include('worker.partials.candidate-verified-icon')</a>
                                 @else
-                                    {{ $candName }}
+                                    <span>{{ $candName }}@include('worker.partials.candidate-verified-icon')</span>
                                 @endif
                                 <span class="w-account-item-ref">#{{ $order->reference_no }}</span>
                             </div>
@@ -42,6 +46,9 @@
                                 <span class="w-account-badge {{ $order->visa_status ? 'is-success' : 'is-warning' }}">
                                     {{ __('locale.Visa Status') }}: {{ $order->visa_status ? __('locale.Confirmed') : __('locale.Pending') }}
                                 </span>
+                                @if ($handledByTeam)
+                                    <span class="w-account-badge is-neutral">{{ __('locale.Handled by our team') }}</span>
+                                @endif
                             </div>
                         </div>
                         @unless ($isCancelled)

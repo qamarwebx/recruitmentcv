@@ -158,9 +158,14 @@ class PartnerPageContent extends Model
      * stripDefaultValues()) - one function, two call sites, so the two can
      * never drift apart.
      */
-    public static function defaultContent(string $page, string $locale, $frontwebsite): array
+    public static function defaultContent(string $page, string $locale, $frontwebsite, ?array $company = null): array
     {
         $isArabic = $locale === 'ar';
+        // Privacy/Terms on a partner website: the partner (its Company
+        // Profile, $company - see SiteBrand) operates the site on the
+        // RecruitmentCV platform provided by Qamr International. No
+        // $company (central recruitmentcv.com content) = Qamr-only text.
+        $legal = \App\Support\SiteBrand::legalOperator($company, $locale);
 
         switch ($page) {
             case 'home':
@@ -253,15 +258,19 @@ class PartnerPageContent extends Model
             case 'privacy':
                 return [
                     'title' => __('locale.Privacy Policy', [], $locale),
-                    'subtitle' => __('locale.How Qamr International collects, uses, discloses and protects information on the Worker Portal.', [], $locale),
-                    'body' => static::renderDefaultLegalBody('worker.partials.privacy-policy-legal-content', $frontwebsite, $locale),
+                    'subtitle' => $legal
+                        ? __('locale.How :operator collects, uses, discloses and protects information on this website, provided on the RecruitmentCV platform by Qamr International.', $legal, $locale)
+                        : __('locale.How Qamr International collects, uses, discloses and protects information on the Worker Portal.', [], $locale),
+                    'body' => static::renderDefaultLegalBody('worker.partials.privacy-policy-legal-content', $frontwebsite, $locale, $legal),
                 ];
 
             case 'terms':
                 return [
                     'title' => __('locale.Terms of Service', [], $locale),
-                    'subtitle' => __('locale.The terms that govern access to and use of the Qamr International Worker Portal.', [], $locale),
-                    'body' => static::renderDefaultLegalBody('worker.partials.terms-of-service-legal-content', $frontwebsite, $locale),
+                    'subtitle' => $legal
+                        ? __('locale.The terms that govern access to and use of the Worker Portal operated by :operator on the RecruitmentCV platform provided by Qamr International.', $legal, $locale)
+                        : __('locale.The terms that govern access to and use of the Qamr International Worker Portal.', [], $locale),
+                    'body' => static::renderDefaultLegalBody('worker.partials.terms-of-service-legal-content', $frontwebsite, $locale, $legal),
                 ];
         }
 
@@ -277,13 +286,13 @@ class PartnerPageContent extends Model
      * runs mid-request while building the Partner's own admin page (which
      * has its own, unrelated current locale).
      */
-    private static function renderDefaultLegalBody(string $view, $frontwebsite, string $locale): string
+    private static function renderDefaultLegalBody(string $view, $frontwebsite, string $locale, ?array $legalOperator = null): string
     {
         $previousLocale = App::getLocale();
         App::setLocale($locale);
 
         try {
-            return view($view, ['frontwebsite' => $frontwebsite])->render();
+            return view($view, ['frontwebsite' => $frontwebsite, 'legalOperator' => $legalOperator])->render();
         } finally {
             App::setLocale($previousLocale);
         }
@@ -364,11 +373,11 @@ class PartnerPageContent extends Model
     }
 
     /**
-     * The floating WhatsApp button's existing hardcoded configuration
-     * (worker/partials/whatsapp-float.blade.php + .w-whatsapp-float), used
-     * wherever a Partner hasn't saved their own value. icon null = the
-     * built-in WhatsApp glyph; label null = the translated default
-     * "Customer Support". icon_color is the button's text (label) colour.
+     * Last-resort WhatsApp values, only for what the central (CRM ->
+     * Website -> WhatsApp) row doesn't provide - e.g. that row missing.
+     * The real default is centralWhatsapp(). icon null = the built-in
+     * WhatsApp glyph; label null = the translated default "Customer
+     * Support". icon_color is the button's text (label) colour.
      */
     public static function defaultWhatsapp(): array
     {
@@ -379,6 +388,23 @@ class PartnerPageContent extends Model
             'icon_color' => '#ffffff',
             'label' => null,
         ];
+    }
+
+    /** One context's saved WhatsApp values (empty ones dropped). */
+    private static function savedWhatsapp(?int $partnerId): array
+    {
+        return array_filter(static::rowFor($partnerId, static::WHATSAPP)->content ?? [], fn ($value) => $value !== null && $value !== '');
+    }
+
+    /**
+     * The default WhatsApp settings: the central row (CRM -> Website ->
+     * WhatsApp, partner_id NULL) over the code fallback. What a partner
+     * without its own values uses, and the placeholder the Partner
+     * Website -> WhatsApp tab shows.
+     */
+    public static function centralWhatsapp(): array
+    {
+        return array_merge(static::defaultWhatsapp(), static::savedWhatsapp(null));
     }
 
     /**
@@ -395,9 +421,12 @@ class PartnerPageContent extends Model
             return static::$whatsappCache[$key];
         }
 
-        $saved = array_filter(static::rowFor($partnerId, static::WHATSAPP)->content ?? [], fn ($value) => $value !== null && $value !== '');
+        $saved = static::savedWhatsapp($partnerId);
 
-        $settings = array_merge(static::defaultWhatsapp(), $saved);
+        // Field by field: a partner's own values, else the central (CRM)
+        // settings, else the code fallback; the central context itself
+        // (main site, Partner Portal support) = central over code fallback.
+        $settings = array_merge($partnerId ? static::centralWhatsapp() : static::defaultWhatsapp(), $saved);
 
         $iconUrl = null;
         if ($settings['icon']) {
@@ -421,5 +450,26 @@ class PartnerPageContent extends Model
     public static function forgetWhatsapp(?int $partnerId): void
     {
         unset(static::$whatsappCache[(int) $partnerId]);
+    }
+
+    /**
+     * Partner Website -> Branding settings row (not a page, like WHATSAPP).
+     * content = {append_company_name: bool} - show the Company Profile name
+     * under the logo in the Partner Portal sidebar. Partner rows only.
+     */
+    public const BRANDING = 'branding';
+
+    public static function brandingFor(int $partnerId): array
+    {
+        $saved = static::rowFor($partnerId, static::BRANDING)->content ?? [];
+
+        return ['append_company_name' => (bool) ($saved['append_company_name'] ?? false)];
+    }
+
+    public static function saveBranding(int $partnerId, array $values): void
+    {
+        $row = static::firstOrNew(['partner_id' => $partnerId, 'page' => static::BRANDING]);
+        $row->content = array_merge($row->content ?? [], $values);
+        $row->save();
     }
 }

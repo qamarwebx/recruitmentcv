@@ -7,6 +7,7 @@ use App\Models\Activity;
 use App\Models\Candidate;
 use App\Models\Country;
 use App\Models\Wishlist;
+use App\Support\CustomerSite;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -26,7 +27,12 @@ class CustomerAccountController extends Controller
         return (int) Auth::guard('web')->id();
     }
 
-    /** Same joins/columns as the partner Orders page, for this customer. */
+    /**
+     * Same joins/columns as the partner Orders page, for this customer -
+     * limited to the orders this site may show (CustomerSite::
+     * whereOrderVisible(): this partner's + no-website/no-office orders,
+     * never another website partner's).
+     */
     private function ordersQuery()
     {
         return DB::table('bookings as booking')
@@ -35,6 +41,7 @@ class CustomerAccountController extends Controller
             ->leftJoin('order_statuses as ordstatus', 'ordstatus.id', '=', 'booking.ord_status_id')
             ->select(
                 'booking.id',
+                'booking.partner_id',
                 'booking.reference_no',
                 'booking.amount',
                 'booking.booking_date',
@@ -51,7 +58,8 @@ class CustomerAccountController extends Controller
                 'ordstatus.ord_status',
                 'ordstatus.ar_status'
             )
-            ->where('booking.user_id', $this->customerId());
+            ->where('booking.user_id', $this->customerId())
+            ->where(fn ($visible) => CustomerSite::whereOrderVisible($visible, 'booking.partner_id'));
     }
 
     public function orders()
@@ -135,7 +143,10 @@ class CustomerAccountController extends Controller
 
         $wish = new Wishlist();
         $wish->user_id = $customer->id;
-        $wish->partner_id = $customer->partner_id;
+        // Attribution: the partner website the heart was clicked on (the
+        // current site - CustomerSite), not where the customer registered.
+        // The wishlist itself stays per customer (user_id) on every site.
+        $wish->partner_id = CustomerSite::partnerId();
         $wish->cand_id = $candidate->id;
         $wish->ref_no = $candidate->reference_no;
         $wish->wishlist_date = now();
@@ -155,7 +166,24 @@ class CustomerAccountController extends Controller
         $isAr = app()->getLocale() === 'ar';
         $items = collect();
 
-        Activity::where('user_id', $this->customerId())
+        $customerId = $this->customerId();
+        // Booking/cancel events carry no partner (activities.partner_id is
+        // never set for them) - they follow the SAME order visibility rule
+        // through their candidate: shown when this customer has a visible
+        // order for that candidate, or no order for it at all.
+        Activity::where('user_id', $customerId)
+            ->where(function ($activity) use ($customerId) {
+                $activity->whereExists(function ($order) use ($customerId) {
+                    $order->selectRaw('1')->from('bookings as booking')
+                        ->whereColumn('booking.cand_id', 'activities.cand_id')
+                        ->where('booking.user_id', $customerId)
+                        ->where(fn ($visible) => CustomerSite::whereOrderVisible($visible, 'booking.partner_id'));
+                })->orWhereNotExists(function ($order) use ($customerId) {
+                    $order->selectRaw('1')->from('bookings as booking')
+                        ->whereColumn('booking.cand_id', 'activities.cand_id')
+                        ->where('booking.user_id', $customerId);
+                });
+            })
             ->orderByDesc('id')
             ->limit(50)
             ->get(['headline', 'bodyMessage', 'created_at'])
@@ -183,7 +211,8 @@ class CustomerAccountController extends Controller
                     'kind' => 'order',
                     'title' => __('locale.Order') . ' #' . $order->reference_no . ' — ' . $candName,
                     'body' => __('locale.Order Status') . ': ' . $status
-                        . ' · ' . __('locale.Payment Status') . ': ' . ($order->payment_status ? __('locale.Paid') : __('locale.Unpaid')),
+                        . ' · ' . __('locale.Payment Status') . ': ' . ($order->payment_status ? __('locale.Paid') : __('locale.Unpaid'))
+                        . (CustomerSite::isHandledByTeam($order->partner_id) ? ' · ' . __('locale.Handled by our team') : ''),
                     'date' => $order->updated_at ? Carbon::parse($order->updated_at) : null,
                     'url' => route('worker.account.orders'),
                 ]);

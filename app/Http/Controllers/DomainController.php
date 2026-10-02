@@ -314,21 +314,25 @@ class DomainController extends Controller
             $decoded[$field] = $binary;
         }
 
+        // Branding files share one folder with every other partner (and with
+        // the RecruitmentCV Partner Portal), so new uploads get a name unique
+        // to this domain row (Domain::newBrandingFileName()) and a replaced
+        // file is deleted only after saving, and only if no other domain /
+        // partner row still references it.
+        $replaced = [];
+
         // =========================
         // 🔹 English Logo Upload
         // =========================
         if (isset($decoded['website_logo'])) {
 
-            // delete old file
-            if ($domain->website_logo && file_exists($uploadPath.'/'.$domain->website_logo)) {
-                unlink($uploadPath.'/'.$domain->website_logo);
-            }
-
-            // unique name
-            $name = time().'_en.png';
+            $name = $domain->newBrandingFileName('en', 'png');
 
             file_put_contents($uploadPath.'/'.$name, $decoded['website_logo']);
 
+            if ($domain->website_logo) {
+                $replaced[] = $domain->website_logo;
+            }
             $domain->website_logo = $name;
         }
 
@@ -337,19 +341,21 @@ class DomainController extends Controller
         // =========================
         if (isset($decoded['website_logo_ar'])) {
 
-            // delete old file
-            if ($domain->website_logo_ar && file_exists($uploadPath.'/'.$domain->website_logo_ar)) {
-                unlink($uploadPath.'/'.$domain->website_logo_ar);
-            }
-
-            $name = time().'_ar.png';
+            $name = $domain->newBrandingFileName('ar', 'png');
 
             file_put_contents($uploadPath.'/'.$name, $decoded['website_logo_ar']);
 
+            if ($domain->website_logo_ar) {
+                $replaced[] = $domain->website_logo_ar;
+            }
             $domain->website_logo_ar = $name;
         }
 
         $domain->save();
+
+        foreach ($replaced as $oldFile) {
+            Domain::deleteBrandingFileIfUnreferenced($uploadPath, $oldFile);
+        }
 
         return response()->json([
             'success' => true,

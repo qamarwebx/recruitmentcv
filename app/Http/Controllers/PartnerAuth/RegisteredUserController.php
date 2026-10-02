@@ -32,6 +32,13 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        // Legacy email+password sign-up created a Partner with credentials
+        // and logged it in with no mobile OTP and no admin approval. Partner
+        // registration is the mobile-OTP flow (Partner Login page ->
+        // Register as Partner -> PartnerAuthController), which only saves
+        // credentials after the OTP is verified - send the visitor there.
+        return redirect()->route('worker.partner.login.page', ['mode' => 'register']);
+
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:'.Partner::class],

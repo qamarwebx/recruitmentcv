@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Country;
 use App\Models\User;
+use App\Support\CustomerSite;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -13,12 +14,18 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
 /**
- * Partner Portal -> Customers. A partner's customers are the users rows with
- * users.partner_id = that partner (set server-side when a customer registers
- * on the partner's subdomain - see App\Support\CustomerSite). Every query
- * here starts from the logged-in partner's id; a customer id that belongs to
- * anyone else always resolves to 404, so changing an id in the URL can never
- * read or modify another partner's customer.
+ * Partner Portal -> Customers. Customer accounts are global ("one account,
+ * all sites" - App\Support\CustomerSite), so a partner sees a customer who:
+ *   - registered on this partner's website (users.partner_id = partner)
+ *     -> "Registered here": editable (name/company/address; mobile/email
+ *        only while the customer hasn't taken the account into use - see
+ *        User::isInUseByCustomer()) and unlinkable; or
+ *   - has at least one order with this partner (bookings.partner_id =
+ *     partner), wherever they registered, incl. legacy customers with no
+ *     partner -> "Ordered here": view only.
+ * The partner is always the partner guard's own id; every lookup goes
+ * through visibleCustomers(), so any other id resolves to 404, and only
+ * this partner's orders are ever shown or counted.
  */
 class PartnerCustomersController extends Controller
 {
@@ -30,9 +37,43 @@ class PartnerCustomersController extends Controller
         return (int) Auth::guard('partner')->id();
     }
 
-    private function findOwned($id): ?User
+    /**
+     * Customers this partner may see: registered here OR ordered here.
+     * One server-side query for the list (search/filter/count/pagination)
+     * and every single-customer lookup.
+     */
+    private function visibleCustomers()
     {
-        return User::where('partner_id', $this->partnerId())->where('id', (int) $id)->first();
+        $partnerId = $this->partnerId();
+
+        return User::query()->where(function ($query) use ($partnerId) {
+            $query->where('users.partner_id', $partnerId)
+                ->orWhereExists(function ($bookings) use ($partnerId) {
+                    $bookings->selectRaw('1')
+                        ->from('bookings')
+                        ->whereColumn('bookings.user_id', 'users.id')
+                        ->where('bookings.partner_id', $partnerId);
+                });
+        });
+    }
+
+    private function findVisible($id): ?User
+    {
+        return $this->visibleCustomers()->where('users.id', (int) $id)->first();
+    }
+
+    /** "Registered here" (editable) vs "Ordered here" (view only). */
+    private function registeredHere(User $customer): bool
+    {
+        return (int) $customer->partner_id === $this->partnerId();
+    }
+
+    private function viewOnlyResponse()
+    {
+        return response()->json([
+            'status' => 'error',
+            'message' => __('locale.This customer registered on another website. You can view them and your orders only.'),
+        ], 403);
     }
 
     public function index(Request $request)
@@ -41,15 +82,14 @@ class PartnerCustomersController extends Controller
         $search = trim((string) $request->query('search', ''));
         $status = $request->query('status');
 
-        $query = User::query()
+        $query = $this->visibleCustomers()
             ->select('users.*')
             ->selectSub(
                 Booking::selectRaw('count(*)')
                     ->whereColumn('bookings.user_id', 'users.id')
                     ->where('bookings.partner_id', $partnerId),
                 'orders_count'
-            )
-            ->where('users.partner_id', $partnerId);
+            );
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
@@ -68,12 +108,13 @@ class PartnerCustomersController extends Controller
         return view('worker.partner.customers.index', [
             'customers' => $customers,
             'countries' => $this->countryOptions(),
+            'partnerId' => $partnerId,
         ]);
     }
 
     public function show($id)
     {
-        $customer = $this->findOwned($id);
+        $customer = $this->findVisible($id);
         abort_if(!$customer, 404);
 
         // Only this customer's orders WITH this partner - same joins as the
@@ -104,6 +145,7 @@ class PartnerCustomersController extends Controller
             'customer' => $customer,
             'orders' => $orders,
             'countries' => $this->countryOptions(),
+            'partnerId' => $this->partnerId(),
         ]);
     }
 
@@ -126,9 +168,12 @@ class PartnerCustomersController extends Controller
 
     public function update(Request $request, $id)
     {
-        $customer = $this->findOwned($id);
+        $customer = $this->findVisible($id);
         if (!$customer) {
             return response()->json(['status' => 'error', 'message' => __('locale.Customer not found.')], 404);
+        }
+        if (!$this->registeredHere($customer)) {
+            return $this->viewOnlyResponse();
         }
 
         $data = $this->validated($request, $customer);
@@ -136,7 +181,30 @@ class PartnerCustomersController extends Controller
             return $data;
         }
 
-        $mobileChanged = $customer->mobile_no !== $data['mobile_no'] || (string) $customer->country_code !== $data['country_code'];
+        $mobileChanged = CustomerSite::canonicalMobile($customer->country_code, $customer->mobile_no) !== CustomerSite::canonicalMobile($data['country_code'], $data['mobile_no'])
+            || ltrim((string) $customer->country_code, '+') !== $data['country_code'];
+        $emailChanged = strcasecmp(trim((string) $customer->email), (string) $data['email']) !== 0;
+
+        // Account takeover guard: once the customer uses the account, its
+        // login identifiers are theirs to change (verified flow on
+        // /account/profile or /account/security) - refused here whatever
+        // the form sent.
+        if ($customer->isInUseByCustomer() && ($mobileChanged || $emailChanged)) {
+            $message = __('locale.Only the customer can change their mobile number and email, from their own account.');
+            return response()->json(['status' => 'error', 'message' => $message, 'errors' => array_fill_keys(
+                array_keys(array_filter(['mobile_no' => $mobileChanged, 'email' => $emailChanged])),
+                [$message]
+            )], 422);
+        }
+
+        // Same number/email typed in another form (leading 0, letter case):
+        // keep the stored values untouched - customer login matches them.
+        if ($customer->isInUseByCustomer()) {
+            $data['country_code'] = ltrim((string) $customer->country_code, '+');
+            $data['mobile_no'] = $customer->mobile_no;
+            $data['email'] = $customer->email;
+        }
+
         $this->fill($customer, $data);
         // A new number hasn't been OTP-verified by the customer.
         if ($mobileChanged) {
@@ -153,9 +221,13 @@ class PartnerCustomersController extends Controller
      */
     public function unlink($id)
     {
-        $customer = $this->findOwned($id);
+        $customer = $this->findVisible($id);
         if (!$customer) {
             return response()->json(['status' => 'error', 'message' => __('locale.Customer not found.')], 404);
+        }
+        // Only a customer registered here can be unlinked from this partner.
+        if (!$this->registeredHere($customer)) {
+            return $this->viewOnlyResponse();
         }
 
         $customer->partner_id = null;
@@ -186,11 +258,16 @@ class PartnerCustomersController extends Controller
             return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
         }
 
-        // One account per mobile number per website (see CustomerSite).
-        $mobileTaken = User::where('partner_id', $this->partnerId())
-            ->where('mobile_no', $request->mobile_no)
-            ->when($customer, fn ($q) => $q->where('id', '!=', $customer->id))
-            ->exists();
+        // One customer account per mobile number across ALL websites (one
+        // account, all sites) - the same normalized check registration uses
+        // (CustomerSite::registrationConflicts()). Only when the number is
+        // new or changed, so an unchanged legacy duplicate never blocks
+        // saving the other fields.
+        $mobileIsNew = !$customer
+            || CustomerSite::canonicalMobile($customer->country_code, $customer->mobile_no) !== CustomerSite::canonicalMobile($request->country_code, $request->mobile_no)
+            || ltrim((string) $customer->country_code, '+') !== (string) $request->country_code;
+        $mobileTaken = $mobileIsNew
+            && isset(CustomerSite::registrationConflicts(null, $request->country_code, $request->mobile_no, $customer?->id)['mobile']);
 
         if ($mobileTaken) {
             return response()->json([

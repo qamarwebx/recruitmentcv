@@ -5,29 +5,29 @@ namespace App\Support;
 class CandidatePhoto
 {
     /**
-     * Candidate photos are uploaded and stored on the CRM (crm.qamarhire.com);
-     * this Worker Portal's own local admin/assets/images/candidate/ copy is
-     * only a periodic snapshot that lags behind new CRM uploads, so resolving
-     * against it (as this class used to) silently falls back to the default
-     * avatar for any recently-added or recently-changed candidate photo. The
-     * CRM is the single source of truth, so build the URL against it
-     * directly - this mirrors the CRM's own reference markup exactly:
+     * Candidate images are served from the current RecruitmentCV site's own
+     * host (asset(), which also honours ASSET_URL if it is ever set).
+     * public/admin/assets is a symlink to the CRM's own admin/assets folder,
+     * so admin/assets/images/candidate/ here is the very directory the CRM
+     * uploads candidate photos to - always current, never a copy. Paths
+     * mirror the CRM's own markup:
      *   asset('admin/assets/images/candidate/'.$post->photo_file)
      *   asset('admin/assets/img/avatars/blank.jpeg') // fallback
-     * just against the CRM's base URL instead of this app's own.
      */
-    private const CRM_BASE_URL = 'https://crm.qamarhire.com';
-    private const CANDIDATE_DIR = '/admin/assets/images/candidate/';
-    private const DEFAULT_AVATAR = '/admin/assets/img/avatars/blank.jpeg';
+    private const CANDIDATE_DIR = 'admin/assets/images/candidate/';
+    private const DEFAULT_AVATAR = 'admin/assets/img/avatars/blank.jpeg';
+    // The CRM's blue "verified" mark (same file qamarhire.com shows after a
+    // candidate's name), from the same shared candidate folder.
+    private const VERIFIED_ICON = 'admin/assets/images/candidate/cadidate-verified.svg';
 
     /**
-     * Resolve a candidate image filename to its CRM public URL, falling back
-     * to the default avatar when the filename is empty.
+     * Resolve a candidate image filename to its public URL on the current
+     * site, falling back to the default avatar when the filename is empty.
      */
     public static function url(?string $filename): string
     {
         if (!empty($filename)) {
-            return self::CRM_BASE_URL . self::CANDIDATE_DIR . $filename;
+            return asset(self::CANDIDATE_DIR . $filename);
         }
 
         return self::defaultUrl();
@@ -35,7 +35,12 @@ class CandidatePhoto
 
     public static function defaultUrl(): string
     {
-        return self::CRM_BASE_URL . self::DEFAULT_AVATAR;
+        return asset(self::DEFAULT_AVATAR);
+    }
+
+    public static function verifiedIconUrl(): string
+    {
+        return asset(self::VERIFIED_ICON);
     }
 
     public static function exists(?string $filename): bool
@@ -44,12 +49,12 @@ class CandidatePhoto
     }
 
     /**
-     * Returns the CRM public URL only when a filename is present, otherwise null.
+     * Returns the public URL only when a filename is present, otherwise null.
      * Useful for optional document images (passport/license) that should simply be
      * skipped rather than shown as a broken image.
      */
     public static function urlIfExists(?string $filename): ?string
     {
-        return self::exists($filename) ? self::CRM_BASE_URL . self::CANDIDATE_DIR . $filename : null;
+        return self::exists($filename) ? asset(self::CANDIDATE_DIR . $filename) : null;
     }
 }

@@ -18,6 +18,9 @@
 
 @section('content')
     <form data-order-filter-form data-endpoint="{{ route('worker.partner.orders') }}" class="wp-filter-bar wp-fade-in">
+        {{-- Active Order / Cancelled Order (buttons in the results toolbar);
+        sent with every search/filter/pagination request. --}}
+        <input type="hidden" name="order_state" value="{{ $orderState }}" data-order-state-input>
         <div class="wp-filter-search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
             <input type="text" name="search" class="w-input" placeholder="{{ __('locale.Search by reference or candidate name') }}" value="{{ request('search') }}">
@@ -55,7 +58,7 @@
     </div>
 
     <div id="worker-orders-grid">
-        @include('worker.partner.orders.partial', ['orders' => $orders])
+        @include('worker.partner.orders.partial', ['orders' => $orders, 'orderState' => $orderState])
     </div>
 
     @include('worker.partials.cancel-order-modal')

@@ -21,7 +21,11 @@
     @php
         $__partner = Auth::guard('partner')->user();
         $__partnerLabel = $__partner->rec_off_name ?: $__partner->owner_name ?: 'Partner';
-        $__partnerInitials = collect(explode(' ', trim($__partnerLabel)))->map(fn($w) => mb_substr($w, 0, 1))->take(2)->implode('');
+        // The signed-in partner's own Full Name (Account -> Full Name) - shown
+        // in the header profile button only.
+        $__partnerFullName = trim((string) $__partner->owner_name);
+        $__partnerHeaderName = $__partnerFullName !== '' ? $__partnerFullName : __('locale.Partner');
+        $__partnerInitials = collect(explode(' ', $__partnerHeaderName))->filter()->map(fn($w) => mb_substr($w, 0, 1))->take(2)->implode('');
         $__notifications = $notifications ?? collect();
 
         // Resolved once here (the one shared layout every /partner/* page
@@ -41,24 +45,38 @@
         $__defaultPartnerLogo = asset('user/img/logo/' . ($__isArabic ? 'new_logo_Arabic_white.webp' : 'Logo_eng_white.webp'));
 
         // Same $__partner->domain relation as above (already loaded, no extra
-        // query) - same gating condition already used by the Settings > Domain
-        // tab's own Live URL link (profile.blade.php): active status + a
-        // non-empty sub_domain. Null means "hide gracefully" per spec, never
+        // query) - same gating as the Website > Domain tab's own Live URL
+        // link: the subdomain is live (Domain::isLiveSubdomain(), the rule
+        // ResolvePartnerWebsiteDomain serves sites by). Null means "hide gracefully" per spec, never
         // a fallback URL (unlike Partner::portalBaseUrl(), which is used for
         // post-login redirects and intentionally falls back to app().url).
         $__partnerDomain = $__partner->domain;
-        $__partnerLiveUrl = ($__partnerDomain && $__partnerDomain->status === 'active' && !empty($__partnerDomain->sub_domain))
+        $__partnerLiveUrl = ($__partnerDomain && $__partnerDomain->isLiveSubdomain())
             ? 'https://' . $__partnerDomain->full_domain
             : null;
+
+        // Website -> Branding "Append Company Name" on: the Company Profile
+        // name for this page's language (Company Name / Company Name
+        // (Arabic), same $__partnerDomain row) beside the logo; empty or off
+        // = logo only.
+        $__brandName = ($__partnerDomain && \App\Models\PartnerPageContent::brandingFor($__partner->id)['append_company_name'])
+            ? trim((string) ($__isArabic ? $__partnerDomain->company_name_ar : $__partnerDomain->company_name))
+            : '';
     @endphp
 
     <div class="wp-shell" data-wp-shell>
         <aside class="wp-sidebar" data-wp-sidebar>
             <div class="wp-sidebar-brand">
+                {{-- "Append Company Name": logo + name side by side. --}}
+                @if ($__brandName !== '')<div class="wp-sidebar-brand-row">@endif
                 @if ($__partnerLogoUrl)
                     <img src="{{ $__partnerLogoUrl }}" alt="{{ $__partnerLabel }}" onerror="this.onerror=null;this.src='{{ $__defaultPartnerLogo }}';this.alt='Qamr International';">
                 @else
                     <x-brand-logo mode="dark" alt="Qamr International" />
+                @endif
+                @if ($__brandName !== '')
+                    <span class="wp-sidebar-brand-name" title="{{ $__brandName }}">{{ $__brandName }}</span>
+                    </div>
                 @endif
                 <button type="button" class="wp-collapse-toggle" data-wp-collapse-toggle aria-label="Collapse sidebar">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 18l-6-6 6-6"/></svg>
@@ -70,13 +88,11 @@
             
 
             <nav class="wp-nav">
-                <a href="{{ route('worker.home') }}" class="wp-nav-link wp-nav-link-back">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                    <span>{{ __('locale.Back to Website') }}</span>
-                </a>
-               
                 <a href="{{ route('worker.partner.candidates') }}" class="wp-partner-card {{ request()->routeIs('worker.partner.candidates', 'worker.partner.candidates.*') ? 'is-active' : '' }}">
-                    <span class="wp-partner-avatar">QW</span>
+                    <span class="wp-partner-avatar">
+                        {{-- CV / resume document, same inline stroke icon style as the menu. --}}
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>
+                    </span>
                     <div>
                         <span class="wp-partner-name">{{ __('locale.Worker CV') }}</span>
                         <span class="wp-partner-role">{{ __('locale.All Candidate CV') }}</span>
@@ -127,6 +143,11 @@
             </nav>
 
             <div class="wp-sidebar-footer">
+                {{-- Main RecruitmentCV site (configured root domain), new tab. --}}
+                <a href="https://{{ \App\Support\RecruitmentDomain::root() }}" target="_blank" rel="noopener">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    <span>RecruitmentCV.com</span>
+                </a>
                 <a href="{{ route('worker.privacy') }}" target="_blank" rel="noopener">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s7-3.5 7-9V5l-7-3-7 3v8c0 5.5 7 9 7 9z"/></svg>
                     <span>{{ __('locale.Privacy Policy') }}</span>
@@ -205,7 +226,7 @@
                     <div class="wp-dropdown-wrap">
                         <button type="button" class="wp-profile-trigger" data-wp-dropdown-trigger="profile">
                             <span class="wp-partner-avatar" style="padding-top: 6px;color: white;">{{ $__partnerInitials ?: 'P' }}</span>
-                            <span>{{ $__partnerLabel }}</span>
+                            <span>{{ $__partnerHeaderName }}</span>
                         </button>
                         <div class="wp-dropdown" data-wp-dropdown="profile">
                             <a href="{{ route('worker.partner.account') }}" class="wp-menu-item">
@@ -242,10 +263,35 @@
     page's Add/Change Number action (see partner-auth.js's
     window.WorkerPartnerAuth.openAddMobile). --}}
     @include('worker.partials.partner-auth-modal')
-    @include('worker.partials.whatsapp-float', ['waPartnerId' => Auth::guard('partner')->id()])
+    {{-- Once per login, only when Edit Account Details are incomplete. --}}
+    @php $accountPromptMissing = \App\Support\PartnerAccountPrompt::take(); @endphp
+    @if ($accountPromptMissing)
+        @include('worker.partner.partials.account-details-prompt', ['missing' => $accountPromptMissing])
+    @endif
+    {{-- Portal "Customer Support" = RecruitmentCV/Qamr platform support for
+    the partner's own staff: the CENTRAL WhatsApp settings (partner_id NULL
+    row, CRM -> Website -> WhatsApp), never the partner's own Website ->
+    WhatsApp number, which is for that partner's customers on its public
+    site. Explicit null so no outer variable can change it. --}}
+    @include('worker.partials.whatsapp-float', ['waPartnerId' => null])
 
     <script src="{{ asset('worker/js/portal.js') }}?v={{ @filemtime(public_path('worker/js/portal.js')) ?: time() }}"></script>
     @include('worker.partials.partner-auth-script')
     @yield('page-script')
+    @if ($accountPromptMissing)
+        {{-- After page-script: reuses that page's jQuery/select2 when present, else loads them. --}}
+        <script src="{{ asset('worker/js/partner-account-prompt.js') }}?v={{ @filemtime(public_path('worker/js/partner-account-prompt.js')) ?: time() }}"
+            data-jquery-url="{{ asset('admin/assets/vendor/libs/jquery/jquery.js') }}"
+            data-select2-url="{{ asset('admin/assets/vendor/libs/select2/select2.js') }}"
+            data-select2-css-url="{{ asset('admin/assets/vendor/libs/select2/select2.css') }}"
+            data-select-init-url="{{ asset('worker/js/profile-vendor-init.js') }}?v={{ @filemtime(public_path('worker/js/profile-vendor-init.js')) ?: time() }}"
+            data-i18n="{{ json_encode([
+                'saving' => __('locale.Saving…'),
+                'save' => __('locale.Save Changes'),
+                'saved' => __('locale.Account details saved.'),
+                'errRequired' => __('locale.Please fill in all required fields.'),
+                'errTechnical' => __('locale.A technical error occurred. Please try again shortly.'),
+            ]) }}"></script>
+    @endif
 </body>
 </html>

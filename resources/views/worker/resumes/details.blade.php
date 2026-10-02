@@ -28,11 +28,7 @@
 
                     <div class="w-profile-card">
                         <div class="w-profile-name">
-                            <h1>{{ $post->display_name }}</h1>
-                            <span class="w-verified">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 7L2 14l10 5 10-5-10-5Z"/></svg>
-                                {{ __('locale.Verified') }}
-                            </span>
+                            <h1>{{ $post->display_name }}@include('worker.partials.candidate-verified-icon')</h1>
                         </div>
 
                         {{-- Locale-aware: Profession::display_name (existing

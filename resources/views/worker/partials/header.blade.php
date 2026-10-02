@@ -10,7 +10,7 @@
     <div class="w-nav-backdrop" data-nav-backdrop></div>
     <div class="w-container w-header-inner">
         <a href="{{ route('worker.home') }}" class="w-logo">
-            <x-brand-logo mode="light" alt="Qamr International" />
+            <x-brand-logo mode="light" alt="{{ \App\Support\SiteBrand::name() }}" />
         </a>
 
         <nav class="w-nav" data-nav>

@@ -21,11 +21,13 @@ use App\Models\Expecworkcity;
 use App\Models\PartnerEmployerSaveFilter;
 use App\Models\PartnerPageContent;
 use App\Models\PartnerPrice;
+use App\Models\PartnerSmtpSetting;
 use App\Models\Placeofissue;
 use App\Models\Profession;
 use App\Models\Region;
 use App\Models\Religion;
 use App\Models\Visadetails;
+use App\Models\WebsiteSmtpSetting;
 use App\Support\HtmlSanitizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -33,7 +35,10 @@ use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 /**
  * Worker-hosted Partner Portal, reachable only after partner login (see
@@ -198,6 +203,13 @@ class PartnerPortalController extends Controller
             )
             ->where('booking.partner_id', $partnerId);
 
+        // Active Order / Cancelled Order switch (default Active): the existing
+        // cancelled flag, booking_status = 2 (as the order cards' Cancelled
+        // badge and the hire checks above use it). One query feeds both the
+        // card and table views, so counts/pagination follow it.
+        $orderState = $request->input('order_state') === 'cancelled' ? 'cancelled' : 'active';
+        $query->where('booking.booking_status', $orderState === 'cancelled' ? '=' : '!=', 2);
+
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -257,11 +269,12 @@ class PartnerPortalController extends Controller
         $allWorkCities = Expecworkcity::orderBy('name')->get();
 
         if ($request->ajax()) {
-            return view('worker.partner.orders.partial', compact('orders'));
+            return view('worker.partner.orders.partial', compact('orders', 'orderState'));
         }
 
         return view('worker.partner.orders.index', compact(
             'orders',
+            'orderState',
             'orderStatuses',
             'professionOptions',
             'locationOptions',
@@ -1314,11 +1327,33 @@ class PartnerPortalController extends Controller
         $validator = Validator::make($request->all(), [
             'rec_off_name' => 'required|string|max:255',
             'owner_name' => 'required|string|max:255',
+            // partners.username - what "Login with Password" by username
+            // looks up (PartnerAuthController::findByAccountIdentifier), so
+            // unique among partners (the CRM's rule, ignoring this partner),
+            // and without spaces or "@" (an identifier with "@" is looked up
+            // as an email). "sometimes": the Account Details prompt modal,
+            // which saves through here too, has no username field.
+            'username' => ['sometimes', 'required', 'string', 'max:120', 'regex:/^[^\s@]+$/u', \Illuminate\Validation\Rule::unique('partners', 'username')->ignore($partner->id)],
+            // partners.licence_number (optional; empty = not provided).
+            'licence_number' => 'nullable|string|max:100',
             'country_id' => 'nullable|integer|exists:countries,id',
             'city_id' => 'nullable|integer|exists:cities,id',
+        ], [
+            'username.required' => __('locale.Please enter a username.'),
+            'username.unique' => __('locale.This username is already taken.'),
+            'username.regex' => __('locale.The username cannot contain spaces or @.'),
+        ], [
+            'licence_number' => __('locale.Recruitment Licence Number'),
+            'username' => __('locale.Username'),
         ]);
 
         if ($validator->fails()) {
+            // JSON for the portal's "Account Details" prompt modal (same
+            // validation / save as this page's form).
+            if ($request->expectsJson()) {
+                return response()->json(['status' => 'error', 'message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+            }
+
             return redirect()->route('worker.partner.account')
                 ->withErrors($validator)
                 ->withInput();
@@ -1326,34 +1361,74 @@ class PartnerPortalController extends Controller
 
         $partner->rec_off_name = $request->rec_off_name;
         $partner->owner_name = $request->owner_name;
+        if ($request->has('username')) {
+            $partner->username = $request->username;
+        }
+        $partner->licence_number = $request->licence_number;
         // Email is changed only through the verified flow below
         // (accountEmailSend/accountEmailVerify), never from this form.
         $partner->country_id = $request->country_id;
         $partner->city_id = $request->city_id;
         $partner->save();
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'status' => 'success',
+                'message' => __('locale.Profile updated successfully.'),
+                // From the saved row, so the modal closes only when complete.
+                'missing' => $partner->fresh()->missingAccountDetails(),
+            ]);
+        }
+
         return redirect()->route('worker.partner.account')->with('success', 'Profile updated successfully.');
     }
 
     /**
-     * Account -> Change Password: New + Confirm only (the partner is already
-     * authenticated). partners.password, bcrypt - the same column the CRM's
-     * partner password update and Login with Password use.
+     * Account -> Change Password: Old Password (checked against the signed-in
+     * partner's stored hash by Laravel's current_password rule, i.e.
+     * Hash::check), then New + Confirm with the existing policy.
+     * partners.password, bcrypt - the same column the CRM's partner password
+     * update and Login with Password use. A partner who has never had a
+     * password (OTP / Google only) sets one without an old password. Wrong
+     * old passwords: 5 per partner, then a short lock (RateLimiter, like
+     * passwordLogin). The partner stays signed in. Forgot Password from this
+     * page is the login page's flow (PartnerAuthController::passwordReset*).
      */
     public function accountPasswordUpdate(Request $request)
     {
         $partner = Auth::guard('partner')->user();
         $hadPassword = !empty($partner->password);
+        $throttleKey = 'partner-account-password:' . $partner->id;
+
+        if ($hadPassword && \Illuminate\Support\Facades\RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            return redirect()->route('worker.partner.account')->withErrors([
+                'current_password' => __('locale.Too many attempts. Please try again later.'),
+            ]);
+        }
 
         $validator = Validator::make($request->all(), [
+            'current_password' => $hadPassword ? ['required', 'string', 'current_password:partner'] : ['nullable'],
             'password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
-        ], [], [
+            'password_confirmation' => ['required'],
+        ], [
+            'current_password.required' => __('locale.Please enter your old password.'),
+            'current_password.current_password' => __('locale.The old password is incorrect.'),
+            'password.required' => __('locale.Please enter your new password.'),
+            'password_confirmation.required' => __('locale.Please confirm your new password.'),
+            'password.confirmed' => __('locale.The passwords do not match.'),
+        ], [
             'password' => __('locale.New Password'),
         ]);
 
         if ($validator->fails()) {
+            if ($hadPassword && $validator->errors()->has('current_password')) {
+                \Illuminate\Support\Facades\RateLimiter::hit($throttleKey, 15 * 60);
+            }
+
             return redirect()->route('worker.partner.account')->withErrors($validator);
         }
+
+        \Illuminate\Support\Facades\RateLimiter::clear($throttleKey);
 
         $partner->password = \Illuminate\Support\Facades\Hash::make($request->password);
         $partner->save();
@@ -1509,9 +1584,16 @@ class PartnerPortalController extends Controller
         $pageContents['contact']['branches'] = PartnerPageContent::effectiveBranches($partner->id);
 
         $whatsapp = PartnerPageContent::effectiveWhatsapp($partner->id);
-        $whatsappDefaults = PartnerPageContent::defaultWhatsapp();
+        // What an empty field falls back to: the central (CRM) settings.
+        $whatsappDefaults = PartnerPageContent::centralWhatsapp();
 
-        return view('worker.partner.website', compact('partner', 'domain', 'pageContents', 'whatsapp', 'whatsappDefaults'));
+        // SMTP tab: the partner's own row (password never passed to the
+        // view) and the non-secret values of the default sender it falls
+        // back to, shown until the partner saves their own.
+        $smtp = PartnerSmtpSetting::forPartner($partner->id);
+        $smtpDefaults = $this->defaultSmtpDisplay();
+
+        return view('worker.partner.website', compact('partner', 'domain', 'pageContents', 'whatsapp', 'whatsappDefaults', 'smtp', 'smtpDefaults'));
     }
 
     /**
@@ -1756,7 +1838,12 @@ class PartnerPortalController extends Controller
      */
     private function websiteConfigDefaults(string $page, string $locale, $frontwebsite): array
     {
-        return PartnerPageContent::defaultContent($page, $locale, $frontwebsite);
+        // The logged-in partner's own Company Profile (never the host's or
+        // a request value), so the Privacy/Terms defaults name this partner
+        // as the website operator - the same text its public page shows.
+        $company = \App\Support\SiteBrand::companyFromDomain(Auth::guard('partner')->user()->domain);
+
+        return PartnerPageContent::defaultContent($page, $locale, $frontwebsite, $company);
     }
 
     /**
@@ -1811,6 +1898,13 @@ class PartnerPortalController extends Controller
     {
         $partner = Auth::guard('partner')->user();
 
+        // "Append Company Name" switch (same Branding save; optional, so a
+        // logo-only request from elsewhere behaves exactly as before).
+        $hasCompanyNameSwitch = $request->has('append_company_name');
+        if ($hasCompanyNameSwitch && !in_array($request->input('append_company_name'), [true, false, 0, 1, '0', '1'], true)) {
+            return response()->json(['status' => 'error', 'errors' => ['append_company_name' => ['Invalid value.']]], 422);
+        }
+
         $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
         $maxBytes = 2048 * 1024;
 
@@ -1851,8 +1945,20 @@ class PartnerPortalController extends Controller
             $mimes[$column] = strtolower($matches[1]);
         }
 
-        if (empty($decoded)) {
+        if (empty($decoded) && !$hasCompanyNameSwitch) {
             return response()->json(['status' => 'error', 'message' => __('locale.Choose at least one logo to upload.')], 422);
+        }
+
+        if ($hasCompanyNameSwitch) {
+            PartnerPageContent::saveBranding($partner->id, ['append_company_name' => (bool) $request->input('append_company_name')]);
+        }
+
+        if (empty($decoded)) {
+            return response()->json([
+                'status' => 'success',
+                'message' => __('locale.Branding updated successfully.'),
+                'data' => PartnerPageContent::brandingFor($partner->id),
+            ]);
         }
 
         $domain = $partner->domain()->firstOrCreate([]);
@@ -1866,24 +1972,33 @@ class PartnerPortalController extends Controller
             mkdir($uploadPath, 0755, true);
         }
 
+        $replaced = [];
+
         foreach ($decoded as $column => $binary) {
             $suffix = ['website_logo' => 'en', 'website_logo_ar' => 'ar', 'website_favicon' => 'fav'][$column];
-
-            if ($domain->{$column} && file_exists($uploadPath . '/' . $domain->{$column})) {
-                unlink($uploadPath . '/' . $domain->{$column});
-            }
 
             // Logos keep their existing .png naming; the favicon keeps its real
             // extension so browsers get the right type for <link rel="icon">.
             $extension = $column === 'website_favicon'
                 ? (['image/jpeg' => 'jpg', 'image/webp' => 'webp'][$mimes[$column]] ?? 'png')
                 : 'png';
-            $name = time() . '_' . $suffix . '.' . $extension;
+            // Unique per domain row (shared folder - see Domain::newBrandingFileName()).
+            $name = $domain->newBrandingFileName($suffix, $extension);
             file_put_contents($uploadPath . '/' . $name, $binary);
+
+            if ($domain->{$column}) {
+                $replaced[] = $domain->{$column};
+            }
             $domain->{$column} = $name;
         }
 
         $domain->save();
+
+        // Old files only once the new names are saved, and only if no other
+        // domain/partner row still points at the same file.
+        foreach ($replaced as $oldFile) {
+            Domain::deleteBrandingFileIfUnreferenced($uploadPath, $oldFile);
+        }
 
         return response()->json([
             'status' => 'success',
@@ -1892,7 +2007,7 @@ class PartnerPortalController extends Controller
                 'english_logo' => $domain->website_logo ? asset('admin/assets/images/partner/' . $domain->website_logo) : null,
                 'arabic_logo' => $domain->website_logo_ar ? asset('admin/assets/images/partner/' . $domain->website_logo_ar) : null,
                 'favicon' => $domain->website_favicon ? asset('admin/assets/images/partner/' . $domain->website_favicon) : null,
-            ],
+            ] + PartnerPageContent::brandingFor($partner->id),
         ]);
     }
 
@@ -1910,8 +2025,10 @@ class PartnerPortalController extends Controller
 
         $validator = Validator::make($request->all(), [
             'whatsapp_number' => ['nullable', 'string', 'max:25', 'regex:/^\+?[0-9\s\-()]+$/'],
-            'bg_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
-            'icon_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            // Not editable in the WhatsApp tab any more: optional, and the
+            // saved value (or default) is kept when not sent.
+            'bg_color' => ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'icon_color' => ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'label' => ['nullable', 'string', 'max:40'],
             'icon' => ['nullable', 'string'],
             'remove_icon' => ['nullable', 'boolean'],
@@ -1971,8 +2088,8 @@ class PartnerPortalController extends Controller
             ['content' => [
                 'number' => $number !== '' ? $number : null,
                 'icon' => $icon,
-                'bg_color' => strtolower($request->input('bg_color')),
-                'icon_color' => strtolower($request->input('icon_color')),
+                'bg_color' => $request->filled('bg_color') ? strtolower($request->input('bg_color')) : ($row->content['bg_color'] ?? null),
+                'icon_color' => $request->filled('icon_color') ? strtolower($request->input('icon_color')) : ($row->content['icon_color'] ?? null),
                 // Blank = the default "Customer Support" label.
                 'label' => trim((string) $request->input('label')) !== '' ? trim(strip_tags((string) $request->input('label'))) : null,
             ]]
@@ -1990,6 +2107,171 @@ class PartnerPortalController extends Controller
             'message' => __('locale.WhatsApp settings updated successfully.'),
             'data' => PartnerPageContent::effectiveWhatsapp($partner->id),
         ]);
+    }
+
+    /**
+     * Partner Website -> SMTP: this partner's own sender for the emails
+     * sent to their customers (PartnerSmtpSetting). Optional - without an
+     * active configuration the global Website SMTP / .env mailer is used.
+     * Always the logged-in partner's own row (never a partner_id from the
+     * request). The password is write-only: never returned or rendered,
+     * and a blank password keeps the saved one. Turning it on tests the
+     * connection + login first, so a typo can't silently break emails.
+     */
+    public function settingsSmtpUpdate(Request $request)
+    {
+        $partner = Auth::guard('partner')->user();
+
+        // Each save may open an SMTP connection: rate-limited per partner.
+        $rateKey = 'partner-smtp-save:' . $partner->id;
+        if (RateLimiter::tooManyAttempts($rateKey, 10)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Too many attempts. Please try again in a minute.')], 429);
+        }
+        RateLimiter::hit($rateKey, 60);
+
+        $existing = PartnerSmtpSetting::forPartner($partner->id);
+        $hasSavedPassword = $existing && filled($existing->getRawOriginal('password'));
+        $active = $request->boolean('status');
+        $required = $active ? 'required' : 'nullable';
+
+        $validator = Validator::make($request->all(), [
+            'mailer' => ['nullable', Rule::in(array_keys(PartnerSmtpSetting::MAILERS))],
+            'host' => [$required, 'string', 'max:255', 'regex:/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/'],
+            'port' => [$required, 'integer', Rule::in(PartnerSmtpSetting::PORTS)],
+            'encryption' => ['nullable', Rule::in(array_filter(array_keys(PartnerSmtpSetting::ENCRYPTIONS)))],
+            'username' => [$required, 'string', 'max:255'],
+            'password' => [$active && !$hasSavedPassword ? 'required' : 'nullable', 'string', 'max:255'],
+            'from_address' => [$required, 'email', 'max:255'],
+            'from_name' => ['nullable', 'string', 'max:255'],
+            'status' => ['required', 'boolean'],
+        ], [
+            'host.regex' => __('locale.Enter a valid SMTP host, e.g. smtp.example.com.'),
+            'port.in' => __('locale.Use one of the standard SMTP ports: :ports.', ['ports' => implode(', ', PartnerSmtpSetting::PORTS)]),
+        ], [
+            'host' => __('locale.Host'),
+            'port' => __('locale.Port'),
+            'username' => __('locale.Username'),
+            'password' => __('locale.Password'),
+            'from_address' => __('locale.From Email'),
+            'from_name' => __('locale.From Name'),
+        ]);
+
+        // Public mail servers only - never an internal/private address.
+        $validator->after(function ($validator) use ($request, $active) {
+            $host = (string) $request->input('host');
+            if (!$active || $host === '' || $validator->errors()->has('host')) {
+                return;
+            }
+            $ips = gethostbynamel($host);
+            if (!$ips) {
+                $validator->errors()->add('host', __('locale.This SMTP host could not be found.'));
+                return;
+            }
+            foreach ($ips as $ip) {
+                if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                    $validator->errors()->add('host', __('locale.This SMTP host is not allowed.'));
+                    return;
+                }
+            }
+        });
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $smtp = $existing ?: new PartnerSmtpSetting(['partner_id' => $partner->id]);
+        foreach (['host', 'port', 'username', 'from_address'] as $field) {
+            if ($request->filled($field)) {
+                $smtp->{$field} = trim((string) $request->input($field));
+            }
+        }
+        $smtp->host = $smtp->host ? strtolower($smtp->host) : $smtp->host;
+        $smtp->encryption = $request->input('encryption') ?: null;
+        $smtp->from_name = trim(strip_tags((string) $request->input('from_name')));
+        if ($request->filled('password')) {
+            $smtp->password = (string) $request->input('password');
+        }
+        $smtp->status = $active;
+        $smtp->updated_by = $partner->id;
+
+        if ($active) {
+            if ($error = $this->smtpConnectionError($smtp)) {
+                return response()->json(['status' => 'error', 'errors' => ['smtp' => [$error]]], 422);
+            }
+            $smtp->save();
+        } elseif ($existing || $smtp->isComplete()) {
+            // Turned off (or saved off): kept for later, default mailer used.
+            $smtp->save();
+        }
+        // Off with nothing complete to keep: nothing to store.
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $active
+                ? __('locale.SMTP settings saved. Customer emails will be sent from :email.', ['email' => $smtp->from_address])
+                : __('locale.SMTP settings saved. Customer emails will be sent with the default RecruitmentCV email settings.'),
+            'data' => [
+                'status' => (bool) $smtp->status,
+                'has_password' => filled($smtp->exists ? $smtp->getRawOriginal('password') : null),
+            ],
+        ]);
+    }
+
+    /**
+     * Host/port/encryption/From of the sender used when a partner has no
+     * SMTP of their own: the global Website SMTP when active, else .env.
+     * Username and password are never included.
+     */
+    private function defaultSmtpDisplay(): array
+    {
+        try {
+            $global = WebsiteSmtpSetting::current();
+            if ($global && $global->isUsable()) {
+                return [
+                    'host' => $global->host,
+                    'port' => $global->port,
+                    'encryption' => (string) $global->encryption,
+                    'from_address' => $global->from_address,
+                    'from_name' => $global->from_name,
+                ];
+            }
+        } catch (\Throwable $e) {
+            // Unreadable global row: show the .env values below.
+        }
+
+        $encryption = strtolower((string) config('mail.mailers.smtp.encryption'));
+
+        return [
+            'host' => config('mail.mailers.smtp.host'),
+            'port' => (int) config('mail.mailers.smtp.port'),
+            'encryption' => in_array($encryption, ['ssl', 'tls'], true) ? $encryption : '',
+            'from_address' => config('mail.from.address'),
+            'from_name' => config('mail.from.name'),
+        ];
+    }
+
+    /**
+     * Opens + authenticates an SMTP session with these (unsaved) settings,
+     * without sending anything. A friendly message on failure - never the
+     * server's raw reply, which can echo settings.
+     */
+    private function smtpConnectionError(PartnerSmtpSetting $smtp): ?string
+    {
+        try {
+            $transport = $smtp->mailer()->getSymfonyTransport();
+            $transport->start();
+            $transport->stop();
+
+            return null;
+        } catch (\Throwable $e) {
+            Log::info('Partner SMTP connection test failed', ['partner_id' => $smtp->partner_id, 'exception' => get_class($e)]);
+
+            return str_contains(strtolower($e->getMessage()), 'authenticat')
+                ? __('locale.The SMTP server rejected the username or password.')
+                : __('locale.Could not connect to the SMTP server. Please check the host, port and encryption.');
+        } finally {
+            Mail::purge('partner_smtp_' . $smtp->partner_id);
+        }
     }
 
     /**

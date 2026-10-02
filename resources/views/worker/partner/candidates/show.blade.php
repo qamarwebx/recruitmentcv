@@ -25,7 +25,7 @@
 
             <div class="w-profile-card">
                 <div class="w-profile-name">
-                    <h1>{{ $post->display_name }}</h1>
+                    <h1>{{ $post->display_name }}@include('worker.partials.candidate-verified-icon')</h1>
                     @if ($hasBooking)
                         <span class="w-verified">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 7L2 14l10 5 10-5-10-5Z"/></svg>
@@ -88,9 +88,14 @@
 
         <div>
             <div class="w-info-card wp-fade-in">
-                <h2>
+                {{-- Reference No. on the right of the header, in the same style as
+                the reference on the Orders cards (.wp-order-card-ref). --}}
+                <h2 class="wp-card-head-with-ref">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
                     {{ __('locale.Personal Details') }}
+                    @if ($post->reference_no)
+                        <span class="wp-order-card-ref" title="{{ __('locale.Reference No.') }}">{{ $post->reference_no }}</span>
+                    @endif
                 </h2>
                 <div class="w-info-grid">
                     <div class="w-info-item">
@@ -128,10 +133,6 @@
                     <div class="w-info-item">
                         <span>{{ __('locale.Preferred Work Location') }}</span>
                         <strong>{{ $expectedWorkPlaces->count() ? $expectedWorkPlaces->pluck('display_name')->implode(', ') : __('locale.Anywhere') }}</strong>
-                    </div>
-                    <div class="w-info-item">
-                        <span>{{ __('locale.Reference No.') }}</span>
-                        <strong>{{ $post->reference_no ?: '---' }}</strong>
                     </div>
                 </div>
             </div>
