@@ -258,10 +258,9 @@ class Domain extends Model
      */
     public static function defaultFaviconUrl(): string
     {
-        $relative = 'user/img/favicon.png';
-        $version = @filemtime(public_path($relative));
-
-        return asset($relative) . ($version ? '?v=' . $version : '');
+        // The global favicon (CRM -> Website -> Company Profile & Branding),
+        // else the built-in file - see App\Support\BrandingAssets.
+        return \App\Support\BrandingAssets::url('favicon', null);
     }
 
     /*
@@ -290,7 +289,8 @@ class Domain extends Model
     /**
      * Deletes a replaced Branding file from $directory only when NO row
      * still references that exact filename - any domain's logo/Arabic
-     * logo/favicon, or a partner's logo/website_logo (same folder). Call it
+     * logo/favicon, a partner's logo/website_logo, or a branding/WhatsApp
+     * settings row (same folder). Call it
      * after the replacement has been saved. Returns whether it was deleted.
      */
     public static function deleteBrandingFileIfUnreferenced(string $directory, ?string $file): bool
@@ -306,7 +306,11 @@ class Domain extends Model
                 $query->orWhere($column, $file);
             }
         })->exists()
-            || Partner::where('logo', $file)->orWhere('website_logo', $file)->exists();
+            || Partner::where('logo', $file)->orWhere('website_logo', $file)->exists()
+            // Global / partner branding rows (header/footer logos, favicon) and WhatsApp icons.
+            || PartnerPageContent::whereIn('page', ['branding', 'whatsapp'])
+                ->where('content', 'like', '%"' . addcslashes($file, '%_\\') . '"%')
+                ->exists();
 
         $path = rtrim($directory, '/') . '/' . $file;
 

@@ -2,19 +2,13 @@
 @php
     $isArabic = ($lang ?? app()->getLocale()) === 'ar';
 
-    // RecruitmentCV partner-subdomain branding (recruitmentcv.com only -
-    // populated by ResolvePartnerWebsiteDomain, unset/empty everywhere
-    // else including this same component on worker.qamarhire.com, so this
-    // is a no-op there). Deliberately checked before the default asset
-    // below, never the reverse - an active partner subdomain always wins.
-    $partnerLogoUrl = $isArabic
-        ? ($partnerBrand['logo_ar'] ?? null)
-        : ($partnerBrand['logo_en'] ?? null);
-
-    if (!$partnerLogoUrl) {
-        $logoFile = $isArabic
-            ? ($mode === 'dark' ? 'new_logo_Arabic_white.webp' : 'new_logo_Arabic.png')
-            : ($mode === 'dark' ? 'Logo_eng_white.webp' : 'Logo_eng_dark.webp');
-    }
+    // light = header logo, dark = footer logo (same pairing as the built-in
+    // files). The effective image - this site's partner upload, else the
+    // global (CRM -> Website -> Company Profile & Branding) upload, else the
+    // built-in file - comes from App\Support\BrandingAssets, the one
+    // resolver. The partner is the host-resolved one (ResolvePartnerWebsiteDomain),
+    // null on the main site.
+    $brandSlot = ($mode === 'dark' ? 'footer' : 'header') . '_logo_' . ($isArabic ? 'ar' : 'en');
+    $brandPartnerId = app()->bound('currentPartner') ? optional(app('currentPartner'))->id : null;
 @endphp
-<img src="{{ $partnerLogoUrl ?: asset('user/img/logo/' . $logoFile) }}" {{ $attributes }}>
+<img src="{{ \App\Support\BrandingAssets::url($brandSlot, $brandPartnerId) }}" {{ $attributes }}>

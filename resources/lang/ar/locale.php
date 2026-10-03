@@ -1045,6 +1045,12 @@
         'Please enter a username.' => 'يرجى إدخال اسم المستخدم.',
         'This username is already taken.' => 'اسم المستخدم هذا مستخدم بالفعل.',
         'The username cannot contain spaces or @.' => 'لا يمكن أن يحتوي اسم المستخدم على مسافات أو @.',
+        'Stat Card' => 'بطاقة إحصائية',
+        'Value' => 'القيمة',
+        'Label' => 'التسمية',
+        'Breadcrumb Label' => 'نص مسار التنقل',
+        'Weekly' => 'أسبوعي',
+        'Yearly' => 'سنوي',
     ];
 
 ?>

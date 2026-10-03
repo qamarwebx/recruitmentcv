@@ -188,7 +188,7 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
         ->name('website-config.branches.update');
 
     Route::post('/website-config/{page}', [PartnerPortalController::class, 'websiteConfigUpdate'])
-        ->where('page', 'home|about|contact|privacy|terms')
+        ->where('page', implode('|', \App\Models\PartnerPageContent::PAGES))
         ->name('website-config.update');
 
     // Settings page tabs (Company Profile / Branding / Domain) - all three

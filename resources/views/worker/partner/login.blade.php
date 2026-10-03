@@ -12,7 +12,8 @@
                 {{-- Partner logo (subdomain branding, else the default logo -
                 same x-brand-logo component the public header uses). --}}
                 <div class="w-partner-auth-page-brand">
-                    <x-brand-logo mode="light" class="w-partner-auth-page-logo" alt="{{ __('locale.Partner Portal') }}" />
+                    <x-brand-logo mode="light" class="w-partner-auth-page-logo" alt="{{ __('locale.Partner Portal') }}" data-brand-logo />
+                    @include('worker.partials.brand-company-name')
                 </div>
                 <p>{{ __('locale.Sign in or register your recruitment office to manage candidates and orders.') }}</p>
             </div>

@@ -47,15 +47,50 @@ class Candidate extends Model
             return '---';
         }
 
-        $experience = '';
+        $experience = $this->display_experience_type;
+
+        return ($experience !== '---' ? $experience . ' ' : '') . optional($this->profession)->display_name;
+    }
+
+    /**
+     * Experience type alone, e.g. "Ex-Abroad" / "Indian Experience" ("---"
+     * when not set) - the first line of every candidate card.
+     */
+    public function getDisplayExperienceTypeAttribute()
+    {
         foreach (static::EXPERIENCE_TYPES as $code => $key) {
             if ($this->gulfexperience == $code) {
-                $experience = __($key) . ' ';
-                break;
+                return __($key);
             }
         }
 
-        return $experience . optional($this->profession)->display_name;
+        return '---';
+    }
+
+    /**
+     * Religion name (Religion::display_name, locale-aware) from religion_id -
+     * the detail page's Personal Details -> Religion. Read through the
+     * relation explicitly: candidates also has a legacy `religion` column,
+     * which would otherwise shadow it.
+     */
+    public function getDisplayReligionAttribute()
+    {
+        return optional($this->getRelationValue('religion'))->display_name ?: '---';
+    }
+
+    /**
+     * The "Period" of each Employment Experience row (candidates.experience
+     * is one value per row, comma-separated), e.g. ["6 Years Experience"];
+     * [] for a fresher. The candidate detail page's Employment Experience
+     * card and every candidate card read it from here.
+     */
+    public function getEmploymentPeriodsAttribute(): array
+    {
+        if (!$this->experience || $this->experience == '0') {
+            return [];
+        }
+
+        return array_map(fn ($years) => trim($years) . ' ' . __('locale.Years Experience'), explode(',', $this->experience));
     }
 
     public function getDisplayMaritalStatusAttribute()

@@ -51,7 +51,8 @@ class PartnerWebsiteVisitorController extends Controller
         $uniqueVisitors = (clone $query)->distinct()->count('visitor_hash');
         // Chart View: built from this same filtered query (all matching
         // visits, not just this page), so chart and table always agree.
-        $chart = $this->chartData($query, $filters);
+        $period = $this->period($request);
+        $chart = $this->chartData($query, $filters, $period);
 
         $visits = $query
             ->select(['id', 'host', 'path', 'referrer', 'ip_address', 'user_id', 'browser', 'platform', 'device', 'visited_at'])
@@ -62,57 +63,55 @@ class PartnerWebsiteVisitorController extends Controller
             ->withQueryString();
 
         if ($request->ajax()) {
-            return view('worker.partner.website-visitors.partial', compact('visits', 'uniqueVisitors', 'chart'));
+            return view('worker.partner.website-visitors.partial', compact('visits', 'uniqueVisitors', 'chart', 'period'));
         }
 
         $browsers = $this->visits()->whereNotNull('browser')->distinct()->orderBy('browser')->pluck('browser');
         $devices = self::DEVICES;
 
-        return view('worker.partner.website-visitors.index', compact('visits', 'uniqueVisitors', 'chart', 'filters', 'search', 'browsers', 'devices'));
+        return view('worker.partner.website-visitors.index', compact('visits', 'uniqueVisitors', 'chart', 'period', 'filters', 'search', 'browsers', 'devices'));
     }
 
     /**
      * Chart View aggregates over the filtered visits ($query is cloned per
-     * aggregate, never modified): visits + unique visitors over time (daily,
-     * or monthly past ~3 months; gaps filled with 0 across the filter's date
-     * range or the data's own span), and top pages / devices / traffic
+     * aggregate, never modified): visits + unique visitors over time, grouped
+     * by $period (daily / weekly / monthly / yearly; gaps filled with 0
+     * across the filter's date range or the data's own span), and top pages / devices / traffic
      * sources (referrer host, "Direct" when none; the tail folded into
      * "Other"). Labels are visitor data - the chart script escapes them.
      */
-    private function chartData($query, array $filters): array
+    private function chartData($query, array $filters, string $period): array
     {
-        $rows = (clone $query)
-            ->selectRaw('visited_on as d, COUNT(*) as visits, COUNT(DISTINCT visitor_hash) as uniques')
-            ->groupBy('visited_on')->orderBy('visited_on')->get();
-
+        // Date span: the filter's range, else the filtered data's own span.
         if ($filters['by_custom_date']) {
             [$from, $to] = array_map(fn ($d) => Carbon::createFromFormat('m/d/Y', trim($d))->startOfDay(), explode(' - ', $filters['by_custom_date']));
             if ($from->gt($to)) {
                 [$from, $to] = [$to, $from];
             }
-        } elseif ($rows->isNotEmpty()) {
-            [$from, $to] = [Carbon::parse($rows->first()->d), Carbon::parse($rows->last()->d)];
         } else {
-            $from = $to = null;
+            $span = (clone $query)->selectRaw('MIN(visited_on) as a, MAX(visited_on) as b')->first();
+            [$from, $to] = $span && $span->a ? [Carbon::parse($span->a), Carbon::parse($span->b)] : [null, null];
         }
 
+        // Visits + unique visitors per period bucket (grouped in SQL), every
+        // bucket of the span listed (0 when empty).
+        [$bucketSql, $start, $step, $key, $label] = match ($period) {
+            // ISO weeks (Monday start), keyed by their Monday.
+            'weekly' => ['DATE_SUB(visited_on, INTERVAL WEEKDAY(visited_on) DAY)', fn ($d) => $d->copy()->startOfWeek(Carbon::MONDAY), fn ($d) => $d->addWeek(), fn ($d) => $d->toDateString(), fn ($d) => $d->translatedFormat('d M')],
+            'monthly' => ["DATE_FORMAT(visited_on, '%Y-%m-01')", fn ($d) => $d->copy()->startOfMonth(), fn ($d) => $d->addMonth(), fn ($d) => $d->toDateString(), fn ($d) => $d->translatedFormat('M Y')],
+            'yearly' => ["DATE_FORMAT(visited_on, '%Y-01-01')", fn ($d) => $d->copy()->startOfYear(), fn ($d) => $d->addYear(), fn ($d) => $d->toDateString(), fn ($d) => $d->format('Y')],
+            default => ['visited_on', fn ($d) => $d->copy(), fn ($d) => $d->addDay(), fn ($d) => $d->toDateString(), fn ($d) => $d->translatedFormat('d M')],
+        };
+
         $labels = $visits = $uniques = [];
-        $monthly = $from && $from->diffInDays($to) > 92;
-        if ($monthly) {
-            $byMonth = (clone $query)
-                ->selectRaw("DATE_FORMAT(visited_on, '%Y-%m') as m, COUNT(*) as visits, COUNT(DISTINCT visitor_hash) as uniques")
-                ->groupBy('m')->get()->keyBy('m');
-            for ($month = $from->copy()->startOfMonth(); $month->lte($to); $month->addMonth()) {
-                $row = $byMonth->get($month->format('Y-m'));
-                $labels[] = $month->translatedFormat('M Y');
-                $visits[] = (int) ($row->visits ?? 0);
-                $uniques[] = (int) ($row->uniques ?? 0);
-            }
-        } elseif ($from) {
-            $byDay = $rows->keyBy(fn ($r) => Carbon::parse($r->d)->toDateString());
-            for ($day = $from->copy(); $day->lte($to); $day->addDay()) {
-                $row = $byDay->get($day->toDateString());
-                $labels[] = $day->translatedFormat('d M');
+        if ($from) {
+            $buckets = (clone $query)
+                ->selectRaw("{$bucketSql} as bucket, COUNT(*) as visits, COUNT(DISTINCT visitor_hash) as uniques")
+                ->groupBy('bucket')->get()
+                ->keyBy(fn ($r) => Carbon::parse($r->bucket)->toDateString());
+            for ($cursor = $start($from); $cursor->lte($to); $step($cursor)) {
+                $row = $buckets->get($key($cursor));
+                $labels[] = $label($cursor);
                 $visits[] = (int) ($row->visits ?? 0);
                 $uniques[] = (int) ($row->uniques ?? 0);
             }
@@ -145,12 +144,22 @@ class PartnerWebsiteVisitorController extends Controller
         }
 
         return [
-            'granularity' => $monthly ? 'monthly' : 'daily',
+            'granularity' => $period,
             'trend' => ['labels' => $labels, 'visits' => $visits, 'uniques' => $uniques],
             'pages' => $top($pages, 7),
             'devices' => $top($devices, 3),
             'sources' => $top($sources, 6),
         ];
+    }
+
+    /** Chart View "Visits over time" grouping (?period=), default daily. */
+    public const PERIODS = ['daily', 'weekly', 'monthly', 'yearly'];
+
+    private function period(Request $request): string
+    {
+        $period = (string) $request->query('period', 'daily');
+
+        return in_array($period, self::PERIODS, true) ? $period : 'daily';
     }
 
     public function saveFilter(Request $request)

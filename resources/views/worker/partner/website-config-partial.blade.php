@@ -16,6 +16,11 @@
                 ['key' => 'hero.card_title', 'label' => __('locale.Card Title'), 'type' => 'text'],
                 ['key' => 'hero.card_subtitle', 'label' => __('locale.Card Subtitle'), 'type' => 'text'],
             ]],
+            // The 4 stat cards under the hero (same order/icons as the page).
+            ...collect([1, 2, 3, 4])->map(fn ($i) => ['title' => __('locale.Stat Card') . ' ' . $i, 'fields' => [
+                ['key' => "hero.stat{$i}_value", 'label' => __('locale.Value'), 'type' => 'text'],
+                ['key' => "hero.stat{$i}_label", 'label' => __('locale.Label'), 'type' => 'text'],
+            ]])->all(),
             ['title' => __('locale.Process Section'), 'fields' => [
                 ['key' => 'process.eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
                 ['key' => 'process.heading', 'label' => __('locale.Heading'), 'type' => 'text'],
@@ -41,6 +46,13 @@
                 ['key' => 'cta.heading', 'label' => __('locale.Heading'), 'type' => 'text'],
                 ['key' => 'cta.text', 'label' => __('locale.Text'), 'type' => 'textarea'],
                 ['key' => 'cta.button_text', 'label' => __('locale.Button Text'), 'type' => 'text'],
+            ]],
+        ],
+        'resumes' => [
+            ['title' => __('locale.Page Header'), 'fields' => [
+                ['key' => 'breadcrumb', 'label' => __('locale.Breadcrumb Label'), 'type' => 'text'],
+                ['key' => 'header_title', 'label' => __('locale.Title'), 'type' => 'text'],
+                ['key' => 'header_subtitle', 'label' => __('locale.Subtitle'), 'type' => 'textarea'],
             ]],
         ],
         'about' => [
@@ -126,6 +138,7 @@
 
     $wcPages = [
         'home' => __('locale.Home'),
+        'resumes' => __('locale.Browse Resumes'),
         'about' => __('locale.About Us'),
         'contact' => __('locale.Contact Us'),
         'privacy' => __('locale.Privacy Policy'),
@@ -141,10 +154,13 @@
     // page starts open, every other one starts closed.
     $collapseSectionsByPage = [
         'home' => [
-            ['title' => __('locale.Hero Section'), 'groupTitles' => [__('locale.Hero Section')]],
+            ['title' => __('locale.Hero Section'), 'groupTitles' => [__('locale.Hero Section'), __('locale.Stat Card') . ' 1', __('locale.Stat Card') . ' 2', __('locale.Stat Card') . ' 3', __('locale.Stat Card') . ' 4']],
             ['title' => __('locale.Process / Features Section'), 'groupTitles' => [__('locale.Process Section'), __('locale.Step') . ' 1', __('locale.Step') . ' 2', __('locale.Step') . ' 3']],
             ['title' => __('locale.Categories Section'), 'groupTitles' => [__('locale.Categories Section')]],
             ['title' => __('locale.CTA Banner'), 'groupTitles' => [__('locale.CTA Banner')]],
+        ],
+        'resumes' => [
+            ['title' => __('locale.Page Header'), 'groupTitles' => [__('locale.Page Header')]],
         ],
         'about' => [
             ['title' => __('locale.Page Header'), 'groupTitles' => [__('locale.Page Header')]],

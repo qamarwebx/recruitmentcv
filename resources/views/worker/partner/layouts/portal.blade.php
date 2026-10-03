@@ -55,13 +55,13 @@
             ? 'https://' . $__partnerDomain->full_domain
             : null;
 
-        // Website -> Branding "Append Company Name" on: the Company Profile
-        // name for this page's language (Company Name / Company Name
-        // (Arabic), same $__partnerDomain row) beside the logo; empty or off
-        // = logo only.
-        $__brandName = ($__partnerDomain && \App\Models\PartnerPageContent::brandingFor($__partner->id)['append_company_name'])
-            ? trim((string) ($__isArabic ? $__partnerDomain->company_name_ar : $__partnerDomain->company_name))
-            : '';
+        // Website -> Branding "Append Company Name": the signed-in partner's
+        // Company Profile name beside the logo (same rule as the public site
+        // and Partner Login - SiteBrand::appendedName()); '' = logo only.
+        $__brandName = \App\Support\SiteBrand::appendedName(
+            \App\Support\SiteBrand::companyFromDomain($__partnerDomain),
+            $__partnerDomain ? \App\Models\PartnerPageContent::brandingFor($__partner->id)['append_company_name'] : false
+        );
     @endphp
 
     <div class="wp-shell" data-wp-shell>
@@ -273,7 +273,8 @@
     row, CRM -> Website -> WhatsApp), never the partner's own Website ->
     WhatsApp number, which is for that partner's customers on its public
     site. Explicit null so no outer variable can change it. --}}
-    @include('worker.partials.whatsapp-float', ['waPartnerId' => null])
+    {{-- Central support button, labelled with this partner's saved Button Label. --}}
+    @include('worker.partials.whatsapp-float', ['wa' => \App\Models\PartnerPageContent::portalWhatsapp($__partner->id)])
 
     <script src="{{ asset('worker/js/portal.js') }}?v={{ @filemtime(public_path('worker/js/portal.js')) ?: time() }}"></script>
     @include('worker.partials.partner-auth-script')

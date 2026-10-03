@@ -35,7 +35,12 @@ The visitor IP is kept in the data (and still searchable) but not shown. --}}
         <div class="w-info-card wp-chart-card wp-chart-card-wide">
             <div class="wp-chart-head">
                 <h2>{{ __('locale.Visits over time') }}</h2>
-                <span class="wp-chart-sub">{{ $chart['granularity'] === 'monthly' ? __('locale.Monthly') : __('locale.Daily') }}</span>
+                {{-- Period of the chart below (server-side grouping, ?period=). --}}
+                <select class="w-select wp-chart-period" data-visitor-period aria-label="{{ __('locale.Period') }}">
+                    @foreach (['daily' => __('locale.Daily'), 'weekly' => __('locale.Weekly'), 'monthly' => __('locale.Monthly'), 'yearly' => __('locale.Yearly')] as $periodKey => $periodLabel)
+                        <option value="{{ $periodKey }}" @selected($chart['granularity'] === $periodKey)>{{ $periodLabel }}</option>
+                    @endforeach
+                </select>
             </div>
             <div class="wp-chart" data-visitor-chart="trend" role="img" aria-label="{{ __('locale.Visits over time') }}"></div>
         </div>

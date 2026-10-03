@@ -41,6 +41,9 @@ class ResolvePartnerWebsiteDomain
             // Partner Company Profile for public titles/meta/footer
             // (App\Support\SiteBrand); null = main site, global branding.
             'company' => null,
+            // Website -> Branding "Append Company Name" (see
+            // SiteBrand::appendedName()); off on the main site.
+            'append_company_name' => false,
         ];
 
         $currentPartner = null;
@@ -87,6 +90,7 @@ class ResolvePartnerWebsiteDomain
             // Website -> Company Profile); raw values, the locale and the
             // per-field global fallback are applied by SiteBrand at render.
             $brand['company'] = \App\Support\SiteBrand::companyFromDomain($record);
+            $brand['append_company_name'] = \App\Models\PartnerPageContent::brandingFor($record->partner_id)['append_company_name'];
 
             // Same already-loaded $record, just following its existing
             // partner() relation - not a second Domain lookup. This is the

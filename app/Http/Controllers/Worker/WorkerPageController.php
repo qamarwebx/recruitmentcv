@@ -61,35 +61,15 @@ class WorkerPageController extends Controller
         $frontwebsite = DB::table('frontendwebsiteconfigs')->first();
         $webconfig = Websiteconfig::first();
 
-        $totalResumes = $this->availableCandidates()->count();
-        $totalProfessions = Profession::count();
-
-        $totalCities = DB::table('expecworkcities')
-            ->whereExists(function ($query) {
-                $query->select(DB::raw(1))
-                    ->from('candidates')
-                    ->whereRaw('FIND_IN_SET(expecworkcities.id, candidates.expwp_id)')
-                    ->where('status', 1)
-                    ->where('publish', 1)
-                    ->where('isdelete', 0)
-                    ->where('cv_execute', 1);
-            })
-            ->count();
-
-        $totalCountries = DB::table('countries')
-            ->whereExists(function ($query) {
-                $query->select(DB::raw(1))
-                    ->from('candidates')
-                    ->whereRaw('FIND_IN_SET(countries.id, candidates.expcountry_id)')
-                    ->where('status', 1)
-                    ->where('publish', 1)
-                    ->where('isdelete', 0)
-                    ->where('cv_execute', 1);
-            })
-            ->count();
+        // Live stat-card counts (shared with the Website Config defaults).
+        $stats = PartnerPageContent::homeStats();
+        $totalResumes = $stats['candidates'];
+        $totalProfessions = $stats['professions'];
+        $totalCities = $stats['cities'];
+        $totalCountries = $stats['countries'];
 
         $featured = $this->availableCandidates()
-            ->with('profession:id,eng_name,ar_name')
+            ->with('profession:id,eng_name,ar_name', 'religion:id,name,arbname')
             ->orderByDesc('id')
             ->limit(8)
             ->get();
@@ -113,7 +93,7 @@ class WorkerPageController extends Controller
 
     public function resumes(Request $request)
     {
-        $cand = $this->availableCandidates()->with('profession:id,eng_name,ar_name');
+        $cand = $this->availableCandidates()->with('profession:id,eng_name,ar_name', 'religion:id,name,arbname');
 
         if (!empty($request->location_id)) {
             $cand->whereRaw('FIND_IN_SET(?, expwp_id)', [$request->location_id]);
@@ -163,7 +143,11 @@ class WorkerPageController extends Controller
             return view('worker.resumes.partial', compact('posts'));
         }
 
+        // Banner texts: partner override -> global -> default (Website Config).
+        $resumesContent = $this->pageContent('resumes');
+
         return view('worker.resumes.index', compact(
+            'resumesContent',
             'posts',
             'cities',
             'jobTypes',
@@ -276,7 +260,7 @@ class WorkerPageController extends Controller
         $experienceCountries = Country::whereIn('id', explode(',', (string) $post->expcountry_id))->get();
 
         $relatedPosts = $this->availableCandidates()
-            ->with('profession:id,eng_name,ar_name')
+            ->with('profession:id,eng_name,ar_name', 'religion:id,name,arbname')
             ->where('job_type', $post->job_type)
             ->where('slug_text', '!=', $id)
             ->orderByDesc('id')

@@ -14,6 +14,7 @@
             <div class="w-footer-brand">
                 <a href="{{ route('worker.home') }}" class="w-logo">
                     <x-brand-logo mode="dark" alt="{{ \App\Support\SiteBrand::name() }}" />
+                    @include('worker.partials.brand-company-name')
                 </a>
                 <p>{{ $footer['about'] }}</p>
                 <div class="w-social-row">

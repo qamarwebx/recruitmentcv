@@ -420,7 +420,7 @@ class PartnerPortalController extends Controller
 
     public function candidates(Request $request)
     {
-        $query = $this->availableCandidates()->with('profession:id,eng_name,ar_name');
+        $query = $this->availableCandidates()->with('profession:id,eng_name,ar_name', 'religion:id,name,arbname');
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -1743,7 +1743,8 @@ class PartnerPortalController extends Controller
             ];
         }
 
-        if ($branches === PartnerPageContent::defaultBranches()) {
+        // Same as what it would inherit (global list, else default) = keep inheriting.
+        if ($branches === PartnerPageContent::effectiveBranches(null)) {
             $branches = null;
         }
 
@@ -1830,20 +1831,22 @@ class PartnerPortalController extends Controller
     }
 
     /**
-     * The default each public page falls back to for one Website Config
-     * page/locale - see PartnerPageContent::defaultContent(), the single
-     * implementation (also used to seed the central recruitmentcv.com
-     * content). Also what a Partner's saved override is diffed against on
-     * save (stripDefaultValues()).
+     * What this partner's public page shows for one Website Config
+     * page/locale before any override: the inherited global values over
+     * the page default (PartnerPageContent::inheritedContent(), the single
+     * resolution layer). Also what a Partner's saved override is diffed
+     * against on save (stripDefaultValues()), so unchanged fields keep
+     * inheriting.
      */
     private function websiteConfigDefaults(string $page, string $locale, $frontwebsite): array
     {
         // The logged-in partner's own Company Profile (never the host's or
         // a request value), so the Privacy/Terms defaults name this partner
         // as the website operator - the same text its public page shows.
-        $company = \App\Support\SiteBrand::companyFromDomain(Auth::guard('partner')->user()->domain);
+        $partner = Auth::guard('partner')->user();
+        $company = \App\Support\SiteBrand::companyFromDomain($partner->domain);
 
-        return PartnerPageContent::defaultContent($page, $locale, $frontwebsite, $company);
+        return PartnerPageContent::inheritedContent($partner->id, $page, $locale, $frontwebsite, $company);
     }
 
     /**

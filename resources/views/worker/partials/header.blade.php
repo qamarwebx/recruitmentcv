@@ -11,6 +11,7 @@
     <div class="w-container w-header-inner">
         <a href="{{ route('worker.home') }}" class="w-logo">
             <x-brand-logo mode="light" alt="{{ \App\Support\SiteBrand::name() }}" />
+            @include('worker.partials.brand-company-name')
         </a>
 
         <nav class="w-nav" data-nav>

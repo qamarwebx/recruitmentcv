@@ -1049,6 +1049,12 @@
         'Please enter a username.' => 'Please enter a username.',
         'This username is already taken.' => 'This username is already taken.',
         'The username cannot contain spaces or @.' => 'The username cannot contain spaces or @.',
+        'Stat Card' => 'Stat Card',
+        'Value' => 'Value',
+        'Label' => 'Label',
+        'Breadcrumb Label' => 'Breadcrumb Label',
+        'Weekly' => 'Weekly',
+        'Yearly' => 'Yearly',
     ];
 
 ?>

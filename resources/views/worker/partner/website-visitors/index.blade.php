@@ -20,6 +20,8 @@
     + #worker-orders-grid + [data-order-loading]). The filter modal's fields
     belong to this form through form="visitorFilterForm". --}}
     <form id="visitorFilterForm" data-order-filter-form data-endpoint="{{ route('worker.partner.website-visitors') }}" class="wp-filter-bar wp-fade-in">
+        {{-- Chart View period (the dropdown on the chart); sent with every search/filter/page request. --}}
+        <input type="hidden" name="period" value="{{ $period }}" data-visitor-period-input>
         <div class="wp-filter-search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
             <input type="text" name="search" class="w-input" placeholder="{{ __('locale.Search page, IP, browser, customer...') }}" value="{{ $search }}">

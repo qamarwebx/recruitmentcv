@@ -9,9 +9,10 @@ icon is conventionally kept in a fixed corner).
 icon / colours / label come from the Partner's WhatsApp settings (Partner
 Website -> WhatsApp tab), falling back to PartnerPageContent::
 defaultWhatsapp(). $waPartnerId is passed by the including layout: the
-host-resolved partner on the public site (null on the apex), and always
-null in the Partner Portal - its button is central RecruitmentCV/Qamr
-support (the partner_id NULL row, CRM -> Website -> WhatsApp). The WhatsApp settings tab reuses this
+host-resolved partner on the public site (null on the apex). The Partner
+Portal passes $wa = PartnerPageContent::portalWhatsapp(): central
+RecruitmentCV/Qamr support (the partner_id NULL row, CRM -> Website ->
+WhatsApp) labelled with the partner's own Button Label. The WhatsApp settings tab reuses this
 partial as its live preview ($waPreview = true, $wa = that page's settings). --}}
 @php
     $wa = $wa ?? \App\Models\PartnerPageContent::effectiveWhatsapp($waPartnerId ?? null);

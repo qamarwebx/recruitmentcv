@@ -7,7 +7,6 @@
 
     @php
         $totalExp = $totalExperience;
-        $contactPhone = $frontwebsite->bottom_contact_us_phone ?? ($frontwebsite->contact_us_phone ?? null);
     @endphp
 
     <section class="w-section" style="padding-top:36px;">
@@ -97,9 +96,9 @@
                                         {{ __('locale.Download CV') }}
                                     </a>
                                 @endguest
-                            @elseif ($contactPhone)
-                                <a href="tel:{{ $contactPhone }}" class="w-btn w-btn-outline">{{ __('locale.Call') }}</a>
                             @endif
+                            {{-- No Call fallback: when the CV isn't available, only the
+                            eligible actions (Hire Now, Wishlist) are shown. --}}
 
                             {{-- Customer wishlist (web guard) - partner subdomains
                             only. Guests get the customer Login modal instead. --}}
@@ -195,7 +194,7 @@
                                     </div>
                                     <div class="w-info-item">
                                         <span>{{ __('locale.Period') }}</span>
-                                        <strong>{{ $exp }} {{ __('locale.Years Experience') }}</strong>
+                                        <strong>{{ $post->employment_periods[$key] }}</strong>
                                     </div>
                                     <div class="w-info-item">
                                         <span>{{ __('locale.Country') }}</span>

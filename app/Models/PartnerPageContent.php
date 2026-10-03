@@ -25,7 +25,7 @@ class PartnerPageContent extends Model
         'content' => 'array',
     ];
 
-    public const PAGES = ['home', 'about', 'contact', 'privacy', 'terms'];
+    public const PAGES = ['home', 'resumes', 'about', 'contact', 'privacy', 'terms'];
 
     /**
      * Every overridable Website Config field per page (dot keys inside
@@ -44,6 +44,15 @@ class PartnerPageContent extends Model
             'hero.primary_cta_text' => 'text',
             'hero.card_title' => 'text',
             'hero.card_subtitle' => 'text',
+            // The 4 stat cards under the hero (value e.g. "78+", label).
+            'hero.stat1_value' => 'text',
+            'hero.stat1_label' => 'text',
+            'hero.stat2_value' => 'text',
+            'hero.stat2_label' => 'text',
+            'hero.stat3_value' => 'text',
+            'hero.stat3_label' => 'text',
+            'hero.stat4_value' => 'text',
+            'hero.stat4_label' => 'text',
             'process.eyebrow' => 'text',
             'process.heading' => 'text',
             'process.subheading' => 'long',
@@ -58,6 +67,12 @@ class PartnerPageContent extends Model
             'cta.heading' => 'text',
             'cta.text' => 'long',
             'cta.button_text' => 'text',
+        ],
+        // Browse Resumes (/resumes) page banner.
+        'resumes' => [
+            'breadcrumb' => 'text',
+            'header_title' => 'text',
+            'header_subtitle' => 'long',
         ],
         'about' => [
             'header_title' => 'text',
@@ -182,7 +197,7 @@ class PartnerPageContent extends Model
                         'primary_cta_text' => __('locale.Browse Resumes', [], $locale),
                         'card_title' => __('locale.Find talent in seconds', [], $locale),
                         'card_subtitle' => __("locale.Jump straight to what you're hiring for.", [], $locale),
-                    ],
+                    ] + static::defaultHomeStats($locale),
                     'process' => [
                         'eyebrow' => __('locale.Simple Process', [], $locale),
                         'heading' => __('locale.Hiring made straightforward', [], $locale),
@@ -204,6 +219,9 @@ class PartnerPageContent extends Model
                         'button_text' => __('locale.Browse All Resumes', [], $locale),
                     ],
                 ];
+
+            case 'resumes':
+                return static::defaultResumesHeader($locale);
 
             case 'about':
                 return [
@@ -299,11 +317,92 @@ class PartnerPageContent extends Model
     }
 
     /**
-     * One context's saved row for a page. $partnerId null = the central
-     * recruitmentcv.com website (rows with partner_id NULL, managed from
-     * CRM -> Website); an id = that partner's subdomain only. The two never
-     * fall back to each other - ResolvePartnerWebsiteDomain decides the
-     * context from the Host header (currentPartner null on the apex).
+     * Fields whose partner-site default is partner-specific and therefore
+     * never inherited from the global row: the Privacy/Terms subtitle and
+     * body name the partner (its Company Profile) as the website operator
+     * (SiteBrand::legalOperator()), which the global Qamr-only legal text
+     * must not replace. Only applies when the partner has that name.
+     */
+    public const PARTNER_DEFAULT_FIELDS = [
+        'privacy' => ['subtitle', 'body'],
+        'terms' => ['subtitle', 'body'],
+    ];
+
+    /**
+     * Browse Resumes (/resumes) banner defaults - the texts the page has
+     * always shown (same keys in the CRM's copy of this model).
+     */
+    public static function defaultResumesHeader(string $locale): array
+    {
+        return [
+            'breadcrumb' => __('locale.Resumes', [], $locale),
+            'header_title' => __('locale.Browse Verified Worker Resumes', [], $locale),
+            'header_subtitle' => __('locale.Filter by profession, experience and work location to find the right candidate for your team.', [], $locale),
+        ];
+    }
+
+    /** Per-request cache for homeStats(). */
+    private static ?array $homeStatsCache = null;
+
+    /**
+     * The live counts behind the homepage stat cards (published, active,
+     * CV-ready candidates; professions; work cities and experience
+     * countries those candidates list). The one place they are computed -
+     * the public homepage and the Website Config defaults both read it.
+     */
+    public static function homeStats(): array
+    {
+        if (static::$homeStatsCache !== null) {
+            return static::$homeStatsCache;
+        }
+
+        $available = fn ($q) => $q->where('status', 1)->where('publish', 1)->where('isdelete', 0)->where('cv_execute', 1);
+        $listedBy = fn (string $table, string $column) => \Illuminate\Support\Facades\DB::table($table)
+            ->whereExists(function ($query) use ($table, $column, $available) {
+                $query->select(\Illuminate\Support\Facades\DB::raw(1))
+                    ->from('candidates')
+                    ->whereRaw("FIND_IN_SET({$table}.id, candidates.{$column})");
+                $available($query);
+            })
+            ->count();
+
+        return static::$homeStatsCache = [
+            'candidates' => $available(Candidate::query())->count(),
+            'professions' => Profession::count(),
+            'cities' => $listedBy('expecworkcities', 'expwp_id'),
+            'countries' => $listedBy('countries', 'expcountry_id'),
+        ];
+    }
+
+    /**
+     * Default values of the hero's 4 stat cards: the live count ("78+") and
+     * the card's own label - what the homepage shows until a partner (or
+     * the central config) overrides a value or label.
+     */
+    public static function defaultHomeStats(string $locale): array
+    {
+        $stats = static::homeStats();
+        $cards = [
+            1 => [$stats['candidates'], 'Verified Candidates'],
+            2 => [$stats['professions'], 'Job Categories'],
+            3 => [$stats['cities'], 'Work Locations'],
+            4 => [$stats['countries'], 'Countries of Experience'],
+        ];
+
+        $defaults = [];
+        foreach ($cards as $i => [$count, $label]) {
+            $defaults["stat{$i}_value"] = number_format($count) . '+';
+            $defaults["stat{$i}_label"] = __('locale.' . $label, [], $locale);
+        }
+
+        return $defaults;
+    }
+
+    /**
+     * One context's own saved row for a page (no inheritance). $partnerId
+     * null = the central recruitmentcv.com website (partner_id NULL, CRM ->
+     * Website); an id = that partner's overrides. ResolvePartnerWebsiteDomain
+     * decides the context from the Host header (currentPartner null on the apex).
      */
     private static function rowFor(?int $partnerId, string $page): ?self
     {
@@ -314,13 +413,56 @@ class PartnerPageContent extends Model
     }
 
     /**
-     * The given context's saved overrides for one page/locale (see
-     * rowFor()), or an empty array (never null) so every call site can
-     * safely do `$content['field'] ?? $existingDefault`.
+     * The effective-value layer for Website Config - the one place the
+     * hierarchy is applied: partner override -> global (central row) ->
+     * page default. Returns the first two layers merged field by field;
+     * every call site adds the page default with
+     * `$content['field'] ?? $existingDefault`. The apex gets the global row.
      */
     public static function contentFor(?int $partnerId, string $page, string $locale): array
     {
-        return static::rowFor($partnerId, $page)->content[$locale] ?? [];
+        if (!$partnerId) {
+            return static::rowFor(null, $page)->content[$locale] ?? [];
+        }
+
+        return array_replace_recursive(
+            static::inheritedGlobal($partnerId, $page, $locale),
+            static::rowFor($partnerId, $page)->content[$locale] ?? []
+        );
+    }
+
+    /**
+     * The global (central) values a partner inherits for one page/locale:
+     * all of them, minus PARTNER_DEFAULT_FIELDS when the partner has its own
+     * legal operator name.
+     */
+    public static function inheritedGlobal(int $partnerId, string $page, string $locale): array
+    {
+        $global = static::rowFor(null, $page)->content[$locale] ?? [];
+
+        if (isset(static::PARTNER_DEFAULT_FIELDS[$page])) {
+            $company = \App\Support\SiteBrand::companyFromDomain(Domain::where('partner_id', $partnerId)->first());
+
+            if (\App\Support\SiteBrand::legalOperator($company, $locale)) {
+                $global = \Illuminate\Support\Arr::except($global, static::PARTNER_DEFAULT_FIELDS[$page]);
+            }
+        }
+
+        return $global;
+    }
+
+    /**
+     * What a partner's Website Config shows before it overrides anything:
+     * its page default (partner-aware legal text) under the inherited
+     * global values. The Partner Portal's prefill, and what an unchanged
+     * field is compared against on save.
+     */
+    public static function inheritedContent(int $partnerId, string $page, string $locale, $frontwebsite, ?array $company = null): array
+    {
+        return array_replace_recursive(
+            static::defaultContent($page, $locale, $frontwebsite, $company),
+            static::inheritedGlobal($partnerId, $page, $locale)
+        );
     }
 
     /**
@@ -355,18 +497,19 @@ class PartnerPageContent extends Model
     }
 
     /**
-     * The branches to actually render/prefill for this partner (or the
-     * central apex website) - that context's saved list if it has ever
-     * saved one (even a shorter/reordered one), otherwise the default
-     * list above. A saved empty array is a deliberate "no branches" and
-     * is honored as such, not treated as "unset".
+     * The branches to render/prefill, same hierarchy as contentFor(): the
+     * partner's saved list, else the global (central) list, else the
+     * default list above. A whole list, never merged; a saved empty array
+     * is a deliberate "no branches" and is honored as such.
      */
     public static function effectiveBranches(?int $partnerId): array
     {
-        $branches = static::rowFor($partnerId, 'contact')->content['branches'] ?? null;
+        foreach (array_unique([$partnerId, null]) as $context) {
+            $branches = static::rowFor($context, 'contact')->content['branches'] ?? null;
 
-        if (is_array($branches)) {
-            return $branches;
+            if (is_array($branches)) {
+                return $branches;
+            }
         }
 
         return static::defaultBranches();
@@ -445,6 +588,26 @@ class PartnerPageContent extends Model
             'shadow' => "rgba($r, $g, $b, 0.45)",
             'shadow_hover' => "rgba($r, $g, $b, 0.55)",
         ];
+    }
+
+    /**
+     * Partner Portal button: central RecruitmentCV support (number, icon,
+     * colours - the partner_id NULL settings, never the partner's own
+     * number), labelled with the signed-in partner's saved Button Label
+     * (Partner Website -> WhatsApp); the central/default label when it is
+     * empty.
+     */
+    public static function portalWhatsapp(int $partnerId): array
+    {
+        $wa = static::effectiveWhatsapp(null);
+        $label = static::savedWhatsapp($partnerId)['label'] ?? null;
+
+        if ($label !== null) {
+            $wa['label'] = $label;
+            $wa['display_label'] = $label;
+        }
+
+        return $wa;
     }
 
     public static function forgetWhatsapp(?int $partnerId): void

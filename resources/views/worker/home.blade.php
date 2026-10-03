@@ -78,8 +78,8 @@
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 </span>
                 <div>
-                    <strong>{{ number_format($totalResumes) }}+</strong>
-                    <span>{{ __('locale.Verified Candidates') }}</span>
+                    <strong>{{ $homeContent['hero']['stat1_value'] ?? number_format($totalResumes) . '+' }}</strong>
+                    <span>{{ $homeContent['hero']['stat1_label'] ?? __('locale.Verified Candidates') }}</span>
                 </div>
             </div>
             <div class="w-stat-card">
@@ -87,8 +87,8 @@
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
                 </span>
                 <div>
-                    <strong>{{ number_format($totalProfessions) }}+</strong>
-                    <span>{{ __('locale.Job Categories') }}</span>
+                    <strong>{{ $homeContent['hero']['stat2_value'] ?? number_format($totalProfessions) . '+' }}</strong>
+                    <span>{{ $homeContent['hero']['stat2_label'] ?? __('locale.Job Categories') }}</span>
                 </div>
             </div>
             <div class="w-stat-card">
@@ -96,8 +96,8 @@
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>
                 </span>
                 <div>
-                    <strong>{{ number_format($totalCities) }}+</strong>
-                    <span>{{ __('locale.Work Locations') }}</span>
+                    <strong>{{ $homeContent['hero']['stat3_value'] ?? number_format($totalCities) . '+' }}</strong>
+                    <span>{{ $homeContent['hero']['stat3_label'] ?? __('locale.Work Locations') }}</span>
                 </div>
             </div>
             <div class="w-stat-card">
@@ -105,8 +105,8 @@
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20Z"/></svg>
                 </span>
                 <div>
-                    <strong>{{ number_format($totalCountries) }}+</strong>
-                    <span>{{ __('locale.Countries of Experience') }}</span>
+                    <strong>{{ $homeContent['hero']['stat4_value'] ?? number_format($totalCountries) . '+' }}</strong>
+                    <span>{{ $homeContent['hero']['stat4_label'] ?? __('locale.Countries of Experience') }}</span>
                 </div>
             </div>
         </div>

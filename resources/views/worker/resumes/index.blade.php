@@ -18,10 +18,10 @@
             <div class="w-breadcrumb">
                 <a href="{{ route('worker.home') }}">{{ __('locale.Home') }}</a>
                 <span>/</span>
-                <span>{{ __('locale.Resumes') }}</span>
+                <span>{{ $resumesContent['breadcrumb'] ?? __('locale.Resumes') }}</span>
             </div>
-            <h1>{{ __('locale.Browse Verified Worker Resumes') }}</h1>
-            <p>{{ __('locale.Filter by profession, experience and work location to find the right candidate for your team.') }}</p>
+            <h1>{{ $resumesContent['header_title'] ?? __('locale.Browse Verified Worker Resumes') }}</h1>
+            <p>{{ $resumesContent['header_subtitle'] ?? __('locale.Filter by profession, experience and work location to find the right candidate for your team.') }}</p>
         </div>
     </section>
 

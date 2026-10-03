@@ -27,6 +27,30 @@ class SiteBrand
         return is_array($brand) && is_array($brand['company'] ?? null) ? $brand['company'] : null;
     }
 
+    /**
+     * Website -> Branding "Append Company Name": the Company Profile name
+     * shown with the partner logo - Company Name in English, Company Name
+     * (Arabic) in Arabic (no cross-language fallback); '' when the switch
+     * is off or that name is empty (= logo only). The one rule for the
+     * Partner Portal sidebar, the Partner Login page and the public site.
+     */
+    public static function appendedName(?array $company, bool $on, ?string $locale = null): string
+    {
+        if (!$on || !$company) {
+            return '';
+        }
+
+        return trim((string) (($locale ?? app()->getLocale()) === 'ar' ? ($company['name_ar'] ?? '') : ($company['name'] ?? '')));
+    }
+
+    /** appendedName() for the current partner site (public pages, Partner Login); '' on the main site. */
+    public static function currentAppendedName(): string
+    {
+        $brand = View::shared('partnerBrand');
+
+        return is_array($brand) ? self::appendedName(self::company(), (bool) ($brand['append_company_name'] ?? false)) : '';
+    }
+
     public static function isPartnerSite(): bool
     {
         return self::company() !== null;
