@@ -47,8 +47,13 @@
                     <div class="wp-badge {{ (int) $order->booking_status === 2 ? 'is-neutral' : 'is-info' }}" style="margin-top:14px;width:fit-content;">{{ $orderStatus }}</div>
                 </div>
 
-                @if ((int) $order->booking_status !== 2)
+                @php
+                    $canVisa = \App\Support\PartnerTeam::allowsSection('orders', 'assign_visa');
+                    $canCancel = \App\Support\PartnerTeam::allowsSection('orders', 'cancel_booking');
+                @endphp
+                @if ((int) $order->booking_status !== 2 && ($canVisa || $canCancel))
                     <div class="w-cta-row" style="margin-top:14px;">
+                        @if ($canVisa)
                         <button type="button" class="w-btn w-btn-outline"
                             data-order-visa-trigger
                             data-visa-url="{{ route('worker.partner.orders.visa.store', $order->id) }}"
@@ -63,9 +68,12 @@
                             data-exp-sal="{{ $order->exp_sal }}">
                             {{ __('locale.Add Visa') }}
                         </button>
+                        @endif
+                        @if ($canCancel)
                         <button type="button" class="w-btn w-btn-outline" style="color:#dc2626;border-color:#fecaca;" data-cancel-order-trigger data-cancel-url="{{ route('worker.partner.orders.cancel', $order->id) }}" data-order-id="{{ $order->id }}">
                             {{ __('locale.Cancel Booking') }}
                         </button>
+                        @endif
                     </div>
                 @endif
             </div>
@@ -146,8 +154,12 @@
         </div>
     </div>
 
+    @if ($canCancel)
     @include('worker.partials.cancel-order-modal')
+    @endif
+    @if ($canVisa)
     @include('worker.partner.orders.add-visa-modal', ['professionOptions' => $professionOptions, 'allWorkCities' => $allWorkCities])
+    @endif
 @endsection
 
 @section('page-script')

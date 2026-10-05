@@ -316,6 +316,9 @@ class WorkerPageController extends Controller
                 'partner' => $hirePartnerId ? \App\Models\Partner::find($hirePartnerId, ['id', 'rec_off_name', 'rec_office_arname', 'portal_rec_off_name', 'portal_add_disp_only']) : null,
                 'offices' => $hireMustChoose ? \App\Http\Controllers\Worker\CustomerHireController::portalOffices() : collect(),
                 'canHire' => (int) $customer->status === 1 && !empty($customer->mobile_verified_at),
+                // Prefill for the modal's inline mobile verification.
+                'mobile' => $customer->mobile_no,
+                'countryCode' => ltrim((string) $customer->country_code, '+'),
                 'limitReached' => $webconfig && DB::table('bookings')->where('user_id', $customerId)->where('booking_status', '!=', 2)->count() >= (int) $webconfig->max_booking_limit,
                 'existingRef' => $existingOrder->reference_no ?? null,
             ];

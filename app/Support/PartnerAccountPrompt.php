@@ -26,6 +26,8 @@ class PartnerAccountPrompt
         }
 
         session()->put(self::SESSION_KEY, (string) $event->user->getAuthIdentifier());
+        // A new partner login is never a team member's until marked again.
+        PartnerTeam::clear();
     }
 
     /**
@@ -37,6 +39,12 @@ class PartnerAccountPrompt
     {
         $partner = Auth::guard('partner')->user();
         if (!$partner || !session()->has(self::SESSION_KEY)) {
+            return [];
+        }
+        // Account details are the owner's to complete, not a team member's.
+        if (PartnerTeam::current()) {
+            session()->forget(self::SESSION_KEY);
+
             return [];
         }
 

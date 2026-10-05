@@ -49,7 +49,6 @@
                             <tr>
                                 <td>
                                     <a href="{{ route('worker.partner.customers.show', $customer->id) }}"><strong>{{ $customer->name ?: '---' }}</strong></a>
-                                    <br>@include('worker.partner.customers.relation-badge')
                                 </td>
                                 <td>
                                     {{ $customer->mobile_no ? '+' . ltrim((string) $customer->country_code, '+') . ' ' . $customer->mobile_no : '---' }}

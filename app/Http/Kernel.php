@@ -46,6 +46,8 @@ class Kernel extends HttpKernel
             // Public page views -> website_visitors (records after the response is sent).
             \App\Http\Middleware\TrackWebsiteVisitor::class,
             \App\Http\Middleware\EnforceCustomerSite::class,
+            // Partner Portal team members: permissions on every request.
+            \App\Http\Middleware\EnforcePartnerTeamPermissions::class,
         ],
 
         'api' => [

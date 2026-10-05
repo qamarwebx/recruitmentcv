@@ -296,6 +296,26 @@ class SocialLoginController extends Controller
         $partner = Partner::where('email', $googleUser->email)->first();
         $partnerLoginPage = route('worker.partner.login.page');
 
+        // Not a partner: a team member with this Google account / email
+        // (created by its partner) signs in to that partner's portal.
+        $member = !$partner
+            ? (\App\Models\PartnerTeamMember::where('google_id', $googleUser->id)->first() ?? \App\Models\PartnerTeamMember::findByAccountIdentifier($googleUser->email))
+            : null;
+        if ($member) {
+            if ($member->google_id && $member->google_id !== $googleUser->id) {
+                return redirect($partnerLoginPage . '?login=1&auth_message=' . urlencode('This Google account is not linked to your team member account.'));
+            }
+            if (!$member->google_id) {
+                $member->google_id = $googleUser->id;
+                $member->save();
+            }
+            $result = app(\App\Http\Controllers\Worker\PartnerAuthController::class)->completeTeamMemberLogin($request, $member)->getData(true);
+
+            return ($result['status'] ?? '') === 'success'
+                ? redirect($result['redirect'])
+                : redirect($partnerLoginPage . '?login=1&auth_message=' . urlencode($result['message'] ?? ''));
+        }
+
         // A row whose mobile was never OTP-verified is only an abandoned
         // registration attempt (PartnerAuthController::registerPending()) -
         // let Google resume registration instead of reporting it as

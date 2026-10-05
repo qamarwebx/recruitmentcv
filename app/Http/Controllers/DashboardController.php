@@ -751,6 +751,19 @@ class DashboardController extends Controller
     }
 
     public function getMobileOTPandUpdate(Request $request){
+        // A real number and a known country code (the country is read
+        // below) - shared by Profile > Change Mobile and the Hire Now modal.
+        $request->merge(['countryCode' => ltrim(trim((string) $request->countryCode), '+'), 'mobile' => trim((string) $request->mobile)]);
+        $validator = \Illuminate\Support\Facades\Validator::make($request->only('mobile', 'countryCode'), [
+            'mobile' => ['required', 'regex:/^[0-9]{6,15}$/'],
+            'countryCode' => ['required', 'exists:countries,country_code'],
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->has('countryCode')
+                ? __('locale.Please choose the country code.')
+                : __('locale.Please enter a valid mobile number.')], 422);
+        }
+
         $mobile = $request->mobile;
         $countryCode = $request->countryCode;
         $phone = $countryCode.''.$mobile;
@@ -775,198 +788,40 @@ class DashboardController extends Controller
         $request->session()->put('PendingMobileCountryId', $country_id);
         $request->session()->put('PendingMobileCountryCode', $countryCode);
 
+        // Send through the SAME sender as Customer Login OTP
+        // (WhatsappOtpController::generateOtp2: the provider-approved "otp"
+        // authentication template with a fresh random code, its own fallback
+        // API, and the OTP / Mobile / CountryCode session keys that
+        // applyVerifiedMobile() checks). This method used to rotate the old
+        // fixed-code static templates (staticmetanotifications otp1-otp7),
+        // which the WhatsApp provider rejects ("Template for the selected
+        // language not found") - so no code was ever delivered.
+        $request->merge(['country_code' => $countryCode]);
+        $sent = app(\App\Http\Controllers\Auth\WhatsappOtpController::class)->generateOtp2($request)->getData(true);
+        // generateOtp2() resets the session's OTP state; keep the pending
+        // new number's country for applyVerifiedMobile().
+        $request->session()->put('PendingMobileCountryId', $country_id);
+        $request->session()->put('PendingMobileCountryCode', $countryCode);
+
         $responseData = [];
-
-
-        // Get Meta Whatsapp API and Meta Template
-        // $metaAPI = Metawhatsappapi::where('status','=',1)->first();
-        $metaAPI = Metawhatsappapi::whereRaw("FIND_IN_SET (?,api_assign_to)",['recruitmentcv_otp'])->first();
-        $staticTemplates = Staticmetanotification::where('status','=',1)->get();
-
-        // Get Normal Whatsapp API and Template
-        $getAPI = Whatsappapi::where('status','=',1)->where('api_for','=','booking_not')->first();
-        $template = Templatecampaign::where('template_name', '=', 'OTP Verification')->where('status','=',1)->first();
-
-        if (isset($staticTemplates) && isset($metaAPI)) {
-            // API Details
-            $base_url = $metaAPI->api_base_url;
-            $vendor_id = $metaAPI->vendor_uid;
-            $access_token = $metaAPI->api_access_token;
-            $endpoint_api = $base_url.'/'.$vendor_id.'/contact/send-template-message';
-
-            $token = "Authorization: Bearer ".$access_token;
-
-            $initState = 0;
-            $staticNotData = [];
-
-
-            //Check OTP Already Sent or Store in Record
-            $otpCount = Otpvalidationmetalist::where('mobile_no','=',$mobile)->get();
-            $latestOTPVID = Otpvalidationmetalist::where('mobile_no','=',$mobile)->latest()->first();
-
-            $allOTPVIDs = [];
-            $allTempIDs = [];
-
-            if(count($otpCount) > 0){
-                // STORE ID on allOTPVIDs
-                foreach($otpCount as $otpCount2){
-                    $allOTPVIDs [] = $otpCount2->metanotification_id;
-                }
-                // Store ID on AllTempIDs
-                foreach ($staticTemplates as $staticTemp2) {
-                    $allTempIDs [] = $staticTemp2->id;
-                }
-
-                $newTempID = array_diff($allTempIDs,$allOTPVIDs);
-                if (count($newTempID) > 0) {
-                    $metaStaticTemp = Staticmetanotification::wherein('id',$newTempID)->get();
-                    $initState = 0;
-                    $staticNotData['id'] = $metaStaticTemp[$initState]->id;
-                    $staticNotData['otp_number'] = $metaStaticTemp[$initState]->otp_number;
-                    $staticNotData['meta_template_name'] = $metaStaticTemp[$initState]->meta_template_name;
-                }else{
-                    $allstaticTemp = Staticmetanotification::where('id','!=',$latestOTPVID->metanotification_id)->get();
-                    $initState = 0;
-                    $totalTemp = count($allstaticTemp) - 1;
-                    $randomID = mt_rand($initState,$totalTemp);
-                    $staticNotData['id'] = $allstaticTemp[$randomID]->id;
-                    $staticNotData['otp_number'] = $allstaticTemp[$randomID]->otp_number;
-                    $staticNotData['meta_template_name'] = $allstaticTemp[$randomID]->meta_template_name;
-                }
-
-            }else{
-                $initState = 0;
-                $totalTemp = count($staticTemplates) - 1;
-                $randomID = mt_rand($initState,$totalTemp);
-                $staticNotData['id'] = $staticTemplates[$randomID]->id;
-                $staticNotData['otp_number'] = $staticTemplates[$randomID]->otp_number;
-                $staticNotData['meta_template_name'] = $staticTemplates[$randomID]->meta_template_name;
-            }
-
-            $otp = $staticNotData['otp_number'];
-
-            // Store Data in Session
-            $request->session()->put('OTP', $staticNotData['otp_number']);
-            $request->session()->put('Mobile', $mobile);
-            $request->session()->put('CountryCode', $countryCode);
-
-            // Send OTP to Mobile Number
-            $data = [];
-            $data['phone_number'] = $phone;
-            $data['template_name'] = $staticNotData['meta_template_name'];
-            $data['template_language'] = "en_US";
-            // $data['field_1'] = $otp;
-            $data['contact'] =  [
-                'first_name' => "Customer",
-                'last_name' => "--",
-                "email" => "customer@gmail.com",
-                "country" => $country->name,
-                "language_code" => "en"
-            ];
-
-            // Send Campaign Message
-            $curl = curl_init();
-            curl_setopt_array($curl, array(
-                CURLOPT_HTTPHEADER => array('Content-Type: application/json',$token),
-                CURLOPT_URL => $endpoint_api,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_ENCODING => '',
-                CURLOPT_MAXREDIRS => 10,
-                CURLOPT_TIMEOUT => 0,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                CURLOPT_CUSTOMREQUEST => 'POST',
-                CURLOPT_POSTFIELDS => json_encode($data)
-            ));
-
-            $response = curl_exec($curl);
-            curl_close($curl);
-            $responseGet = json_decode($response);
-
-            // Store meta notification logs into database
-            $metaWhatsappLog = new Metawhatsapplog();
-            $metaWhatsappLog->message_for = "OTP";
-            $metaWhatsappLog->message_type = "OTP Template";
-            $metaWhatsappLog->template_name = $staticNotData['meta_template_name'];
-
-            if (isset($responseGet->errors) || $responseGet->result == 'failed') {
-                $metaWhatsappLog->message_text = $responseGet->message;
-                if(isset($responseGet->errors)){
-                    $metaWhatsappLog->message_status = "failed";
-                }else{
-                    $metaWhatsappLog->message_status = $responseGet->result;
-                }
-
-                // Send OTP To Normal Number
-                if(isset($getAPI) && isset($template)){
-                    // Generate OTP
-                    $otp = mt_rand(1000, 9999);
-
-                    $request->session()->put('OTP', $otp);
-                    $request->session()->put('Mobile', $mobile);
-
-                    $request->session()->put('CountryCode', $countryCode);
-
-                    // API Details
-                    $url_text = $getAPI->api_url;
-                    $instance_id = $getAPI->instance_id;
-                    $access_token = $getAPI->access_token;
-                    $otpMessage = "$template->msg_whatsapp: $otp";
-
-                    $sendURL = $url_text . "?number=" . $phone . "&type=text&message=" . urlencode($otpMessage) . "&instance_id=" . $instance_id . "&access_token=" . $access_token;
-                    $ch = curl_init();
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-                    curl_setopt($ch, CURLOPT_URL, $sendURL);
-                    $result = curl_exec($ch);
-                    curl_close($ch);
-
-                    $finalResult = json_decode($result);
-
-                    if(isset($finalResult) && $finalResult->status == 'success'){
-                        $responseData['success'] = "Message Sent";
-
-                    }else{
-                        $responseData['error'] = "Whatsapp API Error";
-                    }
-                }else{
-                    $responseData['error'] = "Whatsapp API Error";
-                }
-
-
-
-            } else {
-                $responseData['success'] = "Message Sent";
-                $metaWhatsappLog->message_status = $responseGet->result;
-                $metaWhatsappLog->message_text = $responseGet->message;
-
-                // Store On OTPValidation
-                $newOTP = new Otpvalidationmetalist();
-                $newOTP->metanotification_id = $staticNotData['id'];
-                $newOTP->otp_no = $staticNotData['otp_number'];
-                $newOTP->mobile_no = $mobile;
-                $newOTP->otp_date = date('Y-m-d');
-                $newOTP->save();
-            }
-
-
-            $metaWhatsappLog->save();
-
-        }else{
+        if (($sent['message'] ?? null) === 'otpsend') {
+            $responseData['success'] = "Message Sent";
+        } else {
+            // The provider's reason (no credentials) for the server log only.
+            \Illuminate\Support\Facades\Log::warning('Customer mobile OTP not sent', [
+                'user_id' => Auth::id(),
+                'country_code' => $countryCode,
+                'provider' => optional(Metawhatsapplog::where('message_for', 'OTP')->latest('id')->first(['template_name', 'message_status', 'message_text']))->toArray(),
+            ]);
             $responseData['error'] = "Whatsapp API Error";
+            $responseData['message'] = __('locale.We could not send the OTP. Please try again in a moment.');
         }
-
-
-
-
         $responseData['mobile_no'] = $mobile;
         $responseData['countryCode'] = $countryCode;
         $responseData['country_iso_code'] = $country->iso_code;
         // The code is only sent by WhatsApp and checked server-side
         // (applyVerifiedMobile) - never returned here.
-
-
         return response()->json($responseData);
-
     }
 
     /**

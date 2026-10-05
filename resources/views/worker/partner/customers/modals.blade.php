@@ -59,7 +59,7 @@ public/worker/js/partner-customers.js. --}}
         </button>
         <div class="w-modal-body">
             <h3 id="customerUnlinkTitle" class="w-modal-title">{{ __('locale.Unlink Customer') }}</h3>
-            <p class="w-modal-subtitle">{{ __('locale.Remove this customer from your list? Their account and orders are kept, and they become a customer of the main website.') }}</p>
+            <p class="w-modal-subtitle">{{ __('locale.Remove this customer from your list?') }}</p>
             <div class="w-form-alert" data-customer-unlink-alert hidden></div>
             <div style="display:flex;gap:10px;margin-top:18px;">
                 <button type="button" class="w-btn w-btn-outline w-btn-block" data-customer-unlink-close>{{ __('locale.No, Keep') }}</button>

@@ -167,22 +167,26 @@ class SiteBrand
      */
     public static function footer($frontwebsite): array
     {
-        $globalAddress = $frontwebsite->bottom_contact_us_addr ?? null;
         $globalPhone = $frontwebsite->bottom_contact_us_phone ?? ($frontwebsite->contact_us_phone ?? null);
         $globalEmail = $frontwebsite->bottom_contact_us_email ?? null;
-        $globalAbout = app()->getLocale() === 'ar' && !empty($frontwebsite->about_us_ar ?? null)
-            ? $frontwebsite->about_us_ar
-            : ($frontwebsite->about_us_eng ?? null);
-        $defaultAbout = __('locale.Connecting verified, work-ready candidates with employers who need reliable talent, fast.');
-
         $company = self::company();
+        $locale = app()->getLocale();
+
+        // Description + address: Website Config -> Footer for this site
+        // (partner override -> global -> PartnerPageContent::defaultFooter(),
+        // i.e. what the footer showed before).
+        $partner = app()->bound('currentPartner') ? app('currentPartner') : null;
+        $content = \App\Models\PartnerPageContent::contentFor(optional($partner)->id, 'footer', $locale);
+        $defaults = \App\Models\PartnerPageContent::defaultFooter($locale, $frontwebsite, $company);
+        $about = $content['description'] ?? $defaults['description'];
+        $address = $content['address'] ?? $defaults['address'];
 
         if (!$company) {
             return [
-                'address' => $globalAddress,
+                'address' => $address,
                 'phone' => $globalPhone,
                 'email' => $globalEmail,
-                'about' => $globalAbout ?: $defaultAbout,
+                'about' => $about,
                 'socials' => [
                     'Facebook' => $frontwebsite->bottom_contact_us_fb_link ?? null,
                     'Twitter' => $frontwebsite->bottom_contact_us_twitter_link ?? null,
@@ -202,10 +206,10 @@ class SiteBrand
         $email = trim((string) ($company['email'] ?? ''));
 
         return [
-            'address' => self::localized('address') ?? $globalAddress,
+            'address' => $address,
             'phone' => $mobile !== '' ? $mobile : $globalPhone,
             'email' => $email !== '' ? $email : $globalEmail,
-            'about' => $defaultAbout,
+            'about' => $about,
             'socials' => [],
             'copyright' => self::name(),
             'tagline_host' => $company['host'] ?: RecruitmentDomain::root(),

@@ -44,7 +44,9 @@ class MetaAutomationController extends Controller
             'employers' => 'employers', 
             'leads' => 'leads', 
             'todos' => 'todos',
-            'qamarhire' => 'bookings' 
+            'qamarhire' => 'bookings',
+            // recruitmentcv.com orders: same bookings data as qamarhire.com.
+            'recruitmentcv' => 'bookings',
         );
      
 

@@ -3910,8 +3910,11 @@ class BookingController extends Controller
         }
 
 
-        AutoSendMessageForOrder::dispatch($post->id)->onQueue('default');
-        AutoSendMessageForOrderToPartner::dispatch($post->id)->onQueue('default');
+        // recruitmentcv.com template set (never qamarhire's), with the partner
+        // site resolved from the request host (null = main recruitmentcv.com).
+        $sitePartnerId = \App\Support\CustomerSite::partnerId();
+        AutoSendMessageForOrder::dispatch($post->id, 'recruitmentcv', $sitePartnerId)->onQueue('default');
+        AutoSendMessageForOrderToPartner::dispatch($post->id, 'recruitmentcv', $sitePartnerId)->onQueue('default');
 
 
         // $data = 'Thank you! your booking reference no is BK800'.$post->reference_no;

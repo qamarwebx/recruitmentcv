@@ -208,6 +208,16 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
     // different completion step (PartnerAuthController::verifyMobile).
     Route::post('/mobile/verify', [PartnerAuthController::class, 'verifyMobile'])->name('mobile.verify');
 
+    // Team Members (owner only - App\Support\PartnerTeam::OWNER_ONLY). Every
+    // query is scoped to the logged-in partner, never a request partner_id.
+    Route::get('/team-members', [\App\Http\Controllers\Worker\PartnerTeamMemberController::class, 'index'])->name('team-members');
+    Route::get('/team-members/create', [\App\Http\Controllers\Worker\PartnerTeamMemberController::class, 'create'])->name('team-members.create');
+    Route::post('/team-members', [\App\Http\Controllers\Worker\PartnerTeamMemberController::class, 'store'])->name('team-members.store');
+    Route::get('/team-members/{id}', [\App\Http\Controllers\Worker\PartnerTeamMemberController::class, 'show'])->whereNumber('id')->name('team-members.show');
+    Route::get('/team-members/{id}/edit', [\App\Http\Controllers\Worker\PartnerTeamMemberController::class, 'edit'])->whereNumber('id')->name('team-members.edit');
+    Route::post('/team-members/{id}', [\App\Http\Controllers\Worker\PartnerTeamMemberController::class, 'update'])->whereNumber('id')->name('team-members.update');
+    Route::post('/team-members/{id}/delete', [\App\Http\Controllers\Worker\PartnerTeamMemberController::class, 'destroy'])->whereNumber('id')->name('team-members.destroy');
+
     // Reuses the existing PartnerLanguageController (already used elsewhere for
     // the same purpose) - validates against config('app.locales'), stores in
     // session, and LanguageSwitcher (registered globally in Kernel.php) applies

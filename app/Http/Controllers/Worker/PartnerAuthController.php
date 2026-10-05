@@ -71,6 +71,14 @@ class PartnerAuthController extends Controller
         // this site: local number) - see App\Support\PartnerMobile.
         $partner = PartnerMobile::find($request->session()->get('CountryCode'), $mobile);
 
+        // Not a partner's number: a team member's? (verified by the same OTP)
+        if (!$partner && ($member = \App\Models\PartnerTeamMember::findByMobile($request->session()->get('CountryCode'), $mobile))) {
+            OtpVerification::consume($request);
+            $request->session()->forget('Mobile');
+
+            return $this->completeTeamMemberLogin($request, $member);
+        }
+
         if (!$partner) {
             $request->session()->put('new_partner', true);
             return response()->json(['status' => 'new_partner']);
@@ -175,6 +183,19 @@ class PartnerAuthController extends Controller
             ? $this->findByAccountIdentifier($request->identifier)
             : PartnerMobile::find($request->country_code, $request->mobile);
 
+        // Not a partner: a team member with these identifiers? (Partners
+        // always win - identifiers are kept unique across both.)
+        if (!$partner) {
+            $member = $byAccount
+                ? \App\Models\PartnerTeamMember::findByAccountIdentifier($request->identifier)
+                : \App\Models\PartnerTeamMember::findByMobile($request->country_code, $request->mobile);
+            if ($member && !empty($member->password) && Hash::check($request->password, $member->password)) {
+                RateLimiter::clear($throttleKey);
+
+                return $this->completeTeamMemberLogin($request, $member);
+            }
+        }
+
         if (!$partner || empty($partner->password) || !Hash::check($request->password, $partner->password)) {
             RateLimiter::hit($throttleKey);
 
@@ -205,6 +226,33 @@ class PartnerAuthController extends Controller
         $matches = Partner::where(str_contains($identifier, '@') ? 'email' : 'username', $identifier)->limit(2)->get();
 
         return $matches->count() === 1 ? $matches->first() : null;
+    }
+
+    /**
+     * Team member login (password / mobile OTP / email OTP / Google): the
+     * member must be active and its partner approved; the partner guard then
+     * holds that partner (every portal query stays scoped to it) and the
+     * session records the member (App\Support\PartnerTeam). Lands on the
+     * partner's own site, on the member's first permitted page.
+     */
+    public function completeTeamMemberLogin(Request $request, \App\Models\PartnerTeamMember $member)
+    {
+        $partner = $member->partner;
+
+        if (!$member->status) {
+            return response()->json(['status' => 'error', 'message' => __('locale.This team member account is disabled. Please contact your partner.')], 403);
+        }
+        if (!$partner || (int) $partner->registration_status !== 1) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Your partner account is not active.')], 403);
+        }
+
+        Auth::guard('partner')->login($partner);   // Login event clears any earlier member marker
+        $request->session()->regenerate();
+        \App\Support\PartnerTeam::start($member);
+
+        $path = \App\Support\PartnerTeam::homeUrl($member, false) ?? route('worker.partner.account', [], false);
+
+        return response()->json(['status' => 'success', 'redirect' => $partner->portalBaseUrl() . $path]);
     }
 
     /**
@@ -254,8 +302,10 @@ class PartnerAuthController extends Controller
 
         $partner = $this->findByAccountIdentifier($request->identifier);
         $canReceive = $partner && filled($partner->email) && $partner->email_verified_at;
+        // Not a partner: a team member's own email (set by its partner).
+        $member = !$partner ? \App\Models\PartnerTeamMember::findByAccountIdentifier($request->identifier) : null;
 
-        $this->issueEmailCode($request, 'partner_email_login', $canReceive ? $partner : null, 'login');
+        $this->issueEmailCode($request, 'partner_email_login', $canReceive ? $partner : ($member && filled($member->email) ? $member : null), 'login');
 
         return response()->json(['message' => 'otpsend']);
     }
@@ -264,6 +314,9 @@ class PartnerAuthController extends Controller
     public function emailOtpVerify(Request $request)
     {
         $partner = $this->consumeEmailCode($request, 'partner_email_login', true);
+        if ($partner instanceof \App\Models\PartnerTeamMember) {
+            return $this->completeTeamMemberLogin($request, $partner);
+        }
         if (!$partner instanceof Partner) {
             return $partner;
         }
@@ -384,17 +437,20 @@ class PartnerAuthController extends Controller
      * and an attempt counter. $partner null (no match) or a failed send
      * still stores an entry - one that can never verify.
      */
-    private function issueEmailCode(Request $request, string $key, ?Partner $partner, string $purpose): void
+    private function issueEmailCode(Request $request, string $key, Partner|\App\Models\PartnerTeamMember|null $partner, string $purpose): void
     {
         $minutes = (int) config('partner.email_code.minutes');
         $code = (string) random_int(100000, 999999);
         $sent = false;
+        // A team member (Login with OTP by username/email only): its own
+        // name and email, its partner's company.
+        $member = $partner instanceof \App\Models\PartnerTeamMember ? $partner : null;
 
         if ($partner && filled($partner->email)) {
             try {
                 \App\Models\WebsiteSmtpSetting::mailerOrDefault()->to($partner->email)->send(new \App\Mail\SendOTPVerification([
-                    'name' => $partner->owner_name ?: $partner->rec_off_name,
-                    'company' => $partner->rec_off_name,
+                    'name' => $member ? $member->full_name : ($partner->owner_name ?: $partner->rec_off_name),
+                    'company' => $member ? optional($member->partner)->rec_off_name : $partner->rec_off_name,
                     'EmailOtp' => $code,
                     'email' => $partner->email,
                     'purpose' => $purpose,
@@ -409,7 +465,8 @@ class PartnerAuthController extends Controller
         }
 
         $request->session()->put($key, [
-            'partner_id' => $sent ? $partner->id : null,
+            'partner_id' => $sent && !$member ? $partner->id : null,
+            'team_member_id' => $sent && $member ? $member->id : null,
             'email' => $sent ? $partner->email : null,
             'code' => Hash::make($code),
             'expires_at' => now()->addMinutes($minutes)->timestamp,
@@ -424,7 +481,7 @@ class PartnerAuthController extends Controller
      * codes. The Partner must still have the same email the code went to
      * (and, for login, still verified).
      */
-    private function consumeEmailCode(Request $request, string $key, bool $requireVerifiedEmail): Partner|\Illuminate\Http\JsonResponse
+    private function consumeEmailCode(Request $request, string $key, bool $requireVerifiedEmail): Partner|\App\Models\PartnerTeamMember|\Illuminate\Http\JsonResponse
     {
         $pending = $request->session()->get($key);
         $otp = trim((string) $request->otp);
@@ -436,7 +493,7 @@ class PartnerAuthController extends Controller
             return $expired;
         }
 
-        if ($otp === '' || !Hash::check($otp, $pending['code']) || !$pending['partner_id']) {
+        if ($otp === '' || !Hash::check($otp, $pending['code']) || (!$pending['partner_id'] && empty($pending['team_member_id']))) {
             $pending['attempts']++;
             if ($pending['attempts'] >= (int) config('partner.email_code.attempts')) {
                 $request->session()->forget($key);
@@ -449,6 +506,12 @@ class PartnerAuthController extends Controller
         }
 
         $request->session()->forget($key);
+
+        if (!empty($pending['team_member_id'])) {
+            $member = \App\Models\PartnerTeamMember::find($pending['team_member_id']);
+
+            return $member && strcasecmp((string) $member->email, (string) $pending['email']) === 0 ? $member : $expired;
+        }
 
         $partner = Partner::find($pending['partner_id']);
         if (!$partner || ($requireVerifiedEmail && !$partner->email_verified_at) || strcasecmp((string) $partner->email, (string) $pending['email']) !== 0) {
@@ -733,7 +796,7 @@ class PartnerAuthController extends Controller
         // regenerated (fixation-safe). The CSRF token is kept so other open
         // tabs keep working.
         Auth::guard('partner')->logout();
-        $request->session()->forget(['partner_email_change', 'partner_google_intent', 'new_partner']);
+        $request->session()->forget(['partner_email_change', 'partner_google_intent', 'new_partner', \App\Support\PartnerTeam::SESSION_KEY]);
         // New session id, old one destroyed; data (incl. the CSRF token) kept
         // - regenerate() would also rotate the token.
         $request->session()->migrate(true);

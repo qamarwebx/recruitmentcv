@@ -25,7 +25,7 @@ class PartnerPageContent extends Model
         'content' => 'array',
     ];
 
-    public const PAGES = ['home', 'resumes', 'about', 'contact', 'privacy', 'terms'];
+    public const PAGES = ['home', 'resumes', 'about', 'contact', 'privacy', 'terms', 'footer'];
 
     /**
      * Every overridable Website Config field per page (dot keys inside
@@ -118,6 +118,11 @@ class PartnerPageContent extends Model
             'title' => 'text',
             'subtitle' => 'long',
             'body' => 'body',
+        ],
+        // Public footer: description under the logo, "Get In Touch" address.
+        'footer' => [
+            'description' => 'long',
+            'address' => 'long',
         ],
     ];
 
@@ -222,6 +227,9 @@ class PartnerPageContent extends Model
 
             case 'resumes':
                 return static::defaultResumesHeader($locale);
+
+            case 'footer':
+                return static::defaultFooter($locale, $frontwebsite, $company);
 
             case 'about':
                 return [
@@ -341,6 +349,33 @@ class PartnerPageContent extends Model
         ];
     }
 
+    /**
+     * Footer defaults = what the footer showed before it was configurable.
+     * Main site: the CRM front-end About text / address (frontendwebsiteconfigs,
+     * Arabic columns in Arabic), else the built-in description. Partner
+     * site ($company): the built-in description and its Company Profile
+     * address, else the main address. The CRM's copy computes the same.
+     */
+    public static function defaultFooter(string $locale, $frontwebsite, ?array $company = null): array
+    {
+        $isArabic = $locale === 'ar';
+        $defaultAbout = __('locale.Connecting verified, work-ready candidates with employers who need reliable talent, fast.', [], $locale);
+        $mainAddress = ($isArabic && !empty($frontwebsite->bottom_contact_us_addr_arabic ?? null))
+            ? $frontwebsite->bottom_contact_us_addr_arabic
+            : ($frontwebsite->bottom_contact_us_addr ?? null);
+
+        if ($company) {
+            return [
+                'description' => $defaultAbout,
+                'address' => \App\Support\SiteBrand::companyField($company, 'address', $locale) ?? $mainAddress,
+            ];
+        }
+
+        $about = ($isArabic && !empty($frontwebsite->about_us_ar ?? null)) ? $frontwebsite->about_us_ar : ($frontwebsite->about_us_eng ?? null);
+
+        return ['description' => $about ?: $defaultAbout, 'address' => $mainAddress];
+    }
+
     /** Per-request cache for homeStats(). */
     private static ?array $homeStatsCache = null;
 
@@ -445,6 +480,15 @@ class PartnerPageContent extends Model
 
             if (\App\Support\SiteBrand::legalOperator($company, $locale)) {
                 $global = \Illuminate\Support\Arr::except($global, static::PARTNER_DEFAULT_FIELDS[$page]);
+            }
+        }
+
+        // Footer address: a partner with its own Company Profile address keeps
+        // it (its default) rather than inheriting the global footer address.
+        if ($page === 'footer' && isset($global['address'])) {
+            $company = \App\Support\SiteBrand::companyFromDomain(Domain::where('partner_id', $partnerId)->first());
+            if (\App\Support\SiteBrand::companyField($company, 'address', $locale) !== null) {
+                unset($global['address']);
             }
         }
 

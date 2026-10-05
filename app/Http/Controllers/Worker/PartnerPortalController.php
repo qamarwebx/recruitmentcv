@@ -203,12 +203,20 @@ class PartnerPortalController extends Controller
             )
             ->where('booking.partner_id', $partnerId);
 
-        // Active Order / Cancelled Order switch (default Active): the existing
-        // cancelled flag, booking_status = 2 (as the order cards' Cancelled
-        // badge and the hire checks above use it). One query feeds both the
-        // card and table views, so counts/pagination follow it.
-        $orderState = $request->input('order_state') === 'cancelled' ? 'cancelled' : 'active';
-        $query->where('booking.booking_status', $orderState === 'cancelled' ? '=' : '!=', 2);
+        // Active / Deployed / Cancelled tabs (default Active) - see
+        // applyOrderState(). A team member: only the tabs granted (Orders >
+        // View Active covers Active + Deployed, View Cancelled the
+        // cancelled ones), and search/filters only with Orders > Search/Filter
+        // (App\Support\PartnerTeam; the partner itself has all).
+        $orderTabs = \App\Support\PartnerTeam::orderTabs();
+        if ($request->filled('order_state')) {
+            $orderState = in_array($request->input('order_state'), ['active', 'deployed', 'cancelled'], true) ? $request->input('order_state') : 'active';
+            \App\Support\PartnerTeam::authorize(in_array($orderState, $orderTabs, true));
+        } else {
+            $orderState = $orderTabs[0];
+        }
+        \App\Support\PartnerTeam::authorize(\App\Support\PartnerTeam::allowsSection('orders', 'search_filter')
+            || !collect(['search', 'order_status', 'payment_status', 'profession_id', 'location_id', 'date_range'])->contains(fn ($field) => $request->filled($field)));
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -249,6 +257,13 @@ class PartnerPortalController extends Controller
             }
         }
 
+        // Every tab's count from the same filtered query + the same rule as the list.
+        $orderCounts = [];
+        foreach ($orderTabs as $tab) {
+            $orderCounts[$tab] = self::applyOrderState(clone $query, $tab)->distinct()->count('booking.id');
+        }
+        self::applyOrderState($query, $orderState);
+
         $orders = $query->orderByDesc('booking.id')->paginate(10)->withQueryString();
 
         $orderStatuses = \App\Models\OrderStatus::orderBy('id')->get();
@@ -269,17 +284,38 @@ class PartnerPortalController extends Controller
         $allWorkCities = Expecworkcity::orderBy('name')->get();
 
         if ($request->ajax()) {
-            return view('worker.partner.orders.partial', compact('orders', 'orderState'));
+            return view('worker.partner.orders.partial', compact('orders', 'orderState', 'orderCounts'));
         }
 
         return view('worker.partner.orders.index', compact(
             'orders',
             'orderState',
+            'orderCounts',
             'orderStatuses',
             'professionOptions',
             'locationOptions',
             'allWorkCities'
         ));
+    }
+
+    /**
+     * The Orders tabs, from the existing flags: Cancelled = booking_status
+     * 2 (unchanged); Deployed = not cancelled and a visa assigned
+     * (bookings.visa_status = 1, set by every Assign Visa save -
+     * orderVisaStore() here, the CRM's PartnerBookingController::visaStr();
+     * the order card's visa "Confirmed" badge); Active = the remaining
+     * not-cancelled orders. Used for both the list and its counts.
+     */
+    private static function applyOrderState($query, string $state)
+    {
+        if ($state === 'cancelled') {
+            return $query->where('booking.booking_status', '=', 2);
+        }
+        $query->where('booking.booking_status', '!=', 2);
+
+        return $state === 'deployed'
+            ? $query->where('booking.visa_status', '=', 1)
+            : $query->where(fn ($q) => $q->where('booking.visa_status', '!=', 1)->orWhereNull('booking.visa_status'));
     }
 
     public function orderShow($id)
@@ -321,6 +357,8 @@ class PartnerPortalController extends Controller
             ->first();
 
         abort_if(!$order, 404);
+        // A team member opens only orders of a group they may see.
+        \App\Support\PartnerTeam::authorize(in_array((int) $order->booking_status === 2 ? 'cancelled' : 'active', \App\Support\PartnerTeam::orderStates(), true));
 
         $professionOptions = Profession::orderBy('eng_name')->get();
         $allWorkCities = Expecworkcity::orderBy('name')->get();
@@ -1309,7 +1347,14 @@ class PartnerPortalController extends Controller
 
     public function account()
     {
-        $partner = Auth::guard('partner')->user();
+        // My Account = the signed-in account itself: a team member sees and
+        // edits their own details (the partner guard holds their parent
+        // partner, which only scopes the portal's data/branding).
+        $holder = \App\Support\PartnerTeam::accountHolder();
+        if ($holder instanceof \App\Models\PartnerTeamMember) {
+            return view('worker.partner.account-member', ['member' => $holder]);
+        }
+        $partner = $holder;
 
         // Same Country/City models + flat, unfiltered list already used by
         // the admin partner-edit form (PartnerController/admin/partner/show.blade.php)
@@ -1322,7 +1367,11 @@ class PartnerPortalController extends Controller
 
     public function accountUpdate(Request $request)
     {
-        $partner = Auth::guard('partner')->user();
+        $holder = \App\Support\PartnerTeam::accountHolder();
+        if ($holder instanceof \App\Models\PartnerTeamMember) {
+            return $this->teamMemberAccountUpdate($request, $holder);
+        }
+        $partner = $holder;
 
         $validator = Validator::make($request->all(), [
             'rec_off_name' => 'required|string|max:255',
@@ -1333,7 +1382,7 @@ class PartnerPortalController extends Controller
             // and without spaces or "@" (an identifier with "@" is looked up
             // as an email). "sometimes": the Account Details prompt modal,
             // which saves through here too, has no username field.
-            'username' => ['sometimes', 'required', 'string', 'max:120', 'regex:/^[^\s@]+$/u', \Illuminate\Validation\Rule::unique('partners', 'username')->ignore($partner->id)],
+            'username' => ['sometimes', 'required', 'string', 'max:120', 'regex:/^[^\s@]+$/u', \Illuminate\Validation\Rule::unique('partners', 'username')->ignore($partner->id), \Illuminate\Validation\Rule::unique('partner_team_members', 'username')],
             // partners.licence_number (optional; empty = not provided).
             'licence_number' => 'nullable|string|max:100',
             'country_id' => 'nullable|integer|exists:countries,id',
@@ -1381,6 +1430,39 @@ class PartnerPortalController extends Controller
         }
 
         return redirect()->route('worker.partner.account')->with('success', 'Profile updated successfully.');
+    }
+
+    /**
+     * My Account save for a signed-in team member: only their own name and
+     * sign-in identifiers (same validation as the partner's Team Members
+     * form). The member is the session's (PartnerTeam::accountHolder()),
+     * never an id from the request; partner, status and permissions are
+     * not editable here.
+     */
+    private function teamMemberAccountUpdate(Request $request, \App\Models\PartnerTeamMember $member)
+    {
+        [$validator, $code, $local] = \App\Support\PartnerTeam::identityValidator($request, $member->id);
+
+        if ($validator->fails()) {
+            if ($request->expectsJson()) {
+                return response()->json(['status' => 'error', 'message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+            }
+
+            return redirect()->route('worker.partner.account')->withErrors($validator)->withInput();
+        }
+
+        $member->full_name = trim($request->full_name);
+        $member->username = $request->username;
+        $member->email = $request->email;
+        $member->country_code = $local ? $code : null;
+        $member->mobile = $local ?: null;
+        $member->save();
+
+        if ($request->expectsJson()) {
+            return response()->json(['status' => 'success', 'message' => __('locale.Profile updated successfully.')]);
+        }
+
+        return redirect()->route('worker.partner.account')->with('success', __('locale.Profile updated successfully.'));
     }
 
     /**
@@ -1449,7 +1531,7 @@ class PartnerPortalController extends Controller
         $email = strtolower(trim((string) $request->email));
 
         $validator = Validator::make(['email' => $email], [
-            'email' => ['required', 'email', 'max:255', \Illuminate\Validation\Rule::unique('partners', 'email')->ignore($partner->id)],
+            'email' => ['required', 'email', 'max:255', \Illuminate\Validation\Rule::unique('partners', 'email')->ignore($partner->id), \Illuminate\Validation\Rule::unique('partner_team_members', 'email')],
         ], [
             'email.unique' => __('locale.An account with this email already exists.'),
         ], [
@@ -1813,7 +1895,9 @@ class PartnerPortalController extends Controller
         foreach (Arr::dot($submitted) as $key => $value) {
             $value = is_string($value) ? trim($value) : $value;
 
-            if ($value === '') {
+            // Blank = follow the inherited value. (A cleared field arrives as
+            // null - ConvertEmptyStringsToNull - not as ''.)
+            if ($value === '' || $value === null) {
                 continue;
             }
 

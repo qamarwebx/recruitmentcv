@@ -29,9 +29,30 @@ class AutoSendMessageForOrder implements ShouldQueue
 
     protected $bookingId;
 
-    public function __construct($bookingId)
+    /**
+     * Which website's automation set to run: 'qamarhire' (qamarhire.com,
+     * the default - unchanged behaviour) or 'recruitmentcv' (recruitmentcv.com
+     * main + partner sites). Matches autometanotifications.template_for and
+     * config('constants.template_for_map'). Declared defaults also apply to
+     * jobs queued before this property existed.
+     */
+    protected $templateFor = 'qamarhire';
+
+    /**
+     * RecruitmentCV only: the partner whose subdomain the order was placed
+     * on (resolved from the request host, never from input); null = main
+     * site / qamarhire.com. Used to refuse any order whose office isn't that
+     * partner, so one partner's site can never send another partner's data.
+     */
+    protected $sitePartnerId = null;
+
+    public function __construct($bookingId, $templateFor = 'qamarhire', $sitePartnerId = null)
     {
         $this->bookingId = $bookingId;
+        $this->templateFor = array_key_exists((string) $templateFor, (array) config('constants.website_template_for'))
+            ? (string) $templateFor
+            : 'qamarhire';
+        $this->sitePartnerId = $sitePartnerId !== null ? (int) $sitePartnerId : null;
         $this->onQueue('default');
     }
 
@@ -44,6 +65,14 @@ class AutoSendMessageForOrder implements ShouldQueue
             $booking = Booking::find($this->bookingId);
             if (!$booking) return;
 
+            if ($this->sitePartnerId !== null && (int) $booking->partner_id !== $this->sitePartnerId) {
+                Log::channel('CustomerBooking')->warning('Order skipped: booking office is not the ordering partner site', [
+                    'booking_id' => $booking->id,
+                    'template_for' => $this->templateFor,
+                ]);
+                return;
+            }
+
             $user      = User::find($booking->user_id);
             $country = Country::where('id',$user->country_id)->first();
             $partner   = Partner::find($booking->partner_id);
@@ -53,7 +82,7 @@ class AutoSendMessageForOrder implements ShouldQueue
                     'trigger_template_type',
                     ['order']
                 )
-                ->where('template_for','qamarhire')
+                ->where('template_for', $this->templateFor)
                 ->where('status',1)
                 ->get();
 
@@ -170,7 +199,7 @@ class AutoSendMessageForOrder implements ShouldQueue
 
                 $fieldVariables  = explode(',', $template->field_variable);
                 $assignVariables = explode(',', str_replace(['[',']'],'',$template->assign_variable));
-                $mapping = config('constants.template_for_map.qamarhire');
+                $mapping = config('constants.template_for_map.' . $this->templateFor);
 
                 $preparedValues = [];
 
@@ -421,7 +450,7 @@ class AutoSendMessageForOrder implements ShouldQueue
             ]);
 
             $msg_response = new Automessageresponse();
-            $msg_response->template_for = "qamarhire";
+            $msg_response->template_for = $this->templateFor;
             $msg_response->autometanotification_id = $metanotification->id;
             $msg_response->metatemplate_id = $metanotification->metatemp_id;
             $msg_response->metaapi_id = $metaapi_id;

@@ -134,6 +134,14 @@
                 ['key' => 'body', 'label' => __('locale.Full Page Content (HTML)'), 'type' => 'textarea-lg'],
             ]],
         ],
+        'footer' => [
+            ['title' => __('locale.Footer Description'), 'fields' => [
+                ['key' => 'description', 'label' => __('locale.Description'), 'type' => 'textarea'],
+            ]],
+            ['title' => __('locale.Get In Touch'), 'fields' => [
+                ['key' => 'address', 'label' => __('locale.Address'), 'type' => 'textarea'],
+            ]],
+        ],
     ];
 
     $wcPages = [
@@ -143,6 +151,7 @@
         'contact' => __('locale.Contact Us'),
         'privacy' => __('locale.Privacy Policy'),
         'terms' => __('locale.Terms of Service'),
+        'footer' => __('locale.Footer'),
     ];
 
     // Purely a presentational grouping on top of $fieldGroups above (no
@@ -180,6 +189,10 @@
         'terms' => [
             ['title' => __('locale.Page Header'), 'groupTitles' => [__('locale.Page Header')]],
             ['title' => __('locale.Legal Content'), 'groupTitles' => [__('locale.Legal Content')]],
+        ],
+        'footer' => [
+            ['title' => __('locale.Footer Description'), 'groupTitles' => [__('locale.Footer Description')]],
+            ['title' => __('locale.Get In Touch'), 'groupTitles' => [__('locale.Get In Touch')]],
         ],
     ];
 @endphp

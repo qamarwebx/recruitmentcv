@@ -17,10 +17,15 @@
 @endsection
 
 @section('content')
-    <form data-order-filter-form data-endpoint="{{ route('worker.partner.orders') }}" class="wp-filter-bar wp-fade-in">
+    {{-- Search/filter controls only with Orders > Search/Filter (a team
+    member; App\Support\PartnerTeam). The form itself stays - it carries
+    order_state for the Active/Cancelled switch and pagination. --}}
+    @php $canFilterOrders = \App\Support\PartnerTeam::allowsSection('orders', 'search_filter'); @endphp
+    <form data-order-filter-form data-endpoint="{{ route('worker.partner.orders') }}" class="wp-filter-bar wp-fade-in" @unless ($canFilterOrders) hidden @endunless>
         {{-- Active Order / Cancelled Order (buttons in the results toolbar);
         sent with every search/filter/pagination request. --}}
         <input type="hidden" name="order_state" value="{{ $orderState }}" data-order-state-input>
+        @if ($canFilterOrders)
         <div class="wp-filter-search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
             <input type="text" name="search" class="w-input" placeholder="{{ __('locale.Search by reference or candidate name') }}" value="{{ request('search') }}">
@@ -51,6 +56,7 @@
         <input type="text" name="date_range" class="w-input wp-daterange" placeholder="{{ __('locale.Select date range...') }}" value="{{ request('date_range') }}" autocomplete="off">
         <button type="button" class="w-btn w-btn-primary w-btn-sm" data-filter-search>{{ __('locale.Search') }}</button>
         <button type="button" class="w-btn w-btn-outline w-btn-sm" data-filter-reset>{{ __('locale.Reset') }}</button>
+        @endif
     </form>
 
     <div class="w-loading" data-order-loading>
@@ -61,7 +67,9 @@
         @include('worker.partner.orders.partial', ['orders' => $orders, 'orderState' => $orderState])
     </div>
 
+    @if (\App\Support\PartnerTeam::allowsSection('orders', 'cancel_booking'))
     @include('worker.partials.cancel-order-modal')
+    @endif
     {{-- Rendered here (outside #worker-orders-grid), not inside partial.blade.php,
     same reasoning as the Cancel Booking modal above it: that grid's innerHTML
     gets replaced wholesale on every AJAX filter/pagination refresh
@@ -69,7 +77,9 @@
     once at page load - a modal living inside the swapped content would
     lose its Select2 instances (and duplicate itself) on every refresh. Only
     each card's own "Add Visa" trigger button lives in the swapped partial. --}}
+    @if (\App\Support\PartnerTeam::allowsSection('orders', 'assign_visa'))
     @include('worker.partner.orders.add-visa-modal', ['professionOptions' => $professionOptions, 'allWorkCities' => $allWorkCities])
+    @endif
 @endsection
 
 @section('page-script')

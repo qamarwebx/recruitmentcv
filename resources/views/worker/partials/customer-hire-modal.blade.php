@@ -28,14 +28,65 @@ WorkerPageController::resumeDetails(). --}}
             @if ($hire['existingRef'])
                 <div class="w-form-alert is-success">{{ __('locale.You already have an order for this candidate.') }} #{{ $hire['existingRef'] }}</div>
                 <a href="{{ route('worker.account.orders') }}" class="w-btn w-btn-primary w-btn-block">{{ __('locale.View My Orders') }}</a>
-            @elseif (!$hire['canHire'])
-                <div class="w-form-alert">{{ __('locale.Please verify your mobile number first.') }}</div>
-                <a href="{{ route('worker.account.profile') }}" class="w-btn w-btn-primary w-btn-block">{{ __('locale.Personal Information') }}</a>
-            @elseif ($hire['limitReached'])
-                <div class="w-form-alert">{{ __('locale.You have reached the maximum number of active orders.') }}</div>
-                <a href="{{ route('worker.account.orders') }}" class="w-btn w-btn-primary w-btn-block">{{ __('locale.View My Orders') }}</a>
             @else
-                <div data-customer-hire-form>
+                @php $needsVerify = !$hire['canHire']; @endphp
+                @if ($needsVerify)
+                    {{-- Unverified mobile: verify it right here with the existing
+                    Profile > Change Mobile endpoints (DashboardController
+                    getMobileOTPandUpdate / applyVerifiedMobile - same
+                    duplicate/ownership rules), then the order step below opens
+                    for this same candidate (customer-hire.js). --}}
+                    <div data-customer-hire-verify
+                        data-send-url="{{ route('booking.profile.otpandupdate') }}"
+                        data-verify-url="{{ app()->getLocale() === 'ar' ? route('booking.profile.arvalidate-otp2') : route('booking.profile.validate-otp2') }}"
+                        data-err-mobile="{{ __('locale.Please enter a valid mobile number.') }}"
+                        data-err-not-sent="{{ __('locale.We could not send the OTP. Please try again in a moment.') }}"
+                        data-err-technical="{{ __('locale.A technical error occurred. Please try again shortly.') }}"
+                        data-err-otp="{{ __('locale.Incorrect OTP. Please try again.') }}"
+                        data-sending="{{ __('locale.Sending…') }}"
+                        data-verifying="{{ __('locale.Verifying…') }}"
+                        data-resend-in="{{ __('locale.Resend in :seconds s') }}"
+                        data-verified="{{ __('locale.Mobile number verified. You can continue your order.') }}">
+                        <div class="w-form-alert is-error">{{ __('locale.Please verify your mobile number first.') }}</div>
+                        <div class="w-form-alert" data-customer-hire-verify-alert hidden></div>
+
+                        <div data-customer-hire-verify-step="enter">
+                            <div class="w-form-row">
+                                <label class="w-form-label" for="customerHireMobile">{{ __('locale.Mobile Number') }}</label>
+                                <div class="w-form-phone-row">
+                                    @include('worker.partials.country-code-select', [
+                                        'attr' => 'data-customer-hire-country',
+                                        'selected' => $hire['countryCode'] ?? null,
+                                    ])
+                                    <input type="tel" class="w-input" id="customerHireMobile" data-customer-hire-mobile inputmode="numeric" maxlength="15" dir="ltr" value="{{ $hire['mobile'] ?? '' }}" aria-describedby="customerHireMobileError">
+                                </div>
+                                {{-- Number step errors (invalid / already used / not sent). --}}
+                                <div class="w-form-error" id="customerHireMobileError" data-customer-hire-mobile-error role="alert" hidden></div>
+                            </div>
+                            <button type="button" class="w-btn w-btn-primary w-btn-block" data-customer-hire-send data-default-text="{{ __('locale.Send OTP') }}">{{ __('locale.Send OTP') }}</button>
+                        </div>
+
+                        <div data-customer-hire-verify-step="code" hidden>
+                            <p class="w-form-hint">{{ __('locale.Enter the 4-digit code sent to') }} <strong dir="ltr" data-customer-hire-target></strong></p>
+                            <div class="w-form-row">
+                                <input type="text" class="w-input w-input-otp" maxlength="4" inputmode="numeric" autocomplete="one-time-code" placeholder="••••" data-customer-hire-otp aria-label="OTP">
+                            </div>
+                            <button type="button" class="w-btn w-btn-primary w-btn-block" data-customer-hire-verify-btn data-default-text="{{ __('locale.Verify & Continue') }}">{{ __('locale.Verify & Continue') }}</button>
+                            <div class="w-hire-verify-links" style="display:flex;justify-content:space-between;gap:12px;margin-top:12px;">
+                                <button type="button" class="w-auth-forgot-link" data-customer-hire-change>{{ __('locale.Change Number') }}</button>
+                                <button type="button" class="w-auth-forgot-link" data-customer-hire-resend data-default-text="{{ __('locale.Resend OTP') }}">{{ __('locale.Resend OTP') }}</button>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+
+                @if ($hire['limitReached'])
+                <div data-customer-hire-after-verify @if ($needsVerify) hidden @endif>
+                    <div class="w-form-alert">{{ __('locale.You have reached the maximum number of active orders.') }}</div>
+                    <a href="{{ route('worker.account.orders') }}" class="w-btn w-btn-primary w-btn-block">{{ __('locale.View My Orders') }}</a>
+                </div>
+                @else
+                <div data-customer-hire-form data-customer-hire-after-verify @if ($needsVerify) hidden @endif>
                     <div class="w-form-row">
                         <label class="w-form-check">
                             <input type="checkbox" data-customer-hire-salary>
@@ -97,6 +148,7 @@ WorkerPageController::resumeDetails(). --}}
                     <div class="w-form-alert is-success" data-customer-hire-success-message></div>
                     <a href="{{ route('worker.account.orders') }}" class="w-btn w-btn-primary w-btn-block">{{ __('locale.View My Orders') }}</a>
                 </div>
+                @endif
             @endif
         </div>
     </div>

@@ -36,7 +36,12 @@
         // rather than resetting to Company Profile - resolved server-side
         // (not just via JS hash-routing) so it's correct on first paint.
         $openWcPage = request()->query('open');
-        $activeTopTab = $openWcPage ? 'website-config' : 'company';
+        // Tabs this account may use: all for the partner; a team member only
+        // the ones granted (App\Support\PartnerTeam::SECTIONS, enforced
+        // server-side on every save too). Denied tabs are not rendered.
+        $tabSections = ['company' => 'company_profile', 'branding' => 'branding', 'whatsapp' => 'whatsapp', 'website-config' => 'website_configuration', 'smtp' => 'smtp', 'domain' => 'domain'];
+        $allowedTabs = array_keys(array_filter($tabSections, fn ($section) => \App\Support\PartnerTeam::allowsSection('website', $section)));
+        $activeTopTab = ($openWcPage && in_array('website-config', $allowedTabs, true)) ? 'website-config' : ($allowedTabs[0] ?? null);
         $activeWcPage = in_array($openWcPage, \App\Models\PartnerPageContent::PAGES, true) ? $openWcPage : 'home';
     @endphp
 
@@ -49,17 +54,30 @@
     </div>
 
     <div class="wp-settings-tabs wp-fade-in" role="tablist">
+        @if (in_array('company', $allowedTabs, true))
         <button type="button" class="wp-settings-tab-btn {{ $activeTopTab === 'company' ? 'is-active' : '' }}" data-settings-tab-btn="company">{{ __('locale.Company Profile') }}</button>
-        <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="branding">{{ __('locale.Branding') }}</button>
-        <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="whatsapp">{{ __('locale.WhatsApp') }}</button>
+        @endif
+        @if (in_array('branding', $allowedTabs, true))
+        <button type="button" class="wp-settings-tab-btn {{ $activeTopTab === 'branding' ? 'is-active' : '' }}" data-settings-tab-btn="branding">{{ __('locale.Branding') }}</button>
+        @endif
+        @if (in_array('whatsapp', $allowedTabs, true))
+        <button type="button" class="wp-settings-tab-btn {{ $activeTopTab === 'whatsapp' ? 'is-active' : '' }}" data-settings-tab-btn="whatsapp">{{ __('locale.WhatsApp') }}</button>
+        @endif
+        @if (in_array('website-config', $allowedTabs, true))
         <button type="button" class="wp-settings-tab-btn {{ $activeTopTab === 'website-config' ? 'is-active' : '' }}" data-settings-tab-btn="website-config">{{ __('locale.Website Config') }}</button>
-        <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="smtp">{{ __('locale.SMTP') }}</button>
-        <button type="button" class="wp-settings-tab-btn" data-settings-tab-btn="domain">{{ __('locale.Domain') }}</button>
+        @endif
+        @if (in_array('smtp', $allowedTabs, true))
+        <button type="button" class="wp-settings-tab-btn {{ $activeTopTab === 'smtp' ? 'is-active' : '' }}" data-settings-tab-btn="smtp">{{ __('locale.SMTP') }}</button>
+        @endif
+        @if (in_array('domain', $allowedTabs, true))
+        <button type="button" class="wp-settings-tab-btn {{ $activeTopTab === 'domain' ? 'is-active' : '' }}" data-settings-tab-btn="domain">{{ __('locale.Domain') }}</button>
+        @endif
     </div>
 
     {{-- Company Profile - Domain model's company_name/company_address/etc,
     the SAME row + columns the CRM's "Website" tab -> Address sub-tab
     manages (DomainController::updateAddress()). --}}
+    @if (in_array('company', $allowedTabs, true))
     <div class="wp-settings-tab-pane {{ $activeTopTab === 'company' ? 'is-active' : '' }}" data-settings-tab-pane="company">
         <div class="w-info-card wp-fade-in">
             <h2>
@@ -98,11 +116,13 @@
             </form>
         </div>
     </div>
+    @endif
 
     {{-- Branding - website_logo/website_logo_ar, the SAME columns +
     admin/assets/images/partner/ folder the CRM's "Website" tab -> Logo
     sub-tab manages (DomainController::websitelogoupdt()). --}}
-    <div class="wp-settings-tab-pane" data-settings-tab-pane="branding">
+    @if (in_array('branding', $allowedTabs, true))
+    <div class="wp-settings-tab-pane {{ $activeTopTab === 'branding' ? 'is-active' : '' }}" data-settings-tab-pane="branding">
         <div class="w-info-card wp-fade-in">
             <h2>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
@@ -153,12 +173,14 @@
             </form>
         </div>
     </div>
+    @endif
 
     {{-- WhatsApp - the floating WhatsApp button on this partner's public
     website + portal (partner_page_contents 'whatsapp' row, see
     PartnerPageContent::effectiveWhatsapp()). Prefilled with the saved
     values, otherwise the defaults; an empty number keeps the default one. --}}
-    <div class="wp-settings-tab-pane" data-settings-tab-pane="whatsapp">
+    @if (in_array('whatsapp', $allowedTabs, true))
+    <div class="wp-settings-tab-pane {{ $activeTopTab === 'whatsapp' ? 'is-active' : '' }}" data-settings-tab-pane="whatsapp">
         <div class="w-info-card wp-fade-in">
             <h2>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5Z"/></svg>
@@ -195,6 +217,7 @@
             </form>
         </div>
     </div>
+    @endif
 
     {{-- Domain - the sub_domain column on the SAME Domain row, resolved by
     ResolvePartnerWebsiteDomain middleware on *.recruitmentcv.com requests. --}}
@@ -204,7 +227,8 @@
     disabled (excluded from any accidental submission too, not just
     visually locked). PartnerPortalController::settingsDomainUpdate()
     independently rejects any direct POST regardless of what the UI does. --}}
-    <div class="wp-settings-tab-pane" data-settings-tab-pane="domain">
+    @if (in_array('domain', $allowedTabs, true))
+    <div class="wp-settings-tab-pane {{ $activeTopTab === 'domain' ? 'is-active' : '' }}" data-settings-tab-pane="domain">
         <div class="w-info-card wp-fade-in">
             <h2>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/></svg>
@@ -252,6 +276,7 @@
             @endif
         </div>
     </div>
+    @endif
 
     {{-- SMTP - this partner's own sender for emails to their customers
     (PartnerSmtpSetting, PartnerPortalController::settingsSmtpUpdate()).
@@ -263,7 +288,8 @@
         $smtpValue = fn ($field) => $smtp ? $smtp->{$field} : ($smtpDefaults[$field] ?? null);
         $smtpHasPassword = $smtp && filled($smtp->getRawOriginal('password'));
     @endphp
-    <div class="wp-settings-tab-pane" data-settings-tab-pane="smtp">
+    @if (in_array('smtp', $allowedTabs, true))
+    <div class="wp-settings-tab-pane {{ $activeTopTab === 'smtp' ? 'is-active' : '' }}" data-settings-tab-pane="smtp">
         <div class="w-info-card wp-fade-in">
             <h2>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
@@ -345,13 +371,16 @@
             </form>
         </div>
     </div>
+    @endif
 
     {{-- Website Config (Home/About/Contact/Privacy/Terms) - its own file,
     included here rather than inlined, since this one tab-pane is already
     as large as the rest of this page combined. --}}
+    @if (in_array('website-config', $allowedTabs, true))
     <div class="wp-settings-tab-pane {{ $activeTopTab === 'website-config' ? 'is-active' : '' }}" data-settings-tab-pane="website-config">
         @include('worker.partner.website-config-partial', ['activeWcPage' => $activeWcPage])
     </div>
+    @endif
 @endsection
 
 @section('page-script')

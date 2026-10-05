@@ -25,6 +25,11 @@
         // in the header profile button only.
         $__partnerFullName = trim((string) $__partner->owner_name);
         $__partnerHeaderName = $__partnerFullName !== '' ? $__partnerFullName : __('locale.Partner');
+        // Signed in as a team member (App\Support\PartnerTeam): their own name.
+        $__teamMember = \App\Support\PartnerTeam::current();
+        if ($__teamMember) {
+            $__partnerHeaderName = $__teamMember->full_name;
+        }
         $__partnerInitials = collect(explode(' ', $__partnerHeaderName))->filter()->map(fn($w) => mb_substr($w, 0, 1))->take(2)->implode('');
         $__notifications = $notifications ?? collect();
 
@@ -88,6 +93,7 @@
             
 
             <nav class="wp-nav">
+                @if (\App\Support\PartnerTeam::canOpen('candidates'))
                 <a href="{{ route('worker.partner.candidates') }}" class="wp-partner-card {{ request()->routeIs('worker.partner.candidates', 'worker.partner.candidates.*') ? 'is-active' : '' }}">
                     <span class="wp-partner-avatar">
                         {{-- CV / resume document, same inline stroke icon style as the menu. --}}
@@ -98,48 +104,71 @@
                         <span class="wp-partner-role">{{ __('locale.All Candidate CV') }}</span>
                     </div>
                 </a>
+                @endif
 
               
+                @if (\App\Support\PartnerTeam::canOpen('dashboard'))
                 <a href="{{ route('worker.partner.dashboard') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.dashboard') ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12 12 3l9 9"/><path d="M5 10v10h14V10"/></svg>
                     <span>{{ __('locale.Dashboard') }}</span>
                 </a>
+                @endif
+                @if (\App\Support\PartnerTeam::canOpen('orders'))
                 <a href="{{ route('worker.partner.orders') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.orders', 'worker.partner.orders.*') ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg>
                     <span>{{ __('locale.Orders') }}</span>
                 </a>
+                @endif
               
+                @if (\App\Support\PartnerTeam::canOpen('employer'))
                 <a href="{{ route('worker.partner.employer') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.employer', 'worker.partner.employer.*') ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1m-1 4h1m4-4h1m-1 4h1M9 21v-4h6v4"/></svg>
                     <span>{{ __('locale.Employer') }}</span>
                 </a>
+                @endif
+                @if (\App\Support\PartnerTeam::canOpen('payment'))
                 <a href="{{ route('worker.partner.payment') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.payment', 'worker.partner.payment.*') ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>
                     <span>{{ __('locale.Payment') }}</span>
                 </a>
+                @endif
 
+                @if (\App\Support\PartnerTeam::canOpen('customers'))
                 <a href="{{ route('worker.partner.customers') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.customers', 'worker.partner.customers.*') ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     <span>{{ __('locale.Customers') }}</span>
                 </a>
+                @endif
+                @if (\App\Support\PartnerTeam::canOpen('website-visitors'))
                 <a href="{{ route('worker.partner.website-visitors') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.website-visitors', 'worker.partner.website-visitors.*') ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
                     <span>{{ __('locale.Website Visitor') }}</span>
                 </a>
+                @endif
 
                 <div class="wp-nav-label">{{ __('locale.Account') }}</div>
+                @if (\App\Support\PartnerTeam::canOpen('prices'))
                 <a href="{{ route('worker.partner.prices') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.prices', 'worker.partner.prices.*') ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
                     <span>{{ __('locale.Price Update') }}</span>
                 </a>
+                @endif
+                @if (\App\Support\PartnerTeam::canOpen('website'))
                 <a href="{{ route('worker.partner.website') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.website', 'worker.partner.website.*') ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                     <span>{{ __('locale.Website') }}</span>
                 </a>
+                @endif
                 <a href="{{ route('worker.partner.account') }}" class="wp-nav-link {{ (request()->routeIs('worker.partner.account', 'worker.partner.account.*') || request()->routeIs('worker.partner.profile', 'worker.partner.profile.*')) ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
                     <span>{{ __('locale.My Account') }}</span>
                 </a>
+                @if (\App\Support\PartnerTeam::isOwner())
+                <a href="{{ route('worker.partner.team-members') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.team-members', 'worker.partner.team-members.*') ? 'is-active' : '' }}">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+                    <span>{{ __('locale.Team Members') }}</span>
+                </a>
+                @endif
             </nav>
 
             <div class="wp-sidebar-footer">
