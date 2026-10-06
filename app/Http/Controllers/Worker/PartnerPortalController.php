@@ -1387,13 +1387,22 @@ class PartnerPortalController extends Controller
             'licence_number' => 'nullable|string|max:100',
             'country_id' => 'nullable|integer|exists:countries,id',
             'city_id' => 'nullable|integer|exists:cities,id',
+            // Secondary Email / Mobile (same columns as CRM -> Partner ->
+            // Account, App\Support\PartnerContact). "sometimes": the Account
+            // Details prompt modal has no such fields and leaves them as they are.
+            'secondary_email' => ['sometimes', 'nullable', 'email', 'max:255'],
+            'secondary_mob' => ['sometimes', 'nullable', 'string', 'max:20', 'regex:/^[0-9\s\-+()]*$/'],
+            'secondary_mob_country_code' => ['sometimes', 'nullable', 'required_with:secondary_mob', \Illuminate\Validation\Rule::in(array_values(array_unique(array_filter(array_merge(array_map('strval', array_keys(\App\Support\CountryCodeOptions::all())), [\App\Support\PartnerContact::secondaryMobile($partner)[0]])))))],
         ], [
             'username.required' => __('locale.Please enter a username.'),
             'username.unique' => __('locale.This username is already taken.'),
             'username.regex' => __('locale.The username cannot contain spaces or @.'),
+            'secondary_mob_country_code.required_with' => __('locale.Please choose the country code.'),
         ], [
             'licence_number' => __('locale.Recruitment Licence Number'),
             'username' => __('locale.Username'),
+            'secondary_email' => __('locale.Secondary Email'),
+            'secondary_mob' => __('locale.Secondary Mobile'),
         ]);
 
         if ($validator->fails()) {
@@ -1418,6 +1427,16 @@ class PartnerPortalController extends Controller
         // (accountEmailSend/accountEmailVerify), never from this form.
         $partner->country_id = $request->country_id;
         $partner->city_id = $request->city_id;
+        if ($request->has('secondary_email')) {
+            $partner->secondary_email = $request->filled('secondary_email') ? trim($request->secondary_email) : null;
+        }
+        if ($request->has('secondary_mob')) {
+            // Stored format kept (PartnerContact::storedValue()), code in its own column.
+            $code = preg_replace('/\D+/', '', (string) $request->secondary_mob_country_code);
+            $local = $request->filled('secondary_mob') ? \App\Support\PhoneNumber::local($code, (string) $request->secondary_mob) : '';
+            $partner->secondary_mob = \App\Support\PartnerContact::storedValue($partner->secondary_mob, $code, $local);
+            $partner->secondary_mob_country_code = $local !== '' ? $code : null;
+        }
         $partner->save();
 
         if ($request->expectsJson()) {

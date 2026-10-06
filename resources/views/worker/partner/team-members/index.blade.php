@@ -45,13 +45,25 @@
                                 <td>{{ $member->email ?: '---' }}</td>
                                 <td dir="ltr">{{ $member->display_mobile ?: '---' }}</td>
                                 <td><span class="wp-badge {{ $member->status ? 'is-success' : 'is-neutral' }}">{{ $member->status ? __('locale.Active') : __('locale.Inactive') }}</span></td>
-                                <td style="white-space:nowrap;">
-                                    <a href="{{ route('worker.partner.team-members.show', $member->id) }}" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.View') }}</a>
-                                    <a href="{{ route('worker.partner.team-members.edit', $member->id) }}" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.Edit') }}</a>
-                                    <form method="POST" action="{{ route('worker.partner.team-members.destroy', $member->id) }}" style="display:inline;" onsubmit="return confirm(@js(__('locale.Delete this team member?')))">
-                                        @csrf
-                                        <button type="submit" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.Delete') }}</button>
-                                    </form>
+                                <td>
+                                    {{-- Same 3-dot Actions dropdown as the Employer list (body-appended
+                                    clone, employer-actions-menu.js - generic: the data-employer-*
+                                    attributes only pair each trigger with its menu, here by
+                                    team member id). --}}
+                                    <div class="wp-dropdown-wrap">
+                                        <button type="button" class="wp-icon-btn" data-employer-actions-trigger data-employer-id="{{ $member->id }}" aria-label="{{ __('locale.Actions') }}">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                                        </button>
+                                        <div class="wp-dropdown" data-employer-actions-menu="{{ $member->id }}">
+                                            <a href="{{ route('worker.partner.team-members.show', $member->id) }}" class="wp-menu-item">{{ __('locale.View Profile') }}</a>
+                                            <a href="{{ route('worker.partner.team-members.edit', $member->id) }}" class="wp-menu-item">{{ __('locale.Edit') }}</a>
+                                            <a href="{{ route('worker.partner.team-members.permissions', $member->id) }}" class="wp-menu-item">{{ __('locale.Permission') }}</a>
+                                            <form method="POST" action="{{ route('worker.partner.team-members.destroy', $member->id) }}" style="margin:0;" onsubmit="return confirm(@js(__('locale.Delete this team member?')))">
+                                                @csrf
+                                                <button type="submit" class="wp-menu-item is-danger">{{ __('locale.Delete') }}</button>
+                                            </form>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach
@@ -67,4 +79,8 @@
             <p>{{ __('locale.Add team members to let them sign in to your portal with the permissions you choose.') }}</p>
         </div>
     @endif
+@endsection
+
+@section('page-script')
+    <script src="{{ asset('worker/js/employer-actions-menu.js') }}?v={{ @filemtime(public_path('worker/js/employer-actions-menu.js')) ?: time() }}"></script>
 @endsection

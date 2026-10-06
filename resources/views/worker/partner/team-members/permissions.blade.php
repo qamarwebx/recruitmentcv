@@ -4,9 +4,15 @@ Same modules/actions (App\Support\PartnerTeam::modules()) and the same
 permissions[module][] / permissions[module.section][] inputs as before.
 $editable: checkboxes (Edit form) or read-only status (details page).
 $granted: the member's permissions (form: including old() input).
-Every group starts collapsed; its header opens/closes only that group. --}}
-@php $team = \App\Support\PartnerTeam::class; @endphp
-<div class="wp-perm-groups">
+$open: every group starts open (default: collapsed); its header still
+opens/closes only that group.
+data-perm-item / data-perm-part: hooks for the Permission page's live search
+(team-member-permission-search.js) - display only, inputs unchanged. --}}
+@php
+    $team = \App\Support\PartnerTeam::class;
+    $open = $open ?? false;
+@endphp
+<div class="wp-perm-groups" data-perm-groups>
     @foreach ($modules as $module => $actions)
         @php
             $sections = array_keys($team::SECTIONS[$module] ?? []);
@@ -17,8 +23,8 @@ Every group starts collapsed; its header opens/closes only that group. --}}
             $bodyId = 'wp-perm-' . ($editable ? 'edit' : 'view') . '-' . \Illuminate\Support\Str::slug($module);
             $moduleLabel = $team::moduleLabel($module);
         @endphp
-        <div class="wp-wc-section wp-perm-group" data-wc-collapse data-perm-module="{{ $module }}">
-            <button type="button" class="wp-wc-section-header" data-wc-collapse-toggle aria-expanded="false" aria-controls="{{ $bodyId }}">
+        <div class="wp-wc-section wp-perm-group{{ $open ? ' is-open' : '' }}" data-wc-collapse data-perm-module="{{ $module }}">
+            <button type="button" class="wp-wc-section-header" data-wc-collapse-toggle aria-expanded="{{ $open ? 'true' : 'false' }}" aria-controls="{{ $bodyId }}">
                 <span class="wp-wc-section-title">{{ $moduleLabel }}</span>
                 <span class="wp-perm-group-meta">
                     @if ($editable)
@@ -31,18 +37,18 @@ Every group starts collapsed; its header opens/closes only that group. --}}
             </button>
             <div class="wp-wc-section-body" id="{{ $bodyId }}" data-wc-collapse-body>
                 <div class="wp-wc-section-body-inner">
-                    <div class="wp-perm-label">{{ __('locale.Module') }}</div>
-                    <div class="wp-perm-actions">
+                    <div class="wp-perm-label" data-perm-part="actions">{{ __('locale.Module') }}</div>
+                    <div class="wp-perm-actions" data-perm-part="actions">
                         @foreach ($team::ACTIONS as $action)
                             @continue (!in_array($action, $actions, true))
                             @if ($editable)
-                                <label class="wp-perm-check">
+                                <label class="wp-perm-check" data-perm-item="actions">
                                     <input type="checkbox" name="permissions[{{ $module }}][]" value="{{ $action }}" aria-label="{{ $moduleLabel }} - {{ $action }}"
                                         @checked(in_array($action, $grantedActions, true))>
                                     <span>{{ __('locale.' . ucfirst($action)) }}</span>
                                 </label>
                             @else
-                                <span class="wp-perm-check">
+                                <span class="wp-perm-check" data-perm-item="actions">
                                     <span class="wp-badge {{ in_array($action, $grantedActions, true) ? 'is-success' : 'is-neutral' }}">{{ in_array($action, $grantedActions, true) ? '✓' : '✕' }}</span>
                                     <span>{{ __('locale.' . ucfirst($action)) }}</span>
                                 </span>
@@ -54,17 +60,17 @@ Every group starts collapsed; its header opens/closes only that group. --}}
                     switch each; only effective while the module itself is granted. --}}
                     @if ($sections)
                         @php $sectionOnly = in_array($module, $team::SECTION_ONLY, true); @endphp
-                        <div class="wp-perm-label">{{ $sectionOnly ? __('locale.Actions') : __('locale.Tabs') }}</div>
-                        <p class="wp-field-hint wp-perm-hint">{{ $sectionOnly
+                        <div class="wp-perm-label" data-perm-part="sections">{{ $sectionOnly ? __('locale.Actions') : __('locale.Tabs') }}</div>
+                        <p class="wp-field-hint wp-perm-hint" data-perm-part="sections">{{ $sectionOnly
                             ? __('locale.Allowed action (needs :module)', ['module' => $moduleLabel])
                             : __('locale.Tab access (saving also needs Update on :module)', ['module' => $moduleLabel]) }}</p>
-                        <ul class="wp-perm-children">
+                        <ul class="wp-perm-children" data-perm-part="sections">
                             @foreach ($sections as $section)
                                 @php
                                     $sectionKey = $module . '.' . $section;
                                     $isGranted = in_array($section, $grantedSections, true);
                                 @endphp
-                                <li>
+                                <li data-perm-item="sections">
                                     <span class="wp-perm-arrow" aria-hidden="true">&rarr;</span>
                                     @if ($editable)
                                         <label class="wp-perm-check">

@@ -642,9 +642,14 @@ class PartnerAuthController extends Controller
         if (!$partner->exists) {
             $partner->owner_mobile_no = $mobile;
         }
+        // The code chosen in the selector the OTP was sent with (Primary Mobile country code).
+        $partner->owner_mobile_country_code = preg_replace('/\D+/', '', (string) $request->session()->get('CountryCode')) ?: null;
         $partner->user_type = '1';
         $partner->country_id = $country->id ?? null;
-        $partner->status = 1;
+        // A new partner starts fully inactive/pending: Partner Status
+        // Inactive, Portal Status Deactive, Registration Request Pending -
+        // the admin approves/activates it from CRM -> Partner.
+        $partner->status = 0;
         $partner->portal_status = 0;
         $partner->registration_status = 0;
         // mobile_verified_at intentionally NOT set - still pending OTP
@@ -738,9 +743,13 @@ class PartnerAuthController extends Controller
         if (!$partner->exists) {
             $partner->owner_mobile_no = $mobile;
         }
+        // The code chosen in the selector the OTP was sent with (Primary Mobile country code).
+        $partner->owner_mobile_country_code = preg_replace('/\D+/', '', (string) $request->session()->get('CountryCode')) ?: null;
         $partner->user_type = '1';
         $partner->country_id = $country->id ?? null;
-        $partner->status = 1;
+        // New partner = inactive/pending until the admin approves/activates
+        // it (same initial statuses as registerPending()).
+        $partner->status = 0;
         $partner->portal_status = 0;
         $partner->registration_status = 0;
         // Only the password submitted by whoever actually passed OTP (none
@@ -868,6 +877,8 @@ class PartnerAuthController extends Controller
         }
 
         $partner->owner_mobile_no = $mobile;
+        // The code chosen in the selector the OTP was sent with (Primary Mobile country code).
+        $partner->owner_mobile_country_code = preg_replace('/\D+/', '', (string) $request->session()->get('CountryCode')) ?: null;
         $partner->mobile_verified_at = now();
         $partner->save();
 

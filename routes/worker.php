@@ -217,6 +217,9 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
     Route::get('/team-members/{id}/edit', [\App\Http\Controllers\Worker\PartnerTeamMemberController::class, 'edit'])->whereNumber('id')->name('team-members.edit');
     Route::post('/team-members/{id}', [\App\Http\Controllers\Worker\PartnerTeamMemberController::class, 'update'])->whereNumber('id')->name('team-members.update');
     Route::post('/team-members/{id}/delete', [\App\Http\Controllers\Worker\PartnerTeamMemberController::class, 'destroy'])->whereNumber('id')->name('team-members.destroy');
+    // Permissions are managed on their own page (Team Members -> ⋮ -> Permission), not in Add/Edit.
+    Route::get('/team-members/{id}/permissions', [\App\Http\Controllers\Worker\PartnerTeamMemberController::class, 'permissions'])->whereNumber('id')->name('team-members.permissions');
+    Route::post('/team-members/{id}/permissions', [\App\Http\Controllers\Worker\PartnerTeamMemberController::class, 'updatePermissions'])->whereNumber('id')->name('team-members.permissions.update');
 
     // Reuses the existing PartnerLanguageController (already used elsewhere for
     // the same purpose) - validates against config('app.locales'), stores in

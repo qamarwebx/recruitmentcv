@@ -9,20 +9,27 @@
 
     <form method="POST" action="{{ $editing ? route('worker.partner.team-members.update', $member->id) : route('worker.partner.team-members.store') }}" autocomplete="off">
         @csrf
-        <div class="wp-grid-2">
-            <div class="w-info-card wp-fade-in">
-                <h2>{{ $editing ? __('locale.Edit Team Member') : __('locale.Add Team Member') }}</h2>
+        {{-- Details only: permissions are managed on the member's own
+             Permission page (Team Members -> ⋮ -> Permission). Full content
+             width; two fields per row on desktop, one on tablet/mobile
+             (the portal's .w-form-grid, as in the Add/Edit Employer forms). --}}
+        <div class="w-info-card wp-fade-in">
+            <h2>{{ $editing ? __('locale.Edit Team Member') : __('locale.Add Team Member') }}</h2>
+            <div class="w-form-grid">
                 <div class="w-form-row">
                     <label class="w-form-label" for="tm-full-name">{{ __('locale.Full Name') }}</label>
                     <input type="text" id="tm-full-name" name="full_name" class="w-input" value="{{ old('full_name', $member->full_name) }}" maxlength="255" required>
+                    @error('full_name')<div class="w-form-error">{{ $message }}</div>@enderror
                 </div>
                 <div class="w-form-row">
                     <label class="w-form-label" for="tm-username">{{ __('locale.Username') }}</label>
                     <input type="text" id="tm-username" name="username" class="w-input" dir="ltr" value="{{ old('username', $member->username) }}" maxlength="120" autocapitalize="off" spellcheck="false">
+                    @error('username')<div class="w-form-error">{{ $message }}</div>@enderror
                 </div>
                 <div class="w-form-row">
                     <label class="w-form-label" for="tm-email">{{ __('locale.Email') }}</label>
                     <input type="email" id="tm-email" name="email" class="w-input" dir="ltr" value="{{ old('email', $member->email) }}" maxlength="255">
+                    @error('email')<div class="w-form-error">{{ $message }}</div>@enderror
                 </div>
                 <div class="w-form-row">
                     <label class="w-form-label">{{ __('locale.Mobile Number') }}</label>
@@ -34,6 +41,8 @@
                         </select>
                         <input type="tel" name="mobile" class="w-input" dir="ltr" inputmode="numeric" value="{{ old('mobile', $member->mobile) }}" maxlength="20">
                     </div>
+                    @error('country_code')<div class="w-form-error">{{ $message }}</div>@enderror
+                    @error('mobile')<div class="w-form-error">{{ $message }}</div>@enderror
                 </div>
                 <div class="w-form-row">
                     <label class="w-form-label" for="tm-password">{{ __('locale.Password') }}</label>
@@ -41,6 +50,7 @@
                         <input type="password" id="tm-password" name="password" class="w-input" autocomplete="new-password" placeholder="{{ $editing ? __('locale.Leave blank to keep the current password') : '' }}">
                         @include('worker.partials.password-toggle')
                     </div>
+                    @error('password')<div class="w-form-error">{{ $message }}</div>@enderror
                 </div>
                 <div class="w-form-row">
                     <label class="w-form-label" for="tm-password-confirm">{{ __('locale.Confirm Password') }}</label>
@@ -49,28 +59,20 @@
                         @include('worker.partials.password-toggle')
                     </div>
                 </div>
-                <p class="wp-field-hint" style="margin-top:-6px;">{{ __('locale.They sign in on your Partner Login with their username, email or mobile (password, OTP or Google with the same email).') }}</p>
+                <p class="wp-field-hint w-form-row-full" style="margin-top:-6px;">{{ __('locale.They sign in on your Partner Login with their username, email or mobile (password, OTP or Google with the same email).') }}</p>
                 <div class="w-form-row">
                     <label class="w-form-label" for="tm-status">{{ __('locale.Status') }}</label>
                     <select id="tm-status" name="status" class="w-select">
                         <option value="1" @selected((string) old('status', $member->status ? '1' : '0') === '1')>{{ __('locale.Active') }}</option>
                         <option value="0" @selected((string) old('status', $member->status ? '1' : '0') === '0')>{{ __('locale.Inactive') }}</option>
                     </select>
+                    @error('status')<div class="w-form-error">{{ $message }}</div>@enderror
                 </div>
-            </div>
-
-            {{-- Modules / actions come from the portal routes (App\Support\PartnerTeam::modules()). --}}
-            <div class="w-info-card wp-fade-in">
-                <h2>{{ __('locale.Permissions') }}</h2>
-                <p class="wp-field-hint" style="margin:-6px 0 12px;">{{ __('locale.Choose what this team member can do. Any action also grants View.') }}</p>
-                @include('worker.partner.team-members.permissions', ['editable' => true, 'granted' => old('permissions', $member->permissions ?? [])])
+                @unless ($editing)
+                    <p class="wp-field-hint w-form-row-full" style="margin-bottom:0;">{{ __('locale.After adding, choose what this team member can do from Team Members → ⋮ → Permission.') }}</p>
+                @endunless
             </div>
         </div>
         <button type="submit" class="w-btn w-btn-primary" style="margin-top:18px;">{{ __('locale.Save Changes') }}</button>
     </form>
-@endsection
-
-@section('page-script')
-    {{-- The Website Config sections' collapse handler (delegated, generic). --}}
-    <script src="{{ asset('worker/js/partner-website-config-collapse.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config-collapse.js')) ?: time() }}"></script>
 @endsection

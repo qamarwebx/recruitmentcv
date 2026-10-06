@@ -33,10 +33,12 @@
         accountUpdate route. A failed save comes back in edit mode with the
         typed values; a successful one lands back here in view mode. --}}
         @php
-            $accountFields = ['owner_name', 'username', 'rec_off_name', 'licence_number', 'country_id', 'city_id'];
+            $accountFields = ['owner_name', 'username', 'rec_off_name', 'licence_number', 'country_id', 'city_id', 'secondary_email', 'secondary_mob', 'secondary_mob_country_code'];
             $accountEditing = $errors->hasAny($accountFields);
             $accountCountry = optional($countries->firstWhere('id', $partner->country_id))->display_name;
             $accountCity = optional($cities->firstWhere('id', $partner->city_id))->display_name;
+            // Contact fields = the same partners row CRM -> Partner -> Account edits (App\Support\PartnerContact).
+            $secondaryMobile = \App\Support\PartnerContact::secondaryMobile($partner);
         @endphp
         <div class="w-info-card wp-fade-in" data-account-details @if ($accountEditing) data-account-editing @endif>
             <h2 class="wp-card-head-with-action">
@@ -71,6 +73,14 @@
                 <div class="wp-info-item">
                     <span>{{ __('locale.City') }}</span>
                     <strong>{{ $accountCity ?: '---' }}</strong>
+                </div>
+                <div class="wp-info-item">
+                    <span>{{ __('locale.Secondary Email') }}</span>
+                    <strong>{{ $partner->secondary_email ?: '---' }}</strong>
+                </div>
+                <div class="wp-info-item">
+                    <span>{{ __('locale.Secondary Mobile') }}</span>
+                    <strong dir="ltr">{{ \App\Support\PartnerContact::display($secondaryMobile) ?: '---' }}</strong>
                 </div>
             </div>
             <form action="{{ route('worker.partner.account.update') }}" method="POST" id="partner-account-form" data-account-form @unless ($accountEditing) hidden @endunless>
@@ -110,6 +120,21 @@
                         @endforeach
                     </select>
                 </div>
+                <div class="w-form-row">
+                    <label class="w-form-label" for="partner-secondary-email">{{ __('locale.Secondary Email') }}</label>
+                    <input type="email" name="secondary_email" id="partner-secondary-email" class="w-input" dir="ltr" value="{{ old('secondary_email', $partner->secondary_email) }}" maxlength="255" autocomplete="off">
+                    @error('secondary_email')<div class="w-form-error">{{ $message }}</div>@enderror
+                </div>
+                {{-- Same country-code selector as the Partner Login/Register modal. --}}
+                <div class="w-form-row">
+                    <label class="w-form-label" for="partner-secondary-mob">{{ __('locale.Secondary Mobile') }}</label>
+                    <div class="w-form-phone-row">
+                        @include('worker.partials.country-code-select', ['attr' => 'name=secondary_mob_country_code', 'selected' => old('secondary_mob_country_code', $secondaryMobile[0])])
+                        <input type="tel" name="secondary_mob" id="partner-secondary-mob" class="w-input" dir="ltr" inputmode="numeric" value="{{ old('secondary_mob', $secondaryMobile[1]) }}" maxlength="20" autocomplete="off">
+                    </div>
+                    @error('secondary_mob_country_code')<div class="w-form-error">{{ $message }}</div>@enderror
+                    @error('secondary_mob')<div class="w-form-error">{{ $message }}</div>@enderror
+                </div>
                 <div class="wp-form-actions">
                     <button type="submit" class="w-btn w-btn-primary">{{ __('locale.Save Changes') }}</button>
                     <button type="button" class="w-btn w-btn-outline" data-account-cancel>{{ __('locale.Cancel') }}</button>
@@ -124,16 +149,18 @@
                     {{ __('locale.Account Information') }}
                 </h2>
                 <div class="wp-info-grid">
+                    {{-- Primary Mobile / Email = owner_mobile_no (+ its country code) / email:
+                         the same values CRM -> Partner -> Account shows (PartnerContact). --}}
                     <div class="wp-info-item">
-                        <span>{{ __('locale.Mobile Number') }}</span>
+                        <span>{{ __('locale.Primary Mobile') }}</span>
                         <strong class="wp-editable-value">
-                            <span dir="ltr">{{ $partner->owner_mobile_no ?: __('locale.Not set (signed in via Google)') }}</span>
+                            <span dir="ltr">{{ \App\Support\PartnerContact::display(\App\Support\PartnerContact::primaryMobile($partner)) ?: __('locale.Not set (signed in via Google)') }}</span>
                             {{-- Existing add/verify-mobile flow (partner-auth.js). --}}
                             <button type="button" class="wp-edit-icon" data-add-mobile-trigger aria-label="{{ __('locale.Edit Mobile Number') }}" title="{{ __('locale.Edit Mobile Number') }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
                         </strong>
                     </div>
                     <div class="wp-info-item">
-                        <span>{{ __('locale.Email') }}</span>
+                        <span>{{ __('locale.Primary Email') }}</span>
                         <strong class="wp-editable-value">
                             <span data-partner-email-value>{{ $partner->email ?: '---' }}</span>
                             <button type="button" class="wp-edit-icon" data-email-edit-trigger aria-label="{{ __('locale.Edit Email') }}" title="{{ __('locale.Edit Email') }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>

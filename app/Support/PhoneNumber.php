@@ -40,6 +40,56 @@ class PhoneNumber
     }
 
     /**
+     * Display form "+<code> <local>" of a stored number (display only -
+     * nothing is re-stored). Numbers stored CRM-style already carry their
+     * code: the given (partner's) code is recognized first, then any known
+     * code whose remainder - trunk 0 dropped - is exactly that country's
+     * local length (local numbers are never that long). Otherwise the given
+     * code is put in front; with no code known the number is shown as stored.
+     */
+    public static function international(?string $countryCode, ?string $mobile): string
+    {
+        [$code, $local] = self::split($countryCode, $mobile);
+        if ($local === '') {
+            return '';
+        }
+
+        return $code === null ? trim((string) $mobile) : '+' . $code . ' ' . $local;
+    }
+
+    /**
+     * [code, local number] of a stored number, by the same rules as
+     * international(): code null when none is known (local = digits as
+     * stored); local '' when there is no number.
+     */
+    public static function split(?string $countryCode, ?string $mobile): array
+    {
+        $digits = preg_replace('/\D+/', '', (string) $mobile);
+        $code = preg_replace('/\D+/', '', (string) $countryCode);
+        if ($digits === '') {
+            return [$code !== '' ? $code : null, ''];
+        }
+
+        $candidates = array_unique(array_merge([$code], array_map('strval', array_keys(self::LOCAL_LENGTH))));
+        foreach ($candidates as $candidate) {
+            $expected = self::LOCAL_LENGTH[$candidate] ?? null;
+            if ($expected === null || !str_starts_with($digits, $candidate)) {
+                continue;
+            }
+            $rest = ltrim(substr($digits, strlen($candidate)), '0');
+            if (strlen($rest) === $expected) {
+                return [$candidate, $rest];
+            }
+        }
+
+        if ($code === '') {
+            return [null, $digits];
+        }
+
+        return [$code, self::local($code, $digits)];
+    }
+
+    /**
      * Every stored form the same number can have: local, code + local, and
      * the same with the national trunk 0 kept (e.g. CRM "9660569990906").
      */

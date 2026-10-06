@@ -6,7 +6,8 @@
 @section('content')
     <a href="{{ route('worker.partner.team-members') }}" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:16px;">&larr; {{ __('locale.Team Members') }}</a>
 
-    <div class="wp-grid-2">
+    {{-- Details only: permissions have their own page (Team Members -> ⋮ -> Permission). --}}
+    <div style="max-width:820px;">
         <div class="w-info-card wp-fade-in">
             <h2 class="wp-card-head-with-action">
                 {{ $member->full_name }}
@@ -25,14 +26,5 @@
                 <button type="submit" class="w-btn w-btn-outline">{{ __('locale.Delete') }}</button>
             </form>
         </div>
-        <div class="w-info-card wp-fade-in">
-            <h2>{{ __('locale.Permissions') }}</h2>
-            @include('worker.partner.team-members.permissions', ['editable' => false, 'granted' => $member->permissions ?? []])
-        </div>
     </div>
-@endsection
-
-@section('page-script')
-    {{-- The Website Config sections' collapse handler (delegated, generic). --}}
-    <script src="{{ asset('worker/js/partner-website-config-collapse.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config-collapse.js')) ?: time() }}"></script>
 @endsection

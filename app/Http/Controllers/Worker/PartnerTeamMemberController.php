@@ -52,24 +52,49 @@ class PartnerTeamMemberController extends Controller
 
     public function create()
     {
-        return view('worker.partner.team-members.form', ['member' => new PartnerTeamMember(['status' => true, 'country_code' => '966']), 'modules' => PartnerTeam::modules()]);
+        return view('worker.partner.team-members.form', ['member' => new PartnerTeamMember(['status' => true, 'country_code' => '966'])]);
     }
 
     public function store(Request $request)
     {
-        $member = new PartnerTeamMember(['partner_id' => $this->partnerId()]);
+        // Added without permissions (nothing granted); they are set afterwards
+        // on the member's Permission page.
+        $member = new PartnerTeamMember(['partner_id' => $this->partnerId(), 'permissions' => []]);
 
         return $this->save($request, $member);
     }
 
     public function show($id)
     {
-        return view('worker.partner.team-members.show', ['member' => $this->member($id), 'modules' => PartnerTeam::modules()]);
+        return view('worker.partner.team-members.show', ['member' => $this->member($id)]);
     }
 
     public function edit($id)
     {
-        return view('worker.partner.team-members.form', ['member' => $this->member($id), 'modules' => PartnerTeam::modules()]);
+        return view('worker.partner.team-members.form', ['member' => $this->member($id)]);
+    }
+
+    /**
+     * Team Members -> ⋮ -> Permission: the member's permissions on their own
+     * page (same modules/actions/sections UI and the same stored JSON as
+     * before). Only this partner's own members (member() -> 404 otherwise).
+     */
+    public function permissions($id)
+    {
+        return view('worker.partner.team-members.permission-edit', ['member' => $this->member($id), 'modules' => PartnerTeam::modules()]);
+    }
+
+    public function updatePermissions(Request $request, $id)
+    {
+        $member = $this->member($id);
+        $request->validate(['permissions' => ['nullable', 'array']]);
+
+        // Same rules as before: only real modules/actions/sections, any action implies view.
+        $member->permissions = PartnerTeam::sanitize($request->input('permissions', []));
+        $member->save();
+
+        return redirect()->route('worker.partner.team-members.permissions', $member->id)
+            ->with('success', __('locale.Team member permissions updated.'));
     }
 
     public function update(Request $request, $id)
@@ -87,7 +112,9 @@ class PartnerTeamMemberController extends Controller
     /**
      * Create / update. Identifiers must be unique across partners AND team
      * members (the Partner Login resolves one account per identifier); at
-     * least one way to sign in is required.
+     * least one way to sign in is required. Permissions are not part of this
+     * form - saved permissions are left exactly as they are
+     * (updatePermissions() is the only place that changes them).
      */
     private function save(Request $request, PartnerTeamMember $member)
     {
@@ -95,7 +122,6 @@ class PartnerTeamMemberController extends Controller
         [$validator, $code, $local] = PartnerTeam::identityValidator($request, $id, [
             'password' => ['nullable', 'confirmed', Password::defaults()],
             'status' => ['nullable', 'in:0,1'],
-            'permissions' => ['nullable', 'array'],
         ]);
 
         if ($validator->fails()) {
@@ -109,7 +135,6 @@ class PartnerTeamMemberController extends Controller
             'country_code' => $local ? $code : null,
             'mobile' => $local ?: null,
             'status' => $request->input('status', '1') === '1',
-            'permissions' => PartnerTeam::sanitize($request->input('permissions', [])),
         ]);
         if ($request->filled('password')) {
             $member->password = Hash::make($request->password);
@@ -117,7 +142,10 @@ class PartnerTeamMemberController extends Controller
         $member->partner_id = $this->partnerId();   // never from the request
         $member->save();
 
-        return redirect()->route('worker.partner.team-members.show', $member->id)
+        // New member -> the listing, where ⋮ -> Permission sets what they can do.
+        return ($id
+            ? redirect()->route('worker.partner.team-members.show', $member->id)
+            : redirect()->route('worker.partner.team-members'))
             ->with('success', $id ? __('locale.Team member updated.') : __('locale.Team member added.'));
     }
 }
