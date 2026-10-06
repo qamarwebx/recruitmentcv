@@ -91,6 +91,10 @@ class PartnerTeam
      */
     public const CROSS_GRANTS = [
         'candidates.show' => ['orders', 'view_candidate'],
+        'candidates.passport' => ['orders', 'view_candidate'],   // the candidate page's blurred passport image
+        'candidates.activity.visit' => ['orders', 'view_candidate'],       // the candidate page's activity reports
+        'candidates.activity.heartbeat' => ['orders', 'view_candidate'],
+        'candidates.activity.click' => ['orders', 'view_candidate'],
         'candidates.cv' => ['orders', 'download_cv'],
     ];
 
@@ -374,7 +378,9 @@ class PartnerTeam
         $segment = Str::before($name, '.');
         $module = self::MODULE_ALIASES[$segment] ?? $segment;
 
-        if (in_array(strtoupper($method), ['GET', 'HEAD'], true) || preg_match('/\.filter\.(save|reset)$/', $name)) {
+        // Candidate Detail activity reports (presence / clicks) only record
+        // viewing, so they count as "view" like the page itself.
+        if (in_array(strtoupper($method), ['GET', 'HEAD'], true) || preg_match('/\.filter\.(save|reset)$/', $name) || preg_match('/\.activity\.(visit|heartbeat|click)$/', $name)) {
             $action = 'view';
         } elseif (preg_match('/\.(store|hire)$/', $name)) {
             $action = 'create';

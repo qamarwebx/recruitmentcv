@@ -9,6 +9,11 @@
     $canViewCandidate = $can('view_candidate');
     $canDownloadCv = $can('download_cv');
     $canCancel = $can('cancel_booking');
+    // Download CV links go through PartnerPortalController::candidateCv
+    // (refuses partners not fully verified, Partner::isFullyVerified()); the
+    // direct-file fallback for an order without a candidate slug is only
+    // offered to a fully verified partner, since a plain file link can't be checked.
+    $cvFallbackAllowed = (bool) optional(\Illuminate\Support\Facades\Auth::guard('partner')->user())->isFullyVerified();
 @endphp
 <div class="wp-listing-toolbar">
     {{-- Active / Deployed / Cancelled with their counts (same filtered
@@ -127,7 +132,7 @@
                     @endif
                     {{-- Same cv_execute gate and Download CV endpoint as
                     candidates/show.blade.php (this partner's own B2B CV). --}}
-                    @if ($canDownloadCv && $order->cv_execute == 1 && $order->cv_execute_file != '')
+                    @if ($canDownloadCv && $order->cv_execute == 1 && $order->cv_execute_file != '' && ($order->candidate_slug || $cvFallbackAllowed))
                         <a href="{{ $order->candidate_slug ? route('worker.partner.candidates.cv', $order->candidate_slug) : asset('admin/assets/images/pdf/' . $order->cv_execute_file) }}" target="_blank" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.Download CV') }}</a>
                     @endif
                     @if ($canCancel && (int) $order->booking_status !== 2)
@@ -211,7 +216,7 @@
                             <td>
                                 @php
                                     $menuViewCandidate = $canViewCandidate && $order->candidate_slug;
-                                    $menuCv = $canDownloadCv && $order->cv_execute == 1 && $order->cv_execute_file != '';
+                                    $menuCv = $canDownloadCv && $order->cv_execute == 1 && $order->cv_execute_file != '' && ($order->candidate_slug || $cvFallbackAllowed);
                                     $menuCancel = $canCancel && (int) $order->booking_status !== 2;
                                 @endphp
                                 @if ($canViewOrder || $menuViewCandidate || $menuCv || $menuCancel)

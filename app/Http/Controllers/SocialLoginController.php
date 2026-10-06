@@ -337,11 +337,9 @@ class SocialLoginController extends Controller
             $partner->save();
         }
 
-        if ((int) $partner->registration_status === 0) {
-            return redirect($partnerLoginPage . '?login=1&auth_message=' . urlencode('Your registration is pending approval.'));
-        }
-
-        if ((int) $partner->registration_status === 2) {
+        // Pending partners sign in (Hire Now / Download CV wait for approval -
+        // Partner::isRegistrationApproved()); a Rejected one can't.
+        if ($partner->isRegistrationRejected()) {
             return redirect($partnerLoginPage . '?login=1&auth_message=' . urlencode('Your registration has been rejected.'));
         }
 

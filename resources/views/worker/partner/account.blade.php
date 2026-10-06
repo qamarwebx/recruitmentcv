@@ -150,20 +150,36 @@
                 </h2>
                 <div class="wp-info-grid">
                     {{-- Primary Mobile / Email = owner_mobile_no (+ its country code) / email:
-                         the same values CRM -> Partner -> Account shows (PartnerContact). --}}
+                         the same values CRM -> Partner -> Account shows (PartnerContact).
+                         Badges = the stored verification state: Partner::hasVerifiedMobile()
+                         (number + mobile_verified_at, set by the mobile OTP flows) and
+                         email_verified_at (set by the email-code flow) - as in CRM.
+                         The email is shown in lowercase (display only; data-email-stored
+                         keeps the stored value for partner-account-email.js). --}}
+                    @php
+                        $mobileVerified = $partner->hasVerifiedMobile();
+                        $emailVerified = $partner->hasVerifiedEmail();
+                    @endphp
                     <div class="wp-info-item">
                         <span>{{ __('locale.Primary Mobile') }}</span>
                         <strong class="wp-editable-value">
-                            <span dir="ltr">{{ \App\Support\PartnerContact::display(\App\Support\PartnerContact::primaryMobile($partner)) ?: __('locale.Not set (signed in via Google)') }}</span>
-                            {{-- Existing add/verify-mobile flow (partner-auth.js). --}}
-                            <button type="button" class="wp-edit-icon" data-add-mobile-trigger aria-label="{{ __('locale.Edit Mobile Number') }}" title="{{ __('locale.Edit Mobile Number') }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+                            <span class="wp-editable-text wp-account-mobile-value" dir="ltr">{{ \App\Support\PartnerContact::display(\App\Support\PartnerContact::primaryMobile($partner)) ?: __('locale.Not set (signed in via Google)') }}</span>
+                            <span class="wp-editable-actions">
+                                <span class="wp-badge wp-verify-badge {{ $mobileVerified ? 'is-success' : 'is-neutral' }}" data-partner-mobile-badge>{{ $mobileVerified ? __('locale.Verified') : __('locale.Not Verified') }}</span>
+                                {{-- Existing add/verify-mobile flow (partner-auth.js). --}}
+                                <button type="button" class="wp-edit-icon" data-add-mobile-trigger aria-label="{{ __('locale.Edit Mobile Number') }}" title="{{ __('locale.Edit Mobile Number') }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+                            </span>
                         </strong>
                     </div>
                     <div class="wp-info-item">
                         <span>{{ __('locale.Primary Email') }}</span>
                         <strong class="wp-editable-value">
-                            <span data-partner-email-value>{{ $partner->email ?: '---' }}</span>
-                            <button type="button" class="wp-edit-icon" data-email-edit-trigger aria-label="{{ __('locale.Edit Email') }}" title="{{ __('locale.Edit Email') }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+                            <span class="wp-editable-text wp-account-email-value" dir="ltr" data-partner-email-value data-email-stored="{{ $partner->email }}">{{ $partner->email ? \Illuminate\Support\Str::lower($partner->email) : '---' }}</span>
+                            <span class="wp-editable-actions">
+                                {{-- partner-account-email.js switches it to Verified after a verified change. --}}
+                                <span class="wp-badge wp-verify-badge {{ $emailVerified ? 'is-success' : 'is-neutral' }}" data-partner-email-badge data-verified-label="{{ __('locale.Verified') }}">{{ $emailVerified ? __('locale.Verified') : __('locale.Not Verified') }}</span>
+                                <button type="button" class="wp-edit-icon" data-email-edit-trigger aria-label="{{ __('locale.Edit Email') }}" title="{{ __('locale.Edit Email') }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+                            </span>
                         </strong>
                     </div>
                     <div class="wp-info-item">

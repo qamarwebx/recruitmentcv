@@ -46,14 +46,6 @@ class Partner extends Authenticatable
     ];
 
     /**
-     * Single source of truth for "can this partner Hire Now" - both a
-     * mobile number on file AND it being verified are required.
-     * mobile_verified_at can be set (e.g. stale/legacy data, or a partner
-     * who verified a number and then had it cleared) while
-     * owner_mobile_no is empty, so checking mobile_verified_at alone is
-     * NOT sufficient - both flags must be checked together, every time.
-     */
-    /**
      * Partner Account -> Edit Account Details fields that are still empty
      * (form field names): Full Name, Company / Recruitment Office Name,
      * Recruitment Licence Number, Country, City. Drives the once-per-login
@@ -73,9 +65,60 @@ class Partner extends Authenticatable
         return $missing;
     }
 
+    /**
+     * A verified mobile: a number on file AND mobile_verified_at (set only by
+     * the mobile OTP flows). mobile_verified_at can be set (e.g. stale/legacy
+     * data, or a partner who verified a number and then had it cleared)
+     * while owner_mobile_no is empty, so checking mobile_verified_at alone is
+     * NOT sufficient - both are checked together, every time.
+     */
     public function hasVerifiedMobile(): bool
     {
         return !empty($this->owner_mobile_no) && !is_null($this->mobile_verified_at);
+    }
+
+    /**
+     * A verified email: an address on file AND email_verified_at (set only by
+     * the emailed-code flow, PartnerPortalController::accountEmailVerify()).
+     * Same both-flags rule as hasVerifiedMobile().
+     */
+    public function hasVerifiedEmail(): bool
+    {
+        return filled($this->email) && !is_null($this->email_verified_at);
+    }
+
+    /**
+     * Single source of truth for a partner's candidate actions - Hire Now,
+     * Download CV and seeing the passport image: mobile AND email verified.
+     * Enforced server-side (PartnerHireController::store(),
+     * PartnerPortalController::candidateCv(), candidate-gallery's passport).
+     */
+    public function isFullyVerified(): bool
+    {
+        return $this->hasVerifiedMobile() && $this->hasVerifiedEmail();
+    }
+
+    /**
+     * CRM Registration Request = Approved (registration_status 1). The one
+     * check for Hire Now and Download CV (PartnerHireController::store(),
+     * PartnerPortalController::candidateCv()) - read from this row on every
+     * request, so a change in the CRM applies on the next click. It does NOT
+     * gate signing in or the Portal itself (see isRegistrationRejected()).
+     */
+    public function isRegistrationApproved(): bool
+    {
+        return (int) $this->registration_status === 1;
+    }
+
+    /**
+     * CRM Registration Request = Rejected (registration_status 2): the only
+     * registration state that refuses sign-in / the Portal. Pending partners
+     * sign in and use the Portal; only Hire Now / Download CV wait for
+     * approval (isRegistrationApproved()).
+     */
+    public function isRegistrationRejected(): bool
+    {
+        return (int) $this->registration_status === 2;
     }
 
     /**

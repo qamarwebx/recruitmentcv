@@ -165,9 +165,24 @@ class SiteBrand
      * blurb instead of Qamr's own "about" text. Main site: the global values
      * exactly as before.
      */
+    /**
+     * The global RecruitmentCV footer phone - what recruitmentcv.com's footer
+     * shows (frontendwebsiteconfigs: bottom contact phone, else contact phone).
+     * Also the support number of the partner Candidate Detail "Hire Candidate"
+     * modal. $frontwebsite omitted = the saved row.
+     */
+    public static function globalFooterPhone($frontwebsite = false): ?string
+    {
+        if ($frontwebsite === false) {
+            $frontwebsite = \Illuminate\Support\Facades\DB::table('frontendwebsiteconfigs')->first();
+        }
+
+        return $frontwebsite->bottom_contact_us_phone ?? ($frontwebsite->contact_us_phone ?? null);
+    }
+
     public static function footer($frontwebsite): array
     {
-        $globalPhone = $frontwebsite->bottom_contact_us_phone ?? ($frontwebsite->contact_us_phone ?? null);
+        $globalPhone = self::globalFooterPhone($frontwebsite);
         $globalEmail = $frontwebsite->bottom_contact_us_email ?? null;
         $company = self::company();
         $locale = app()->getLocale();

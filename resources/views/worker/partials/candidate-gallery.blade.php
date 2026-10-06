@@ -18,7 +18,18 @@
     // when photo_file is empty, and onerror covers a genuinely broken CRM URL.
     $slides[] = ['thumb' => $imagePath, 'html' => '<img src="' . $imagePath . '" alt="' . e($post->display_name) . '" ' . $imgFallback . '>'];
 
-    if ($passUrl = \App\Support\CandidatePhoto::urlIfExists($post->pass_file)) {
+    // Passport: a signed-in partner who is not fully verified (mobile AND
+    // email, Partner::isFullyVerified()) gets a server-blurred copy
+    // (PartnerPortalController::candidatePassportPreview) - the original
+    // file's URL is not put in the page for them. Customers, guests and
+    // verified partners: unchanged.
+    $galleryPartner = \Illuminate\Support\Facades\Auth::guard('partner')->user();
+    $blurPassport = $galleryPartner && !$galleryPartner->isFullyVerified();
+    if (\App\Support\CandidatePhoto::exists($post->pass_file) && $blurPassport) {
+        $passPreview = route('worker.partner.candidates.passport', $post->slug_text);
+        $slides[] = ['thumb' => $passPreview, 'html' => '<div class="w-gallery-blurred"><img src="' . $passPreview . '" alt="Passport photo (blurred)" ' . $imgFallback . '>'
+            . '<span class="w-gallery-blurred-note">' . e(__('locale.Verify your mobile number and email address to view the passport.')) . '</span></div>'];
+    } elseif ($passUrl = \App\Support\CandidatePhoto::urlIfExists($post->pass_file)) {
         $slides[] = ['thumb' => $passUrl, 'html' => '<img src="' . $passUrl . '" alt="Passport photo" ' . $imgFallback . '>'];
     }
     if ($licUrl = \App\Support\CandidatePhoto::urlIfExists($post->lic_file)) {

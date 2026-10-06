@@ -35,7 +35,8 @@ class PartnerAuthController extends Controller
     {
         $partner = Auth::guard('partner')->user();
 
-        if ($partner && (int) $partner->registration_status === 1) {
+        // Already signed in (Pending or Approved - only Rejected can't hold a session).
+        if ($partner && !$partner->isRegistrationRejected()) {
             return redirect($partner->portalBaseUrl() . route('worker.partner.candidates', [], false));
         }
 
@@ -108,11 +109,9 @@ class PartnerAuthController extends Controller
             $partner->save();
         }
 
-        if ((int) $partner->registration_status === 0) {
-            return response()->json(['status' => 'pending', 'message' => __('locale.Your registration is pending approval.')], 403);
-        }
-
-        if ((int) $partner->registration_status === 2) {
+        // Pending partners sign in (Hire Now / Download CV wait for approval -
+        // Partner::isRegistrationApproved()); a Rejected one can't.
+        if ($partner->isRegistrationRejected()) {
             return response()->json(['status' => 'rejected', 'message' => __('locale.Your registration has been rejected.')], 403);
         }
 
@@ -242,7 +241,9 @@ class PartnerAuthController extends Controller
         if (!$member->status) {
             return response()->json(['status' => 'error', 'message' => __('locale.This team member account is disabled. Please contact your partner.')], 403);
         }
-        if (!$partner || (int) $partner->registration_status !== 1) {
+        // Same rule as the partner: a Rejected partner's team can't sign in;
+        // Pending is fine (Hire Now / Download CV wait for approval).
+        if (!$partner || $partner->isRegistrationRejected()) {
             return response()->json(['status' => 'error', 'message' => __('locale.Your partner account is not active.')], 403);
         }
 
@@ -268,11 +269,8 @@ class PartnerAuthController extends Controller
             return response()->json(['status' => 'error', 'message' => __('locale.Please log in with OTP once to verify your mobile number.')], 403);
         }
 
-        if ((int) $partner->registration_status === 0) {
-            return response()->json(['status' => 'pending', 'message' => __('locale.Your registration is pending approval.')], 403);
-        }
-
-        if ((int) $partner->registration_status === 2) {
+        // Pending signs in; Rejected can't (Partner::isRegistrationRejected()).
+        if ($partner->isRegistrationRejected()) {
             return response()->json(['status' => 'rejected', 'message' => __('locale.Your registration has been rejected.')], 403);
         }
 
@@ -430,8 +428,9 @@ class PartnerAuthController extends Controller
 
     /**
      * Shared email-code issuer (email login + Forgot Password): a 6-digit
-     * code emailed to $partner's stored email through the RecruitmentCV
-     * mailer (global Website SMTP, else .env) and the branded
+     * code emailed to $partner's stored email through this website's SMTPs
+     * (App\Support\SmtpMailer: the partner site's own, then Global, else
+     * .env) and the branded
      * partner-email-verification template; only its hash goes into the
      * session under $key, with the partner/email it was sent to, an expiry
      * and an attempt counter. $partner null (no match) or a failed send
@@ -448,7 +447,7 @@ class PartnerAuthController extends Controller
 
         if ($partner && filled($partner->email)) {
             try {
-                \App\Models\WebsiteSmtpSetting::mailerOrDefault()->to($partner->email)->send(new \App\Mail\SendOTPVerification([
+                \App\Support\SmtpMailer::forSite()->to($partner->email)->send(new \App\Mail\SendOTPVerification([
                     'name' => $member ? $member->full_name : ($partner->owner_name ?: $partner->rec_off_name),
                     'company' => $member ? optional($member->partner)->rec_off_name : $partner->rec_off_name,
                     'EmailOtp' => $code,
@@ -789,9 +788,16 @@ class PartnerAuthController extends Controller
         OtpVerification::consume($request);
         $request->session()->forget(['Mobile', 'new_partner']);
 
+        // Signed in right away (the mobile was just OTP-verified): a Pending
+        // partner uses the Portal; Hire Now / Download CV wait for the CRM
+        // approval. The "Registration Submitted" screen offers the dashboard.
+        Auth::guard('partner')->login($partner);
+        $request->session()->regenerate();
+
         return response()->json([
             'status' => 'pending',
             'message' => __('locale.Thanks for registering! Your account is pending admin approval. We will notify you once approved.'),
+            'redirect' => $partner->portalBaseUrl() . route('worker.partner.dashboard', [], false),
         ]);
     }
 
@@ -839,10 +845,8 @@ class PartnerAuthController extends Controller
 
         $partner = Partner::find($partnerId);
 
-        if (!$partner || (int) $partner->registration_status !== 1) {
-            $message = $partner && (int) $partner->registration_status === 2
-                ? 'Your registration has been rejected.'
-                : 'Your registration is pending approval.';
+        if (!$partner || $partner->isRegistrationRejected()) {
+            $message = $partner ? 'Your registration has been rejected.' : 'That Google sign-in link has expired. Please try again.';
 
             return redirect()->route('worker.home', ['login' => 1, 'auth_message' => $message]);
         }

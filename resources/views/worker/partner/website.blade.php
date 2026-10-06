@@ -146,11 +146,13 @@
                             <input type="file" class="w-input" accept="image/png,image/jpeg,image/webp" data-logo-input="ar">
                         </div>
                     </div>
-                    {{-- Same Domain row / folder as the logos (website_favicon). --}}
+                    {{-- Same Domain row / folder as the logos (website_favicon). Preview =
+                    the effective favicon the website itself uses (BrandingAssets: this
+                    partner's file -> the global one -> the built-in default). --}}
                     <div class="w-form-row">
                         <label class="w-form-label">{{ __('locale.Favicon') }}</label>
                         <div class="wp-logo-upload">
-                            <img src="{{ $domain->website_favicon ? asset('admin/assets/images/partner/'.$domain->website_favicon) : asset('favicon.ico') }}" alt="Favicon" class="wp-favicon-preview" data-logo-preview="fav">
+                            <img src="{{ \App\Support\BrandingAssets::url('favicon', $partner->id) }}" alt="Favicon" class="wp-favicon-preview" data-logo-preview="fav">
                             <input type="file" class="w-input" accept="image/png,image/jpeg,image/webp" data-logo-input="fav">
                         </div>
                         <div class="form-text" style="color:var(--w-ink-500);font-size:0.8rem;margin-top:6px;">{{ __('locale.Square image recommended, e.g. 64 × 64 px.') }}</div>
@@ -278,97 +280,23 @@
     </div>
     @endif
 
-    {{-- SMTP - this partner's own sender for emails to their customers
-    (PartnerSmtpSetting, PartnerPortalController::settingsSmtpUpdate()).
-    Optional: until one is active, the default RecruitmentCV sender is used
-    and its non-secret values are shown. The password is write-only - never
-    rendered; blank keeps the saved one. --}}
-    @php
-        $smtpActive = $smtp && $smtp->isUsable();
-        $smtpValue = fn ($field) => $smtp ? $smtp->{$field} : ($smtpDefaults[$field] ?? null);
-        $smtpHasPassword = $smtp && filled($smtp->getRawOriginal('password'));
-    @endphp
+    {{-- SMTP - this partner's own ordered SMTP list (the same list and
+    backend as CRM -> Website -> SMTP: App\Support\SmtpSettings, actions in
+    PartnerPortalController::smtp*). Emails from this partner's website and
+    dashboard try them in order, then the default RecruitmentCV settings.
+    Passwords are write-only - never rendered. --}}
     @if (in_array('smtp', $allowedTabs, true))
-    <div class="wp-settings-tab-pane {{ $activeTopTab === 'smtp' ? 'is-active' : '' }}" data-settings-tab-pane="smtp">
+    <div class="wp-settings-tab-pane {{ $activeTopTab === 'smtp' ? 'is-active' : '' }}" data-settings-tab-pane="smtp" id="smtp">
         <div class="w-info-card wp-fade-in">
             <h2>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
                 {{ __('locale.SMTP') }}
             </h2>
-            <p class="wp-field-hint wp-smtp-intro">{{ __('locale.Emails to your customers (order confirmations, email changes) are sent with these settings. Optional - when inactive, the default RecruitmentCV email settings are used.') }}</p>
-            <div class="wp-smtp-current">
-                <span class="w-form-label">{{ __('locale.Currently sending with') }}</span>
-                <span class="wp-badge {{ $smtpActive ? 'is-success' : 'is-neutral' }}" data-smtp-current
-                      data-label-custom="{{ __('locale.Your SMTP') }}" data-label-default="{{ __('locale.Default RecruitmentCV email settings') }}">
-                    {{ $smtpActive ? __('locale.Your SMTP') : __('locale.Default RecruitmentCV email settings') }}
-                </span>
-            </div>
+            <p class="wp-field-hint wp-smtp-intro">{{ __('locale.Emails from your website and dashboard (order confirmations, verification codes, email changes) are sent with your SMTPs, one at a time in this order: the next SMTP is used only if the one before it fails. When none is enabled or all fail, the default RecruitmentCV email settings are used.') }}</p>
             <div class="w-form-alert" style="display:none;" data-settings-alert="smtp"></div>
-            <form data-settings-form="smtp" autocomplete="off">
-                <div class="wp-info-grid">
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="smtp-mailer">{{ __('locale.Mailer') }}</label>
-                        <select id="smtp-mailer" name="mailer" class="w-select">
-                            @foreach (\App\Models\PartnerSmtpSetting::MAILERS as $value => $label)
-                                <option value="{{ $value }}">{{ $label }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="smtp-host">{{ __('locale.Host') }}</label>
-                        <input type="text" id="smtp-host" name="host" class="w-input" dir="ltr" maxlength="255" placeholder="smtp.example.com"
-                               value="{{ $smtpValue('host') }}">
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="smtp-port">{{ __('locale.Port') }}</label>
-                        <select id="smtp-port" name="port" class="w-select" dir="ltr">
-                            @foreach (\App\Models\PartnerSmtpSetting::PORTS as $port)
-                                <option value="{{ $port }}" @selected((int) $smtpValue('port') === $port)>{{ $port }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="smtp-encryption">{{ __('locale.Encryption') }}</label>
-                        <select id="smtp-encryption" name="encryption" class="w-select">
-                            @foreach (\App\Models\PartnerSmtpSetting::ENCRYPTIONS as $value => $label)
-                                <option value="{{ $value }}" @selected((string) $smtpValue('encryption') === (string) $value)>{{ $value === '' ? __('locale.None') : $label }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="smtp-username">{{ __('locale.Username') }}</label>
-                        <input type="text" id="smtp-username" name="username" class="w-input" dir="ltr" maxlength="255" autocomplete="off"
-                               value="{{ $smtp->username ?? '' }}">
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="smtp-password">{{ __('locale.Password') }}</label>
-                        <input type="password" id="smtp-password" name="password" class="w-input" dir="ltr" maxlength="255" autocomplete="new-password"
-                               value="" placeholder="{{ $smtpHasPassword ? __('locale.Saved - leave blank to keep') : '' }}"
-                               data-placeholder-saved="{{ __('locale.Saved - leave blank to keep') }}">
-                        <div class="wp-field-hint">{{ __('locale.Stored encrypted and never shown again.') }}</div>
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="smtp-from-address">{{ __('locale.From Email') }}</label>
-                        <input type="email" id="smtp-from-address" name="from_address" class="w-input" dir="ltr" maxlength="255"
-                               value="{{ $smtpValue('from_address') }}">
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="smtp-from-name">{{ __('locale.From Name') }}</label>
-                        <input type="text" id="smtp-from-name" name="from_name" class="w-input" maxlength="255"
-                               value="{{ $smtpValue('from_name') }}">
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="smtp-status">{{ __('locale.Status') }}</label>
-                        <select id="smtp-status" name="status" class="w-select">
-                            <option value="1" @selected($smtp && $smtp->status)>{{ __('locale.Active') }}</option>
-                            <option value="0" @selected(!$smtp || !$smtp->status)>{{ __('locale.Inactive') }}</option>
-                        </select>
-                        <div class="wp-field-hint">{{ __('locale.Active checks the connection and login before saving.') }}</div>
-                    </div>
-                </div>
-
-                <button type="submit" class="w-btn w-btn-primary" data-settings-submit>{{ __('locale.Save Changes') }}</button>
-            </form>
+            <div data-smtp-root data-error-generic="{{ __('locale.Something went wrong. Please try again.') }}">
+                @include('worker.partner.partials.smtp-list', ['smtps' => $smtps])
+            </div>
         </div>
     </div>
     @endif
@@ -389,13 +317,13 @@
             company: "{{ route('worker.partner.settings.company') }}",
             logo: "{{ route('worker.partner.settings.logo') }}",
             domain: "{{ route('worker.partner.settings.domain') }}",
-            whatsapp: "{{ route('worker.partner.settings.whatsapp') }}",
-            smtp: "{{ route('worker.partner.settings.smtp') }}"
+            whatsapp: "{{ route('worker.partner.settings.whatsapp') }}"
         };
         window.WorkerBranchesUpdateUrl = "{{ route('worker.partner.website-config.branches.update') }}";
         window.WorkerBranchesConfirmDelete = "{{ __('locale.Are you sure you want to delete this branch?') }}";
     </script>
     <script src="{{ asset('worker/js/partner-settings.js') }}?v={{ @filemtime(public_path('worker/js/partner-settings.js')) ?: time() }}"></script>
+    <script src="{{ asset('worker/js/partner-smtp.js') }}?v={{ @filemtime(public_path('worker/js/partner-smtp.js')) ?: time() }}"></script>
     <script src="{{ asset('worker/js/partner-website-config.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config.js')) ?: time() }}"></script>
     <script src="{{ asset('worker/js/partner-website-config-branches.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config-branches.js')) ?: time() }}"></script>
     <script src="{{ asset('worker/js/partner-website-config-collapse.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config-collapse.js')) ?: time() }}"></script>

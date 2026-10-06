@@ -2,31 +2,45 @@
 
 namespace App\Models;
 
+use App\Mail\Transport\SmtpAttemptTransport;
+use App\Support\SmtpMailer;
 use Illuminate\Contracts\Mail\Mailer;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Mail\Mailer as LaravelMailer;
+use Symfony\Component\Mailer\Transport\TransportInterface;
 
 /**
- * The single global SMTP configuration for RecruitmentCV (CRM -> Website ->
- * SMTP), used for partner email-change verification - one config for
- * every partner, never per partner. Always row id 1. Kept identical in the
- * CRM and RecruitmentCV codebases (same website_smtp_settings table).
+ * One RecruitmentCV SMTP server (CRM -> Website -> SMTP, Partner Portal ->
+ * Website -> SMTP). partner_id NULL = a Global SMTP (recruitmentcv.com, and
+ * the fallback for every partner); otherwise that partner's own. Each
+ * website keeps an ordered list - priority 1 is tried first - which
+ * App\Support\SmtpMailer sends through with strictly sequential failover
+ * and App\Support\SmtpSettings manages. Kept identical in the CRM and
+ * RecruitmentCV codebases (same website_smtp_settings table).
  *
  * `password` is encrypted at rest with the shared APP_KEY and hidden from
- * every array/JSON serialization; it is only ever read to build a mailer.
+ * every array/JSON serialization; it is only ever read to build a transport.
  */
 class WebsiteSmtpSetting extends Model
 {
-    public const ID = 1;
-
     public const MAILERS = ['smtp' => 'SMTP'];
 
     public const ENCRYPTIONS = ['ssl' => 'SSL', 'tls' => 'TLS', '' => 'None'];
 
-    private const MAILER = 'website_smtp';
+    /** Ports a partner SMTP may use (standard SMTP submission ports). */
+    public const PARTNER_PORTS = [25, 465, 587, 2525];
+
+    /** SMTPs per website (Global, or one partner). */
+    public const MAX_PER_WEBSITE = 10;
+
+    /** Seconds before an unreachable SMTP counts as failed (the next one is then tried). */
+    public const TIMEOUT = 20;
 
     protected $fillable = [
+        'partner_id',
+        'name',
+        'priority',
         'mailer',
         'host',
         'port',
@@ -43,41 +57,50 @@ class WebsiteSmtpSetting extends Model
 
     protected $casts = [
         'password' => 'encrypted',
+        'partner_id' => 'integer',
+        'priority' => 'integer',
         'port' => 'integer',
         'status' => 'boolean',
     ];
 
-    public static function current(): ?self
+    public function partner()
     {
-        return static::find(static::ID);
+        return $this->belongsTo(Partner::class);
     }
 
-    /**
-     * The mailer RecruitmentCV should send through: this global SMTP when
-     * it is enabled and complete, otherwise the app's default (.env)
-     * mailer - also when the row can't be read (e.g. database or
-     * decryption error), so email keeps working either way.
-     */
+    /** The SMTPs of one website: that partner's own, or (null) the Global ones. */
+    public function scopeOfWebsite(Builder $query, ?int $partnerId): Builder
+    {
+        return $partnerId ? $query->where('partner_id', $partnerId) : $query->whereNull('partner_id');
+    }
+
+    /** Sending order: priority, then the oldest first. */
+    public function scopeOrdered(Builder $query): Builder
+    {
+        return $query->orderBy('priority')->orderBy('id');
+    }
+
+    /** The Global SMTP tried first. */
+    public static function current(): ?self
+    {
+        return static::ofWebsite(null)->ordered()->first();
+    }
+
+    /** The Global failover mailer (Global SMTPs in order, else the .env mailer). */
     public static function mailerOrDefault(): Mailer
     {
-        try {
-            $smtp = static::current();
-
-            if ($smtp && $smtp->isUsable()) {
-                return $smtp->mailer();
-            }
-        } catch (\Throwable $e) {
-            // Class only - never the message (it could echo settings).
-            Log::warning('Website SMTP unavailable, using the default mailer', ['exception' => get_class($e)]);
-        }
-
-        return Mail::mailer();
+        return SmtpMailer::global();
     }
 
     public function isUsable(): bool
     {
-        return $this->status
-            && $this->mailer === 'smtp'
+        return $this->status && $this->isComplete();
+    }
+
+    /** Every value a working SMTP sender needs is set. */
+    public function isComplete(): bool
+    {
+        return ($this->mailer ?: 'smtp') === 'smtp'
             && filled($this->host)
             && $this->port > 0
             && filled($this->username)
@@ -85,27 +108,51 @@ class WebsiteSmtpSetting extends Model
             && filled($this->from_address);
     }
 
-    /**
-     * A mailer bound to this configuration only, registered as a runtime
-     * mailer (purged first so an earlier instance is never reused).
-     */
-    public function mailer(): Mailer
+    /** A password is saved (without decrypting or exposing it). */
+    public function hasPassword(): bool
     {
-        config(['mail.mailers.' . self::MAILER => [
+        return filled($this->getRawOriginal('password'));
+    }
+
+    /** Its own name, else "SMTP #<position>". */
+    public function label(int $position): string
+    {
+        return filled($this->name) ? (string) $this->name : 'SMTP #' . $position;
+    }
+
+    /** Laravel mail config for this SMTP alone. Holds the password: never log it. */
+    public function transportConfig(): array
+    {
+        return [
             'transport' => 'smtp',
             'host' => $this->host,
             'port' => $this->port,
             'encryption' => $this->encryption ?: null,
             'username' => $this->username,
             'password' => $this->password,
-            'timeout' => 20,
-        ]]);
+            'timeout' => self::TIMEOUT,
+        ];
+    }
 
-        Mail::purge(self::MAILER);
+    /** The bare Symfony SMTP transport (connection checks). */
+    public function symfonyTransport(): TransportInterface
+    {
+        return app('mail.manager')->createSymfonyTransport($this->transportConfig());
+    }
 
-        $mailer = Mail::mailer(self::MAILER);
-        $mailer->alwaysFrom($this->from_address, $this->from_name);
+    /** This SMTP as one step of a failover chain, sending as its own From. */
+    public function transport(int $position = 1): TransportInterface
+    {
+        return new SmtpAttemptTransport($this, $this->symfonyTransport(), $position);
+    }
 
-        return $mailer;
+    /**
+     * A mailer bound to this SMTP only - no failover (Test email). Built
+     * directly (not registered), so it is never cached or reused and works
+     * for unsaved settings too.
+     */
+    public function mailer(): Mailer
+    {
+        return new LaravelMailer('website_smtp_' . ($this->id ?: 'unsaved'), app('view'), $this->transport(), app('events'));
     }
 }

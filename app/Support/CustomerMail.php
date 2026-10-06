@@ -5,17 +5,16 @@ namespace App\Support;
 use App\Models\Domain;
 use App\Models\Partner;
 use App\Models\PartnerPageContent;
-use App\Models\PartnerSmtpSetting;
-use App\Models\WebsiteSmtpSetting;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Emails RecruitmentCV sends to a customer on behalf of a partner (booking
- * confirmation, email changed). Sent through that partner's own SMTP
- * (PartnerSmtpSetting) when configured, otherwise the global Website SMTP /
- * .env mailer. The partner id always comes from the server side (the
- * booking's partner, or the site the customer is on) - never the request.
+ * confirmation, email changed). Sent through that partner's SMTPs in
+ * failover order, then the Global SMTPs, else the .env mailer
+ * (App\Support\SmtpMailer::forPartner()). The partner id always comes from
+ * the server side (the booking's partner, or the site the customer is on) -
+ * never the request.
  *
  * Sending is synchronous (the queue worker on this server belongs to
  * another app) and never throws: a failed email must not undo or block the
@@ -32,28 +31,15 @@ class CustomerMail
         $mail->locale(app()->getLocale());
 
         try {
-            PartnerSmtpSetting::mailerFor($partnerId)->to($to)->send($mail);
+            SmtpMailer::forPartner($partnerId)->to($to)->send($mail);
 
             return true;
         } catch (\Throwable $e) {
             // Class only - never the message (it could echo settings).
             Log::warning('Customer email failed', ['partner_id' => $partnerId, 'mail' => get_class($mail), 'exception' => get_class($e)]);
+
+            return false;
         }
-
-        // The partner's own SMTP failed (wrong password, server down...):
-        // one retry through the global mailer so the customer still gets it.
-        try {
-            $partnerSmtp = PartnerSmtpSetting::forPartner($partnerId);
-            if ($partnerSmtp && $partnerSmtp->isUsable()) {
-                WebsiteSmtpSetting::mailerOrDefault()->to($to)->send($mail);
-
-                return true;
-            }
-        } catch (\Throwable $e) {
-            Log::warning('Customer email fallback failed', ['partner_id' => $partnerId, 'mail' => get_class($mail), 'exception' => get_class($e)]);
-        }
-
-        return false;
     }
 
     /**

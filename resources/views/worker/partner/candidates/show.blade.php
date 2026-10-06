@@ -3,14 +3,27 @@
 @section('title', $post->display_name)
 @section('page-title', __('locale.Candidate'))
 
+@php
+    // Hire Now / Download CV need the CRM Registration Request = Approved
+    // (Partner::isRegistrationApproved(), re-checked by both endpoints);
+    // until then both open the "not approved - contact support" modal.
+    // Approved: the original hiring form (config partner.hire_now_enabled,
+    // else the "Hire Candidate - contact support" modal).
+    $viewingPartner = Auth::guard('partner')->user();
+    $approved = $viewingPartner->isRegistrationApproved();
+    $hireEnabled = $approved && (bool) config('partner.hire_now_enabled');
+    $supportReason = $approved ? 'hire_disabled' : 'not_approved';
+    $needsSupportModal = !$approved || (!$hasBooking && !$hireEnabled);
+@endphp
+
 @section('page-style')
     {{-- jQuery-dependent select2, same vendored files/config/reskin already
     used elsewhere in the Partner Portal - scoped to this page only, and
     only actually needed when the Hire Now modal (below) is rendered at
     all, i.e. this candidate hasn't already been hired by this partner. --}}
-    @unless ($hasBooking)
+    @if (!$hasBooking && $hireEnabled)
         <link rel="stylesheet" href="{{ asset('admin/assets/vendor/libs/select2/select2.css') }}">
-    @endunless
+    @endif
 @endsection
 
 @section('content')
@@ -64,10 +77,22 @@
                         <a href="{{ route('worker.partner.orders.show', $existingBooking->id) }}" class="w-btn w-btn-accent">
                             {{ __('locale.View Order') }}
                         </a>
-                    @else
+                    @elseif ($hireEnabled)
+                        {{-- Approved partner: the original hiring flow. --}}
+                        {{-- data-*-verified: hire-now.js's UX gate (mobile -> OTP
+                        modal, email -> the notice below); the server re-checks
+                        (Partner::isFullyVerified()). --}}
                         <button type="button" class="w-btn w-btn-accent" data-hire-now-trigger
+                            data-partner-activity-click="hire"
                             data-hire-url="{{ route('worker.partner.candidates.hire', $post->slug_text) }}"
-                            data-mobile-verified="{{ Auth::guard('partner')->user()->hasVerifiedMobile() ? '1' : '0' }}">
+                            data-mobile-verified="{{ $viewingPartner->hasVerifiedMobile() ? '1' : '0' }}"
+                            data-email-verified="{{ $viewingPartner->hasVerifiedEmail() ? '1' : '0' }}">
+                            {{ __('locale.Hire Now') }}
+                        </button>
+                    @else
+                        {{-- Not approved yet ("not approved" modal), or hiring switched off
+                        for everyone ("Hire Candidate - contact support" modal). --}}
+                        <button type="button" class="w-btn w-btn-accent" data-partner-hire-support data-partner-activity-click="hire">
                             {{ __('locale.Hire Now') }}
                         </button>
                     @endif
@@ -76,13 +101,35 @@
                     (this page sits behind worker.partner.auth), so unlike the
                     public resumes/details page there's no guest/login-modal
                     branch needed here. Same cv_execute gate; the link serves
-                    this partner's own B2B CV (PartnerPortalController::candidateCv). --}}
+                    this partner's own B2B CV (PartnerPortalController::candidateCv,
+                    which also refuses partners who are not fully verified). --}}
                     @if ($post->cv_execute == 1 && $post->cv_execute_file != '')
-                        <a href="{{ route('worker.partner.candidates.cv', $post->slug_text) }}" target="_blank" class="w-btn w-btn-outline">
-                            {{ __('locale.Download CV') }}
-                        </a>
+                        @if (!$approved)
+                            {{-- Not approved yet: the "not approved - contact support" modal
+                            (candidateCv refuses it too). --}}
+                            <button type="button" class="w-btn w-btn-outline" data-partner-hire-support data-cv-request="{{ route('worker.partner.candidates.cv', $post->slug_text) }}">
+                                {{ __('locale.Download CV') }}
+                            </button>
+                        @elseif ($viewingPartner->isFullyVerified())
+                            <a href="{{ route('worker.partner.candidates.cv', $post->slug_text) }}" target="_blank" class="w-btn w-btn-outline">
+                                {{ __('locale.Download CV') }}
+                            </a>
+                        @else
+                            <button type="button" class="w-btn w-btn-outline" data-partner-verify-required data-cv-request="{{ route('worker.partner.candidates.cv', $post->slug_text) }}">
+                                {{ __('locale.Download CV') }}
+                            </button>
+                        @endif
                     @endif
                 </div>
+                @include('worker.partials.partner-verification-notice')
+                {{-- Partner Activity alerts to CRM staff: presence on this page + Hire Now clicks
+                (partner-candidate-activity.js; partner and candidate are decided server-side).
+                Download CV is recorded server-side when the CV is served (candidateCv). --}}
+                <div hidden data-partner-activity data-track-presence="1"
+                    data-csrf="{{ csrf_token() }}"
+                    data-visit-url="{{ route('worker.partner.candidates.activity.visit', $post->slug_text) }}"
+                    data-heartbeat-url="{{ route('worker.partner.candidates.activity.heartbeat', $post->slug_text) }}"
+                    data-click-url="{{ route('worker.partner.candidates.activity.click', $post->slug_text) }}"></div>
             </div>
         </div>
 
@@ -296,9 +343,13 @@
         </div>
     </div>
 
-    @unless ($hasBooking)
+    @if (!$hasBooking && $hireEnabled)
         @include('worker.partials.hire-now-modal')
-    @endunless
+    @endif
+    @if ($needsSupportModal)
+        {{-- Opens by itself when a refused CV download sent the partner back here. --}}
+        @include('worker.partials.hire-support-modal', ['supportReason' => $supportReason, 'supportOpenOnLoad' => session('partner_not_approved')])
+    @endif
 @endsection
 
 @section('page-script')
@@ -311,10 +362,11 @@
     just this page is safe. --}}
     <script src="{{ asset('worker/js/main.js') }}?v={{ @filemtime(public_path('worker/js/main.js')) ?: time() }}"></script>
 
-    @unless ($hasBooking)
+    @if (!$hasBooking && $hireEnabled)
         <script src="{{ asset('admin/assets/vendor/libs/jquery/jquery.js') }}"></script>
         <script src="{{ asset('admin/assets/vendor/libs/select2/select2.js') }}"></script>
         <script src="{{ asset('worker/js/hire-now-vendor-init.js') }}?v={{ @filemtime(public_path('worker/js/hire-now-vendor-init.js')) ?: time() }}"></script>
         <script src="{{ asset('worker/js/hire-now.js') }}?v={{ @filemtime(public_path('worker/js/hire-now.js')) ?: time() }}"></script>
-    @endunless
+    @endif
+    <script src="{{ asset('worker/js/partner-candidate-activity.js') }}?v={{ @filemtime(public_path('worker/js/partner-candidate-activity.js')) ?: time() }}"></script>
 @endsection

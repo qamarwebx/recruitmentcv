@@ -1023,6 +1023,23 @@ class PartnerController extends Controller
     // Gates login on the Worker portal's phone+OTP partner flow.
     public function registrationStatusUpdate(Request $request){
         $post = Partner::find($request->partner_id);
+
+        // Approving needs a Recruitment Licence Number (partners.licence_number;
+        // whitespace-only counts as empty). Checked only when changing to
+        // Approved - Pending / Rejected, and an already-approved partner, are
+        // unaffected. Nothing is saved when blocked.
+        if ($post && (string) $request->registration_status === '1' && (int) $post->registration_status !== 1
+            && !preg_match('/[^\s\p{Z}]/u', (string) $post->licence_number)) {
+            $message = 'Recruitment Licence Number is not added. Please add it before approving this Partner.';
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['status' => 'error', 'message' => $message, 'errors' => ['registration_status' => [$message]]], 422);
+            }
+
+            // Partner View page (plain form): back with the message, which re-opens its modal.
+            return redirect()->back()->withErrors(['registration_status' => $message], 'registrationStatus')->withInput();
+        }
+
         $post->registration_status = $request->registration_status;
         $post->save();
 

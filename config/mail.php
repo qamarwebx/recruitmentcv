@@ -13,7 +13,13 @@ return [
     |
     */
 
-    'default' => env('MAIL_MAILER', 'smtp'),
+    // Every email goes through App\Support\SmtpMailer: the website's SMTPs
+    // (CRM -> Website -> SMTP / Partner Portal -> SMTP) with sequential
+    // failover. "fallback" (MAIL_MAILER, the .env mailer) is used only when
+    // no SMTP is configured/usable there.
+    'default' => 'smtp_failover',
+
+    'fallback' => env('MAIL_MAILER', 'smtp'),
 
     /*
     |--------------------------------------------------------------------------
@@ -69,6 +75,17 @@ return [
 
         'array' => [
             'transport' => 'array',
+        ],
+
+        // App\Support\SmtpMailer (registered in AppServiceProvider).
+        'smtp_failover' => [
+            'transport' => 'smtp_failover',
+            'context' => 'site',
+        ],
+
+        'smtp_failover_global' => [
+            'transport' => 'smtp_failover',
+            'context' => 'global',
         ],
 
         'failover' => [

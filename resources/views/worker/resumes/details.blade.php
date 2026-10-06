@@ -91,10 +91,29 @@
                                         {{ __('locale.Download CV') }}
                                     </button>
                                 @else
-                                    {{-- Logged-in partner: their own B2B CV (PartnerPortalController::candidateCv). --}}
-                                    <a href="{{ route('worker.partner.candidates.cv', $post->slug_text) }}" target="_blank" class="w-btn w-btn-outline">
-                                        {{ __('locale.Download CV') }}
-                                    </a>
+                                    {{-- Logged-in partner: their own B2B CV (PartnerPortalController::candidateCv),
+                                    only once mobile AND email are verified (Partner::isFullyVerified(),
+                                    also enforced by that endpoint); otherwise the notice below. --}}
+                                    @if (!Auth::guard('partner')->user()->isRegistrationApproved())
+                                        {{-- CRM Registration Request not Approved yet: "not approved -
+                                        contact support" modal (candidateCv refuses it too). --}}
+                                        <button type="button" class="w-btn w-btn-outline" data-partner-hire-support data-cv-request="{{ route('worker.partner.candidates.cv', $post->slug_text) }}">
+                                            {{ __('locale.Download CV') }}
+                                        </button>
+                                    @elseif (Auth::guard('partner')->user()->isFullyVerified())
+                                        <a href="{{ route('worker.partner.candidates.cv', $post->slug_text) }}" target="_blank" class="w-btn w-btn-outline">
+                                            {{ __('locale.Download CV') }}
+                                        </a>
+                                    @else
+                                        <button type="button" class="w-btn w-btn-outline" data-partner-verify-required data-cv-request="{{ route('worker.partner.candidates.cv', $post->slug_text) }}">
+                                            {{ __('locale.Download CV') }}
+                                        </button>
+                                    @endif
+                                    {{-- Download CV alert: recorded server-side when the CV is actually served
+                                    (PartnerPortalController::candidateCv). This hook only drives the
+                                    "not approved" support modal (partner-candidate-activity.js) - no reporting. --}}
+                                    <div hidden data-partner-activity data-track-presence="0"
+                                        data-csrf="{{ csrf_token() }}"></div>
                                 @endguest
                             @endif
                             {{-- No Call fallback: when the CV isn't available, only the
@@ -122,6 +141,8 @@
                             @endauth
                             @endif
                         </div>
+                        {{-- Signed-in partner not fully verified: why Hire / Download CV / passport are unavailable. --}}
+                        @include('worker.partials.partner-verification-notice')
                     </div>
                 </div>
 
@@ -344,10 +365,22 @@
         @include('worker.partials.customer-hire-modal', ['hire' => $hire, 'post' => $post])
     @endif
 
+    {{-- Signed-in partner whose registration is not approved yet: the support
+    modal for Download CV. At page level (not inside the sticky photo column,
+    whose own stacking layer kept the modal behind the detail cards). --}}
+    @auth('partner')
+        @unless (Auth::guard('partner')->user()->isRegistrationApproved())
+            @include('worker.partials.hire-support-modal', ['supportReason' => 'not_approved'])
+        @endunless
+    @endauth
+
 @endsection
 
 @section('page-script')
     @if ($hire)
         <script src="{{ asset('worker/js/customer-hire.js') }}?v={{ @filemtime(public_path('worker/js/customer-hire.js')) ?: time() }}"></script>
     @endif
+    @auth('partner')
+        <script src="{{ asset('worker/js/partner-candidate-activity.js') }}?v={{ @filemtime(public_path('worker/js/partner-candidate-activity.js')) ?: time() }}"></script>
+    @endauth
 @endsection

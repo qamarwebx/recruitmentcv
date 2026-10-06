@@ -241,9 +241,31 @@
             <div data-partner-step="pending" hidden>
                 <div class="w-form-alert is-success" data-partner-pending-message></div>
                 {{-- RecruitmentCV/Qamr support: the central WhatsApp settings
-                (CRM -> Website -> WhatsApp), same as the Partner Portal button. --}}
-                <a href="{{ \App\Models\PartnerPageContent::effectiveWhatsapp(null)['link'] }}" target="_blank" rel="noopener" class="w-btn w-btn-outline w-btn-block">
-                    {{ __('locale.Contact Support') }}
+                (CRM -> Website -> WhatsApp), same as the Partner Portal button -
+                never the registering partner's own number. The number is shown
+                as "+<code> <number>" (PhoneNumber::international(), as elsewhere);
+                hidden when none is set. --}}
+                @php
+                    $supportWhatsapp = \App\Models\PartnerPageContent::effectiveWhatsapp(null);
+                    $supportDigits = preg_replace('/\D+/', '', (string) ($supportWhatsapp['number'] ?? ''));
+                    $supportNumber = $supportDigits !== '' ? \App\Support\PhoneNumber::international(null, $supportDigits) : '';
+                    if ($supportNumber !== '' && !str_starts_with($supportNumber, '+')) {
+                        $supportNumber = '+' . $supportDigits;
+                    }
+                @endphp
+                <a href="{{ $supportWhatsapp['link'] }}" target="_blank" rel="noopener" class="w-btn w-btn-outline w-btn-block w-support-contact" data-partner-support-contact>
+                    <svg class="w-support-contact-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14v-3a8 8 0 0 1 16 0v3"/><path d="M18 19c0 1.1-.9 2-2 2h-2"/><rect x="2.5" y="13" width="4" height="6" rx="1.5"/><rect x="17.5" y="13" width="4" height="6" rx="1.5"/></svg>
+                    <span class="w-support-contact-text">
+                        <span>{{ __('locale.Contact Support') }}</span>
+                        @if ($supportNumber !== '')
+                            <span class="w-support-contact-number" dir="ltr">{{ $supportNumber }}</span>
+                        @endif
+                    </span>
+                </a>
+                {{-- Shown after a completed registration (the partner is signed in;
+                Hire Now / Download CV wait for approval). partner-auth.js sets the link. --}}
+                <a href="#" class="w-btn w-btn-primary w-btn-block" data-partner-pending-dashboard hidden style="margin-top:10px;">
+                    {{ __('locale.Go to Dashboard') }}
                 </a>
             </div>
         </div>

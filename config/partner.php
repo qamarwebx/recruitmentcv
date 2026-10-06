@@ -46,4 +46,13 @@ return [
         'update_minutes' => env('PARTNER_RESET_UPDATE_MINUTES', 10),
     ],
 
+    /*
+    | Partner Candidate Detail "Hire Now" for APPROVED partners
+    | (Partner::isRegistrationApproved()): true = the hiring form (the
+    | original flow); false = everyone gets the "Hire Candidate - contact our
+    | support team" modal instead. Partners not yet approved always get the
+    | "not approved - contact support" modal, whatever this says.
+    */
+    'hire_now_enabled' => env('PARTNER_HIRE_NOW_ENABLED', true),
+
 ];

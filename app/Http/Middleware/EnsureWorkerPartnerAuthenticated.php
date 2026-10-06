@@ -16,10 +16,9 @@ use Illuminate\Support\Facades\Auth;
  * (PartnerAuthController::loginPage) instead.
  *
  * Also re-checks registration_status on every request, not just at login:
- * PartnerAuthController::login() already refuses to establish a session for
- * a Pending/Rejected partner, but a partner who was Approved when they logged
- * in and is later moved to Pending/Rejected by an admin would otherwise keep
- * their existing session and stay able to browse the portal.
+ * a partner moved to Rejected by an admin loses their session immediately.
+ * Pending partners keep full Portal access - only Hire Now / Download CV need
+ * an Approved registration (Partner::isRegistrationApproved()).
  *
  * And, on a partner subdomain, only lets the partner that owns that
  * subdomain use the portal there - any other logged-in partner is sent to
@@ -37,10 +36,10 @@ class EnsureWorkerPartnerAuthenticated
 
         $partner = $guard->user();
 
-        if ((int) $partner->registration_status !== 1) {
-            $message = (int) $partner->registration_status === 2
-                ? 'Your registration has been rejected.'
-                : 'Your registration is pending approval.';
+        // Only a Rejected registration ends the session (same message as
+        // before). Pending partners use the Portal normally.
+        if ($partner->isRegistrationRejected()) {
+            $message = 'Your registration has been rejected.';
 
             $guard->logout();
             $request->session()->invalidate();

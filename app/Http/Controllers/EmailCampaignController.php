@@ -595,11 +595,17 @@ class EmailCampaignController extends Controller
                 'mail.from.name' => $smtp->from_name,
             ]);
 
+            // A campaign sends through the SMTP chosen for it (not the
+            // default failover mailer): a fresh "smtp" mailer with the
+            // settings above.
+            Mail::purge('smtp');
+            $campaignMailer = Mail::mailer('smtp');
+
             foreach ($emails as $email) {
                 try {
 
                     // IMPORTANT FIX → send directly to string email
-                    Mail::to($email)->send(
+                    $campaignMailer->to($email)->send(
                         new GenericCampaignMail($subject, $body, $attachment)
                     );
 

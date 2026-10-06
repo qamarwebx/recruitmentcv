@@ -57,6 +57,19 @@ return [
         'todos'       => 'todos',
         'qamarhire'     => $websiteOrderMap,
         'recruitmentcv' => $websiteOrderMap,
+        // Partner Activity alerts to CRM staff (App\Support\PartnerActivity):
+        // values come from the alert itself ("activity.<context key>").
+        'partner_activity' => [
+            'partner name'   => 'activity.partner_name',
+            'partner mobile' => 'activity.partner_mobile',
+            'partner city'   => 'activity.partner_city',
+            'candidate name' => 'activity.candidate_name',
+            'candidate id'   => 'activity.candidate_ref',
+            'date time'      => 'activity.occurred_at',
+            'candidate url'  => 'activity.candidate_url',
+            'activity'       => 'activity.activity',
+            'team member'    => 'activity.team_member',
+        ],
     ],
 
     // Website template sets offered in the Template / Meta Automation
@@ -65,6 +78,12 @@ return [
     'website_template_for' => [
         'qamarhire'     => 'Qamarhire',
         'recruitmentcv' => 'recruitmentcv.com',
+    ],
+
+    // Partner Activity alerts (CRM -> Website -> Partner Notification) in the
+    // same Template / Meta Automation "Template For" dropdowns.
+    'partner_activity_template_for' => [
+        'partner_activity' => 'Partner Activity',
     ],
 
 ];

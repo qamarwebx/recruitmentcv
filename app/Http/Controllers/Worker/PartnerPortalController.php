@@ -21,23 +21,23 @@ use App\Models\Expecworkcity;
 use App\Models\PartnerEmployerSaveFilter;
 use App\Models\PartnerPageContent;
 use App\Models\PartnerPrice;
-use App\Models\PartnerSmtpSetting;
 use App\Models\Placeofissue;
 use App\Models\Profession;
 use App\Models\Region;
 use App\Models\Religion;
 use App\Models\Visadetails;
-use App\Models\WebsiteSmtpSetting;
 use App\Support\HtmlSanitizer;
+use App\Support\SmtpMailer;
+use App\Support\SmtpSettings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -653,9 +653,40 @@ class PartnerPortalController extends Controller
         $partnerId = $this->partnerId();
 
         [$post] = $this->accessibleCandidate($id, $partnerId);
+        $cvAvailable = (int) $post->cv_execute === 1 && $post->cv_execute_file != '';
+
+        // CRM Registration Request must be Approved (Partner::isRegistrationApproved(),
+        // the same check as Hire Now) - before anything is generated or served.
+        // A page request lands back on the candidate page, which opens the
+        // "not approved - contact support" modal.
+        if (!Auth::guard('partner')->user()->isRegistrationApproved()) {
+            if ($cvAvailable) {
+                $this->queueCvDownloadAlert($post, $partnerId);
+            }
+            $message = __('locale.Your Account is not Approved yet, please contact our support team.');
+            if (request()->expectsJson()) {
+                return response()->json(['status' => 'not_approved', 'message' => $message], 403);
+            }
+
+            return redirect()->route('worker.partner.candidates.show', $post->slug_text)->with('partner_not_approved', true);
+        }
+
+        // Mobile AND email verified (Partner::isFullyVerified()) - checked
+        // before anything is generated or served, whatever link was used.
+        if (!Auth::guard('partner')->user()->isFullyVerified()) {
+            if ($cvAvailable) {
+                $this->queueCvDownloadAlert($post, $partnerId);
+            }
+            $message = __('locale.Please verify your mobile number and email address to download CVs.');
+            if (request()->expectsJson()) {
+                return response()->json(['status' => 'unverified', 'message' => $message], 403);
+            }
+
+            return redirect()->route('worker.partner.candidates.show', $post->slug_text)->withErrors(['cv' => $message]);
+        }
 
         // Same gate as every Download CV button.
-        abort_unless((int) $post->cv_execute === 1 && $post->cv_execute_file != '', 404);
+        abort_unless($cvAvailable, 404);
 
         $file = $this->partnerCvFile($post->id, $partnerId);
 
@@ -713,7 +744,258 @@ class PartnerPortalController extends Controller
         $response->headers->addCacheControlDirective('no-store');
         $response->headers->addCacheControlDirective('max-age', 0);
 
+        $this->queueCvDownloadAlert($post, $partnerId);
+
         return $response;
+    }
+
+    /**
+     * Partner Activity "Download CV" alert (App\Support\PartnerActivity) for
+     * a Download CV request that reached candidateCv() - where every Download
+     * CV button/link ends up (Candidate Detail, /resumes/details, Orders) -
+     * for a candidate whose CV exists: the CV was served, or the request was
+     * refused only because the account is not approved / verified yet (the
+     * partner asked for this CV; CRM staff follow up, as with Hire Now).
+     * Never from a page load or a click alone. Recorded after the response
+     * has been sent (terminating callback), so it can never delay or break
+     * the download; the email/WhatsApp alert itself is queued.
+     *
+     * One download = one alert: HEAD probes and a PDF viewer's follow-up
+     * range requests are skipped, and repeats within
+     * PartnerActivity::DOWNLOAD_DEDUPE_SECONDS (a double click) are
+     * suppressed. Partner = the signed-in partner, which on a partner website
+     * must be that website's partner (also enforced by
+     * EnsureWorkerPartnerAuthenticated).
+     */
+    private function queueCvDownloadAlert(Candidate $post, int $partnerId): void
+    {
+        $request = request();
+        if (!$request->isMethod('GET') || preg_match('/^\s*bytes\s*=\s*(?!0-)/i', (string) $request->headers->get('Range'))) {
+            return;
+        }
+
+        $sitePartnerId = \App\Support\CustomerSite::partnerId();
+        if ($sitePartnerId && $sitePartnerId !== $partnerId) {
+            return;
+        }
+
+        $partner = Auth::guard('partner')->user();
+        $member = \App\Support\PartnerTeam::current();
+        $ip = $request->ip();
+        $done = false;
+
+        app()->terminating(function () use (&$done, $post, $partnerId, $partner, $member, $ip) {
+            if ($done) {
+                return;
+            }
+            $done = true;
+
+            try {
+                $event = \App\Models\PartnerActivityEvent::create([
+                    'partner_id' => $partnerId,
+                    'team_member_id' => optional($member)->id,
+                    'candidate_id' => $post->id,
+                    'event' => \App\Support\PartnerActivity::DOWNLOAD,
+                    'token' => Str::random(48),
+                    'status' => 'tracking',
+                    'started_at' => now(),
+                    'last_seen_at' => now(),
+                    'ip' => $ip,
+                ]);
+
+                $this->notifyPartnerActivity($event, $post, $partner, optional($member)->full_name);
+            } catch (\Throwable $e) {
+                // Class only - the download itself already succeeded.
+                Log::warning('Partner Download CV alert not recorded', ['partner_id' => $partnerId, 'candidate_id' => $post->id, 'exception' => get_class($e)]);
+            }
+        });
+    }
+
+    /**
+     * Partner Activity (App\Support\PartnerActivity) - Candidate Detail
+     * presence, step 1: opens a visit for the signed-in partner and this
+     * candidate (accessibleCandidate()) and returns its server-issued token.
+     * Nothing from the request decides the partner or candidate.
+     */
+    public function candidateActivityVisit(Request $request, $id)
+    {
+        $partnerId = $this->partnerId();
+        [$post] = $this->accessibleCandidate($id, $partnerId);
+
+        $event = \App\Models\PartnerActivityEvent::create([
+            'partner_id' => $partnerId,
+            'team_member_id' => optional(\App\Support\PartnerTeam::current())->id,
+            'candidate_id' => $post->id,
+            'event' => \App\Support\PartnerActivity::VIEWED,
+            'token' => Str::random(48),
+            'status' => 'tracking',
+            'started_at' => now(),
+            'last_seen_at' => now(),
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json(['token' => $event->token]);
+    }
+
+    /**
+     * Step 2, sent every ~15 s while the page is visible: confirms continuous
+     * presence. The page being hidden ("paused") or a gap longer than
+     * PartnerActivity::HEARTBEAT_GAP_SECONDS restarts the timer; after
+     * VIEW_SECONDS of continuous presence the alert is sent - once per visit
+     * (and once per partner + candidate within the cooldown).
+     */
+    public function candidateActivityHeartbeat(Request $request, $id)
+    {
+        $partnerId = $this->partnerId();
+        [$post] = $this->accessibleCandidate($id, $partnerId);
+
+        $event = \App\Models\PartnerActivityEvent::where('token', (string) $request->input('token'))
+            ->where('event', \App\Support\PartnerActivity::VIEWED)
+            ->where('partner_id', $partnerId)
+            ->where('candidate_id', $post->id)
+            ->first();
+
+        if (!$event) {
+            return response()->json(['status' => 'unknown_visit'], 404);
+        }
+        if ($event->notified_at) {
+            return response()->json(['status' => 'done']);
+        }
+
+        $now = now();
+        if ($request->input('state') === 'paused') {
+            $event->update(['started_at' => null, 'last_seen_at' => $now]);
+
+            return response()->json(['status' => 'paused']);
+        }
+
+        $interrupted = !$event->started_at || !$event->last_seen_at
+            || $event->last_seen_at->diffInSeconds($now) > \App\Support\PartnerActivity::HEARTBEAT_GAP_SECONDS;
+        $startedAt = $interrupted ? $now : $event->started_at;
+        $event->update(['started_at' => $startedAt, 'last_seen_at' => $now]);
+
+        if ($startedAt->diffInSeconds($now) < \App\Support\PartnerActivity::VIEW_SECONDS) {
+            return response()->json(['status' => 'tracking']);
+        }
+
+        $this->notifyPartnerActivity($event, $post);
+
+        return response()->json(['status' => 'done']);
+    }
+
+    /**
+     * A real Hire Now click on a Candidate Detail page. The page sends a
+     * random click id per click: a retried request with the same id is
+     * recognised (unique token + event), and repeated clicks fall in the per
+     * partner + candidate cooldown. Download CV is not reported from the
+     * page any more: candidateCv() records it when the CV is actually served.
+     */
+    public function candidateActivityClick(Request $request, $id)
+    {
+        $partnerId = $this->partnerId();
+        [$post] = $this->accessibleCandidate($id, $partnerId);
+
+        $events = ['hire' => \App\Support\PartnerActivity::HIRE];
+        $event = $events[(string) $request->input('event')] ?? null;
+        $clickId = (string) $request->input('click_id');
+        if (!$event || !preg_match('/^[A-Za-z0-9-]{8,64}$/', $clickId)) {
+            return response()->json(['status' => 'error'], 422);
+        }
+
+        try {
+            $row = \App\Models\PartnerActivityEvent::firstOrCreate(['token' => $clickId, 'event' => $event], [
+                'partner_id' => $partnerId,
+                'team_member_id' => optional(\App\Support\PartnerTeam::current())->id,
+                'candidate_id' => $post->id,
+                'status' => 'tracking',
+                'started_at' => now(),
+                'last_seen_at' => now(),
+                'ip' => $request->ip(),
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            return response()->json(['status' => 'duplicate']);   // the same click id arrived twice at once
+        }
+
+        // A click id belongs to the partner + candidate that created it.
+        if ((int) $row->partner_id !== $partnerId || (int) $row->candidate_id !== (int) $post->id) {
+            return response()->json(['status' => 'error'], 409);
+        }
+        if (!$row->wasRecentlyCreated) {
+            return response()->json(['status' => 'duplicate']);
+        }
+
+        $this->notifyPartnerActivity($row, $post);
+
+        return response()->json(['status' => 'recorded']);
+    }
+
+    /**
+     * Claims the event (once, outside the cooldown) and queues the alert with
+     * the partner's own details and Candidate Detail URL on their own site
+     * (Partner::portalBaseUrl()). Partner / team member: the signed-in ones
+     * unless given (captured earlier in the same request).
+     */
+    private function notifyPartnerActivity(\App\Models\PartnerActivityEvent $event, Candidate $post, $partner = null, ?string $teamMember = null): void
+    {
+        if (!\App\Support\PartnerActivity::claim($event)) {
+            return;
+        }
+
+        if (!$partner) {
+            $partner = Auth::guard('partner')->user();
+            $teamMember = optional(\App\Support\PartnerTeam::current())->full_name;
+        }
+        $url = rtrim($partner->portalBaseUrl(), '/') . route('worker.partner.candidates.show', $post->slug_text, false);
+
+        \App\Support\PartnerActivity::dispatch(\App\Support\PartnerActivity::context($event->fresh(), $partner, $post, $url, $teamMember));
+    }
+
+    /**
+     * Passport image for a partner who is NOT fully verified
+     * (Partner::isFullyVerified()): a blurred, downscaled copy rendered here,
+     * so the candidate gallery never puts the original file's URL in the
+     * page for them (worker.partials.candidate-gallery). Same candidate
+     * access rule as the detail page. Never redirects to / streams the
+     * original; a placeholder when it can't be rendered.
+     */
+    public function candidatePassportPreview($id)
+    {
+        [$post] = $this->accessibleCandidate($id, $this->partnerId());
+
+        $path = $post->pass_file ? public_path('admin/assets/images/candidate/' . basename((string) $post->pass_file)) : null;
+        $source = ($path && is_file($path)) ? @imagecreatefromstring((string) file_get_contents($path)) : false;
+
+        if ($source) {
+            // Shrink hard first (detail is gone before any blur), then blur
+            // the small copy repeatedly and scale it back up.
+            $width = imagesx($source);
+            $height = imagesy($source);
+            $smallWidth = 48;
+            $smallHeight = max(1, (int) round($height * $smallWidth / max(1, $width)));
+            $small = imagecreatetruecolor($smallWidth, $smallHeight);
+            imagecopyresampled($small, $source, 0, 0, 0, 0, $smallWidth, $smallHeight, $width, $height);
+            for ($i = 0; $i < 6; $i++) {
+                imagefilter($small, IMG_FILTER_GAUSSIAN_BLUR);
+            }
+            $outWidth = min(640, $width);
+            $outHeight = max(1, (int) round($height * $outWidth / max(1, $width)));
+            $image = imagecreatetruecolor($outWidth, $outHeight);
+            imagecopyresampled($image, $small, 0, 0, 0, 0, $outWidth, $outHeight, $smallWidth, $smallHeight);
+            imagedestroy($small);
+            imagedestroy($source);
+        } else {
+            $image = imagecreatetruecolor(480, 320);
+            imagefill($image, 0, 0, imagecolorallocate($image, 226, 232, 240));
+        }
+
+        ob_start();
+        imagejpeg($image, null, 70);
+        imagedestroy($image);
+
+        return response(ob_get_clean(), 200, [
+            'Content-Type' => 'image/jpeg',
+            'Cache-Control' => 'private, no-store, max-age=0',
+        ]);
     }
 
     /**
@@ -1561,7 +1843,10 @@ class PartnerPortalController extends Controller
             return response()->json(['status' => 'error', 'message' => $validator->errors()->first('email')], 422);
         }
 
-        if (strcasecmp($email, (string) $partner->email) === 0) {
+        // The current address is refused only once it is verified - an
+        // unverified one can be verified through this same code flow
+        // (needed for Partner::isFullyVerified()).
+        if (strcasecmp($email, (string) $partner->email) === 0 && $partner->hasVerifiedEmail()) {
             return response()->json(['status' => 'error', 'message' => __('locale.This is already your email address.')], 422);
         }
 
@@ -1577,9 +1862,9 @@ class PartnerPortalController extends Controller
         $code = (string) random_int(100000, 999999);
 
         try {
-            // The global RecruitmentCV SMTP (CRM -> Website -> SMTP), the same
-            // for every partner; the .env mailer when it isn't configured.
-            \App\Models\WebsiteSmtpSetting::mailerOrDefault()->to($email)->send(new \App\Mail\SendOTPVerification([
+            // This website's SMTPs in failover order (the partner's own, then
+            // the Global ones; the .env mailer when none is configured).
+            SmtpMailer::forSite()->to($email)->send(new \App\Mail\SendOTPVerification([
                 'name' => $partner->owner_name ?: $partner->rec_off_name,
                 'company' => $partner->rec_off_name,
                 'EmailOtp' => $code,
@@ -1688,13 +1973,11 @@ class PartnerPortalController extends Controller
         // What an empty field falls back to: the central (CRM) settings.
         $whatsappDefaults = PartnerPageContent::centralWhatsapp();
 
-        // SMTP tab: the partner's own row (password never passed to the
-        // view) and the non-secret values of the default sender it falls
-        // back to, shown until the partner saves their own.
-        $smtp = PartnerSmtpSetting::forPartner($partner->id);
-        $smtpDefaults = $this->defaultSmtpDisplay();
+        // SMTP tab: this partner's own SMTP list only (passwords never
+        // passed to the view).
+        $smtps = SmtpSettings::list($partner->id);
 
-        return view('worker.partner.website', compact('partner', 'domain', 'pageContents', 'whatsapp', 'whatsappDefaults', 'smtp', 'smtpDefaults'));
+        return view('worker.partner.website', compact('partner', 'domain', 'pageContents', 'whatsapp', 'whatsappDefaults', 'smtps'));
     }
 
     /**
@@ -2216,17 +2499,76 @@ class PartnerPortalController extends Controller
     }
 
     /**
-     * Partner Website -> SMTP: this partner's own sender for the emails
-     * sent to their customers (PartnerSmtpSetting). Optional - without an
-     * active configuration the global Website SMTP / .env mailer is used.
-     * Always the logged-in partner's own row (never a partner_id from the
-     * request). The password is write-only: never returned or rendered,
-     * and a blank password keeps the saved one. Turning it on tests the
-     * connection + login first, so a typo can't silently break emails.
+     * Partner Website -> SMTP: this partner's own ordered SMTP list - the
+     * same list and backend (App\Support\SmtpSettings) as CRM -> Website ->
+     * SMTP. Emails from this partner's website/dashboard try them in order
+     * (App\Support\SmtpMailer), then the Global SMTPs. Always the signed-in
+     * partner's own list: an SMTP id is looked up inside it only, so another
+     * partner's SMTP is a 404 and the Global SMTPs are never reachable here.
+     * Passwords are write-only (never returned or rendered; blank keeps the
+     * saved one). Enabling an SMTP checks its connection + login first.
+     * Every action answers with the re-rendered list.
      */
-    public function settingsSmtpUpdate(Request $request)
+    public function smtpAdd(Request $request)
+    {
+        return $this->smtpWrite($request, null);
+    }
+
+    public function smtpSave(Request $request, $smtp)
+    {
+        return $this->smtpWrite($request, $smtp);
+    }
+
+    public function smtpRemove(Request $request, $smtp)
     {
         $partner = Auth::guard('partner')->user();
+        $smtp = SmtpSettings::find($partner->id, $smtp);
+
+        SmtpSettings::delete($smtp);
+
+        return $this->smtpResponse($partner->id, __('locale.SMTP deleted.'));
+    }
+
+    public function smtpMove(Request $request, $smtp)
+    {
+        $partner = Auth::guard('partner')->user();
+        $smtp = SmtpSettings::find($partner->id, $smtp);
+        $direction = (string) $request->input('direction');
+        abort_unless(in_array($direction, ['up', 'down', 'top'], true), 422);
+
+        SmtpSettings::move($smtp, $direction);
+
+        return $this->smtpResponse($partner->id, __('locale.Sending order updated.'));
+    }
+
+    /** Test email through this one SMTP, to the partner's own account email. */
+    public function smtpTest(Request $request, $smtp)
+    {
+        $partner = Auth::guard('partner')->user();
+        $smtp = SmtpSettings::find($partner->id, $smtp);
+
+        $rateKey = 'partner-smtp-test:' . $partner->id;
+        if (RateLimiter::tooManyAttempts($rateKey, 5)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Too many attempts. Please try again in :seconds seconds.', ['seconds' => RateLimiter::availableIn($rateKey)])], 429);
+        }
+        RateLimiter::hit($rateKey, 600);
+
+        if (!filter_var((string) $partner->email, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Add an email address to your account first.')], 422);
+        }
+
+        $position = SmtpSettings::list($partner->id)->search(fn ($row) => $row->id === $smtp->id) + 1;
+        $error = SmtpSettings::sendTest($smtp, $partner->email, $partner->rec_off_name ?: 'RecruitmentCV', $smtp->label($position));
+
+        return $error
+            ? response()->json(['status' => 'error', 'message' => __('locale.Test email failed. Please check this SMTP\'s settings.')], 422)
+            : response()->json(['status' => 'success', 'message' => __('locale.Test email sent to :email.', ['email' => $partner->email])]);
+    }
+
+    private function smtpWrite(Request $request, $smtpId)
+    {
+        $partner = Auth::guard('partner')->user();
+        $smtp = $smtpId !== null ? SmtpSettings::find($partner->id, $smtpId) : null;
 
         // Each save may open an SMTP connection: rate-limited per partner.
         $rateKey = 'partner-smtp-save:' . $partner->id;
@@ -2235,149 +2577,44 @@ class PartnerPortalController extends Controller
         }
         RateLimiter::hit($rateKey, 60);
 
-        $existing = PartnerSmtpSetting::forPartner($partner->id);
-        $hasSavedPassword = $existing && filled($existing->getRawOriginal('password'));
-        $active = $request->boolean('status');
-        $required = $active ? 'required' : 'nullable';
-
-        $validator = Validator::make($request->all(), [
-            'mailer' => ['nullable', Rule::in(array_keys(PartnerSmtpSetting::MAILERS))],
-            'host' => [$required, 'string', 'max:255', 'regex:/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/'],
-            'port' => [$required, 'integer', Rule::in(PartnerSmtpSetting::PORTS)],
-            'encryption' => ['nullable', Rule::in(array_filter(array_keys(PartnerSmtpSetting::ENCRYPTIONS)))],
-            'username' => [$required, 'string', 'max:255'],
-            'password' => [$active && !$hasSavedPassword ? 'required' : 'nullable', 'string', 'max:255'],
-            'from_address' => [$required, 'email', 'max:255'],
-            'from_name' => ['nullable', 'string', 'max:255'],
-            'status' => ['required', 'boolean'],
-        ], [
-            'host.regex' => __('locale.Enter a valid SMTP host, e.g. smtp.example.com.'),
-            'port.in' => __('locale.Use one of the standard SMTP ports: :ports.', ['ports' => implode(', ', PartnerSmtpSetting::PORTS)]),
-        ], [
-            'host' => __('locale.Host'),
-            'port' => __('locale.Port'),
-            'username' => __('locale.Username'),
-            'password' => __('locale.Password'),
-            'from_address' => __('locale.From Email'),
-            'from_name' => __('locale.From Name'),
-        ]);
-
-        // Public mail servers only - never an internal/private address.
-        $validator->after(function ($validator) use ($request, $active) {
-            $host = (string) $request->input('host');
-            if (!$active || $host === '' || $validator->errors()->has('host')) {
-                return;
-            }
-            $ips = gethostbynamel($host);
-            if (!$ips) {
-                $validator->errors()->add('host', __('locale.This SMTP host could not be found.'));
-                return;
-            }
-            foreach ($ips as $ip) {
-                if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                    $validator->errors()->add('host', __('locale.This SMTP host is not allowed.'));
-                    return;
-                }
-            }
-        });
-
-        if ($validator->fails()) {
-            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        try {
+            SmtpSettings::save($partner->id, $smtp, $request->only(['name', 'host', 'port', 'encryption', 'username', 'password', 'from_address', 'from_name', 'status']), $partner->id, [
+                'verify' => true,
+                'messages' => [
+                    'host.regex' => __('locale.Enter a valid SMTP host, e.g. smtp.example.com.'),
+                    'port.in' => __('locale.Use one of the standard SMTP ports: :ports.'),
+                    'host_not_found' => __('locale.This SMTP host could not be found.'),
+                    'host_not_allowed' => __('locale.This SMTP host is not allowed.'),
+                    'duplicate' => __('locale.This SMTP (same host, port and username) is already in your list.'),
+                    'limit' => __('locale.You can add at most :max SMTPs.'),
+                    'auth_failed' => __('locale.The SMTP server rejected the username or password.'),
+                    'connect_failed' => __('locale.Could not connect to the SMTP server. Please check the host, port and encryption.'),
+                ],
+                'attributes' => [
+                    'name' => __('locale.Name'),
+                    'host' => __('locale.Host'),
+                    'port' => __('locale.Port'),
+                    'username' => __('locale.Username'),
+                    'password' => __('locale.Password'),
+                    'from_address' => __('locale.From Email'),
+                    'from_name' => __('locale.From Name'),
+                ],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 'error', 'errors' => $e->errors()], 422);
         }
 
-        $smtp = $existing ?: new PartnerSmtpSetting(['partner_id' => $partner->id]);
-        foreach (['host', 'port', 'username', 'from_address'] as $field) {
-            if ($request->filled($field)) {
-                $smtp->{$field} = trim((string) $request->input($field));
-            }
-        }
-        $smtp->host = $smtp->host ? strtolower($smtp->host) : $smtp->host;
-        $smtp->encryption = $request->input('encryption') ?: null;
-        $smtp->from_name = trim(strip_tags((string) $request->input('from_name')));
-        if ($request->filled('password')) {
-            $smtp->password = (string) $request->input('password');
-        }
-        $smtp->status = $active;
-        $smtp->updated_by = $partner->id;
+        return $this->smtpResponse($partner->id, $smtp ? __('locale.SMTP saved.') : __('locale.SMTP added.'));
+    }
 
-        if ($active) {
-            if ($error = $this->smtpConnectionError($smtp)) {
-                return response()->json(['status' => 'error', 'errors' => ['smtp' => [$error]]], 422);
-            }
-            $smtp->save();
-        } elseif ($existing || $smtp->isComplete()) {
-            // Turned off (or saved off): kept for later, default mailer used.
-            $smtp->save();
-        }
-        // Off with nothing complete to keep: nothing to store.
-
+    /** Success + this partner's re-rendered SMTP list. */
+    private function smtpResponse(int $partnerId, string $message)
+    {
         return response()->json([
             'status' => 'success',
-            'message' => $active
-                ? __('locale.SMTP settings saved. Customer emails will be sent from :email.', ['email' => $smtp->from_address])
-                : __('locale.SMTP settings saved. Customer emails will be sent with the default RecruitmentCV email settings.'),
-            'data' => [
-                'status' => (bool) $smtp->status,
-                'has_password' => filled($smtp->exists ? $smtp->getRawOriginal('password') : null),
-            ],
+            'message' => $message,
+            'html' => view('worker.partner.partials.smtp-list', ['smtps' => SmtpSettings::list($partnerId)])->render(),
         ]);
-    }
-
-    /**
-     * Host/port/encryption/From of the sender used when a partner has no
-     * SMTP of their own: the global Website SMTP when active, else .env.
-     * Username and password are never included.
-     */
-    private function defaultSmtpDisplay(): array
-    {
-        try {
-            $global = WebsiteSmtpSetting::current();
-            if ($global && $global->isUsable()) {
-                return [
-                    'host' => $global->host,
-                    'port' => $global->port,
-                    'encryption' => (string) $global->encryption,
-                    'from_address' => $global->from_address,
-                    'from_name' => $global->from_name,
-                ];
-            }
-        } catch (\Throwable $e) {
-            // Unreadable global row: show the .env values below.
-        }
-
-        $encryption = strtolower((string) config('mail.mailers.smtp.encryption'));
-
-        return [
-            'host' => config('mail.mailers.smtp.host'),
-            'port' => (int) config('mail.mailers.smtp.port'),
-            'encryption' => in_array($encryption, ['ssl', 'tls'], true) ? $encryption : '',
-            'from_address' => config('mail.from.address'),
-            'from_name' => config('mail.from.name'),
-        ];
-    }
-
-    /**
-     * Opens + authenticates an SMTP session with these (unsaved) settings,
-     * without sending anything. A friendly message on failure - never the
-     * server's raw reply, which can echo settings.
-     */
-    private function smtpConnectionError(PartnerSmtpSetting $smtp): ?string
-    {
-        try {
-            $transport = $smtp->mailer()->getSymfonyTransport();
-            $transport->start();
-            $transport->stop();
-
-            return null;
-        } catch (\Throwable $e) {
-            Log::info('Partner SMTP connection test failed', ['partner_id' => $smtp->partner_id, 'exception' => get_class($e)]);
-
-            return str_contains(strtolower($e->getMessage()), 'authenticat')
-                ? __('locale.The SMTP server rejected the username or password.')
-                : __('locale.Could not connect to the SMTP server. Please check the host, port and encryption.');
-        } finally {
-            Mail::purge('partner_smtp_' . $smtp->partner_id);
-        }
     }
 
     /**

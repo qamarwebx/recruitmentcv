@@ -131,7 +131,14 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
     Route::get('/candidates/{id}', [PartnerPortalController::class, 'candidateShow'])->name('candidates.show');
     // Download CV = this partner's own B2B CV (executed on demand) - see PartnerPortalController::candidateCv.
     Route::get('/candidates/{id}/cv', [PartnerPortalController::class, 'candidateCv'])->name('candidates.cv');
+    // Blurred passport image for partners not yet fully verified (candidate gallery).
+    Route::get('/candidates/{id}/passport-preview', [PartnerPortalController::class, 'candidatePassportPreview'])->name('candidates.passport');
     Route::post('/candidates/{id}/hire', [PartnerHireController::class, 'store'])->name('candidates.hire');
+    // Partner Activity alerts to CRM staff (App\Support\PartnerActivity): Candidate Detail
+    // presence (visit + heartbeats) and Hire Now / Download CV clicks.
+    Route::post('/candidates/{id}/activity/visit', [PartnerPortalController::class, 'candidateActivityVisit'])->middleware('throttle:30,1')->name('candidates.activity.visit');
+    Route::post('/candidates/{id}/activity/heartbeat', [PartnerPortalController::class, 'candidateActivityHeartbeat'])->middleware('throttle:60,1')->name('candidates.activity.heartbeat');
+    Route::post('/candidates/{id}/activity/click', [PartnerPortalController::class, 'candidateActivityClick'])->middleware('throttle:30,1')->name('candidates.activity.click');
     // Payment - this partner's CRM invoices, read-only (view/download PDF).
     Route::get('/payment', [PartnerPaymentController::class, 'index'])->name('payment');
     Route::get('/payment/{id}/view', [PartnerPaymentController::class, 'show'])->whereNumber('id')->name('payment.show');
@@ -200,7 +207,13 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
     Route::post('/settings/logo', [PartnerPortalController::class, 'settingsLogoUpdate'])->name('settings.logo');
     Route::post('/settings/domain', [PartnerPortalController::class, 'settingsDomainUpdate'])->name('settings.domain');
     Route::post('/settings/whatsapp', [PartnerPortalController::class, 'settingsWhatsappUpdate'])->name('settings.whatsapp');
-    Route::post('/settings/smtp', [PartnerPortalController::class, 'settingsSmtpUpdate'])->name('settings.smtp');
+    // SMTP list (the "smtp" section; names resolve to the website module's
+    // "update" action, as the former single save did).
+    Route::post('/settings/smtp', [PartnerPortalController::class, 'smtpAdd'])->name('settings.smtp.add');
+    Route::post('/settings/smtp/{smtp}', [PartnerPortalController::class, 'smtpSave'])->whereNumber('smtp')->name('settings.smtp.save');
+    Route::post('/settings/smtp/{smtp}/remove', [PartnerPortalController::class, 'smtpRemove'])->whereNumber('smtp')->name('settings.smtp.remove');
+    Route::post('/settings/smtp/{smtp}/move', [PartnerPortalController::class, 'smtpMove'])->whereNumber('smtp')->name('settings.smtp.move');
+    Route::post('/settings/smtp/{smtp}/test', [PartnerPortalController::class, 'smtpTest'])->whereNumber('smtp')->name('settings.smtp.test');
 
     // Attaches+verifies a mobile number for the already-logged-in partner
     // (Hire Now gate, Profile page "Add/Change Number") - reuses the same

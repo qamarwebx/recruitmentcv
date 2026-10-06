@@ -40,6 +40,9 @@ class AppServiceProvider extends ServiceProvider
             'deal' => \App\Models\DealPipeline::class,
         ]);
 
+        // Default mailer = the website's SMTPs with sequential failover.
+        \App\Support\SmtpMailer::register();
+
         try {
             $domain = str_replace('www.', '', request()->getHost());
     

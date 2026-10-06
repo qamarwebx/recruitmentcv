@@ -48,16 +48,36 @@ class PartnerHireController extends Controller
     {
         $partner = Auth::guard('partner')->user();
 
+        // CRM Registration Request must be Approved (Partner::isRegistrationApproved())
+        // - checked first, from the partner row loaded for this request, so a
+        // CRM change applies on the next click. The page shows the same
+        // "not approved - contact support" modal.
+        if (!$partner->isRegistrationApproved()) {
+            return response()->json([
+                'status' => 'not_approved',
+                'message' => __('locale.Your Account is not Approved yet, please contact our support team.'),
+            ], 403);
+        }
+
         // Authoritative gate - the Hire Now button/modal is only ever
         // JS-gated on the client (data-mobile-verified), which is a UX
         // convenience, not a security boundary. This is the one place that
         // actually creates the order, so it's re-checked here regardless of
         // how the request arrived (direct POST, ?hire=1 auto-open, stale
-        // client-side attribute, etc.) - see Partner::hasVerifiedMobile().
+        // client-side attribute, etc.) - see Partner::isFullyVerified():
+        // mobile AND email verified. The status says which one is missing so
+        // the page starts the right existing flow (mobile OTP modal / My
+        // Account email verification).
         if (!$partner->hasVerifiedMobile()) {
             return response()->json([
                 'status' => 'mobile_unverified',
                 'message' => __('locale.Please verify your mobile number first.'),
+            ], 403);
+        }
+        if (!$partner->isFullyVerified()) {
+            return response()->json([
+                'status' => 'email_unverified',
+                'message' => __('locale.Please verify your email address first.'),
             ], 403);
         }
 
