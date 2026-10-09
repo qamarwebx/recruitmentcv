@@ -488,6 +488,19 @@ class PartnerPortalController extends Controller
             }
         }
 
+        // Available / Already Hired (?hiring=hired; default Available): the same
+        // rule as the Already Hired badge (PartnerCandidateAccess::whereAlreadyHired()),
+        // inside the search / filters above. Both counts are over the complete
+        // filtered result set, not just this page. This partner's own orders
+        // stay under Available (shown as Hired / View Order, as before).
+        $hiring = $request->query('hiring') === 'hired' ? 'hired' : 'available';
+        $partnerId = (int) $this->partnerId();
+        $hiringCounts = [
+            'available' => \App\Support\PartnerCandidateAccess::whereAlreadyHired(clone $query, $partnerId, null, false)->count(),
+            'hired' => \App\Support\PartnerCandidateAccess::whereAlreadyHired(clone $query, $partnerId, null, true)->count(),
+        ];
+        \App\Support\PartnerCandidateAccess::whereAlreadyHired($query, $partnerId, null, $hiring === 'hired');
+
         $candidates = $query->orderByDesc('id')->paginate(12)->withQueryString();
 
         // Partner-scoped "already hired" lookup for Hired badge / View Order
@@ -528,6 +541,8 @@ class PartnerPortalController extends Controller
 
         return view('worker.partner.candidates.index', compact(
             'candidates',
+            'hiring',
+            'hiringCounts',
             'professionOptions',
             'locationOptions',
             'candidateOptions',
@@ -557,15 +572,11 @@ class PartnerPortalController extends Controller
         // same "still live" convention the existing customer-facing flow
         // uses ($checkCand/$candBkc in FrontEndController::fullresumes()) -
         // a cancelled order shouldn't block a partner from hiring again.
-        $existingBooking = DB::table('bookings')
-            ->where('partner_id', $partnerId)
-            ->where('cand_id', $post->id)
-            ->where('booking_status', '!=', 2)
-            ->first();
+        // (App\Support\PartnerCandidateAccess - the same rule the passport
+        // protection uses.)
+        $existingBooking = \App\Support\PartnerCandidateAccess::booking((int) $partnerId, (int) $post->id);
 
-        $isAvailable = (int) $post->status === 1 && (int) $post->publish === 1 && (int) $post->cv_execute === 1;
-
-        abort_if(!$isAvailable && !$existingBooking, 404);
+        abort_if(!\App\Support\PartnerCandidateAccess::isAvailable($post) && !$existingBooking, 404);
 
         return [$post, $existingBooking];
     }
@@ -576,6 +587,9 @@ class PartnerPortalController extends Controller
 
         [$post, $existingBooking] = $this->accessibleCandidate($id, $partnerId);
         $hasBooking = (bool) $existingBooking;
+        // "Already Hired" badge: hired by another customer / partner and this
+        // partner has no live order of its own (PartnerCandidateAccess).
+        $alreadyHired = \App\Support\PartnerCandidateAccess::alreadyHiredIds([$post->id], (int) $partnerId) === [(int) $post->id];
 
         $totalExperience = $post->experience ? array_sum(array_filter(explode(',', $post->experience), 'is_numeric')) : 0;
         $nation = Country::find($post->nation_id);
@@ -621,6 +635,7 @@ class PartnerPortalController extends Controller
         return view('worker.partner.candidates.show', compact(
             'post',
             'hasBooking',
+            'alreadyHired',
             'existingBooking',
             'totalExperience',
             'nation',
@@ -951,51 +966,25 @@ class PartnerPortalController extends Controller
     }
 
     /**
-     * Passport image for a partner who is NOT fully verified
-     * (Partner::isFullyVerified()): a blurred, downscaled copy rendered here,
-     * so the candidate gallery never puts the original file's URL in the
-     * page for them (worker.partials.candidate-gallery). Same candidate
-     * access rule as the detail page. Never redirects to / streams the
-     * original; a placeholder when it can't be rendered.
+     * Blurred passport image for the Partner Portal's candidate gallery where
+     * App\Support\PassportAccess withholds the original (partner not
+     * Approved, or not fully verified). Same candidate access rule as the
+     * detail page. Never the original - always the blurred copy (or a
+     * placeholder when it can't be rendered).
      */
     public function candidatePassportPreview($id)
     {
         [$post] = $this->accessibleCandidate($id, $this->partnerId());
 
-        $path = $post->pass_file ? public_path('admin/assets/images/candidate/' . basename((string) $post->pass_file)) : null;
-        $source = ($path && is_file($path)) ? @imagecreatefromstring((string) file_get_contents($path)) : false;
+        return \App\Support\PassportAccess::blurredResponse($post->pass_file);
+    }
 
-        if ($source) {
-            // Shrink hard first (detail is gone before any blur), then blur
-            // the small copy repeatedly and scale it back up.
-            $width = imagesx($source);
-            $height = imagesy($source);
-            $smallWidth = 48;
-            $smallHeight = max(1, (int) round($height * $smallWidth / max(1, $width)));
-            $small = imagecreatetruecolor($smallWidth, $smallHeight);
-            imagecopyresampled($small, $source, 0, 0, 0, 0, $smallWidth, $smallHeight, $width, $height);
-            for ($i = 0; $i < 6; $i++) {
-                imagefilter($small, IMG_FILTER_GAUSSIAN_BLUR);
-            }
-            $outWidth = min(640, $width);
-            $outHeight = max(1, (int) round($height * $outWidth / max(1, $width)));
-            $image = imagecreatetruecolor($outWidth, $outHeight);
-            imagecopyresampled($image, $small, 0, 0, 0, 0, $outWidth, $outHeight, $smallWidth, $smallHeight);
-            imagedestroy($small);
-            imagedestroy($source);
-        } else {
-            $image = imagecreatetruecolor(480, 320);
-            imagefill($image, 0, 0, imagecolorallocate($image, 226, 232, 240));
-        }
+    /** The same for the driving licence image (same access rule, never the original). */
+    public function candidateLicencePreview($id)
+    {
+        [$post] = $this->accessibleCandidate($id, $this->partnerId());
 
-        ob_start();
-        imagejpeg($image, null, 70);
-        imagedestroy($image);
-
-        return response(ob_get_clean(), 200, [
-            'Content-Type' => 'image/jpeg',
-            'Cache-Control' => 'private, no-store, max-age=0',
-        ]);
+        return \App\Support\PassportAccess::blurredResponse($post->lic_file);
     }
 
     /**
@@ -1433,7 +1422,8 @@ class PartnerPortalController extends Controller
         DB::transaction(function () use ($employer) {
             Employercandidate::where('emp_id', $employer->id)->get()->each(function ($assignment) {
                 $candidate = Candidate::find($assignment->cand_id);
-                if ($candidate) {
+                // Re-shown only if the CRM reservation queue didn't hide it (reservation_lock full / hold / selected).
+                if ($candidate && empty($candidate->reservation_lock)) {
                     $candidate->status = true;
                     $candidate->save();
                 }
@@ -1607,7 +1597,8 @@ class PartnerPortalController extends Controller
 
             $candidate = Candidate::find($assignment->cand_id);
 
-            if ($candidate) {
+            // Re-shown only if the CRM reservation queue didn't hide it (reservation_lock full / hold / selected).
+            if ($candidate && empty($candidate->reservation_lock)) {
                 $candidate->status = true;
                 $candidate->save();
             }
@@ -1665,8 +1656,6 @@ class PartnerPortalController extends Controller
             // as an email). "sometimes": the Account Details prompt modal,
             // which saves through here too, has no username field.
             'username' => ['sometimes', 'required', 'string', 'max:120', 'regex:/^[^\s@]+$/u', \Illuminate\Validation\Rule::unique('partners', 'username')->ignore($partner->id), \Illuminate\Validation\Rule::unique('partner_team_members', 'username')],
-            // partners.licence_number (optional; empty = not provided).
-            'licence_number' => 'nullable|string|max:100',
             'country_id' => 'nullable|integer|exists:countries,id',
             'city_id' => 'nullable|integer|exists:cities,id',
             // Secondary Email / Mobile (same columns as CRM -> Partner ->
@@ -1681,7 +1670,6 @@ class PartnerPortalController extends Controller
             'username.regex' => __('locale.The username cannot contain spaces or @.'),
             'secondary_mob_country_code.required_with' => __('locale.Please choose the country code.'),
         ], [
-            'licence_number' => __('locale.Recruitment Licence Number'),
             'username' => __('locale.Username'),
             'secondary_email' => __('locale.Secondary Email'),
             'secondary_mob' => __('locale.Secondary Mobile'),
@@ -1704,7 +1692,11 @@ class PartnerPortalController extends Controller
         if ($request->has('username')) {
             $partner->username = $request->username;
         }
-        $partner->licence_number = $request->licence_number;
+        // Recruitment Licence Number (partners.licence_number): read-only for
+        // partners - managed only in the CRM (CRM -> Partner -> Account, with
+        // App\Support\LicenceNumber's global uniqueness). Never read from this
+        // request, so a submitted value (page form, Account Details prompt or a
+        // hand-made request) is ignored and the saved number stays as it is.
         // Email is changed only through the verified flow below
         // (accountEmailSend/accountEmailVerify), never from this form.
         $partner->country_id = $request->country_id;
@@ -1816,6 +1808,17 @@ class PartnerPortalController extends Controller
         $partner->password = \Illuminate\Support\Facades\Hash::make($request->password);
         $partner->save();
 
+        // Security notice (CRM -> Website -> Settings -> Security).
+        \App\Support\NotificationCenter::notify('partner_password_changed', (int) $partner->id, [
+            'title' => $hadPassword ? 'Your RecruitmentCV password was changed' : 'A password was set for your RecruitmentCV account',
+            'message' => $hadPassword
+                ? 'The password of your RecruitmentCV partner account was just changed.'
+                : 'A password was just set for your RecruitmentCV partner account - you can now also sign in with it.',
+            'lines' => [['Account', (string) $partner->email ?: (string) $partner->username], ['IP address', (string) $request->ip()]],
+            'note' => 'If you did not make this change, reset your password right away using Forgot Password, or contact RecruitmentCV support.',
+            'context' => ['ip' => (string) $request->ip()],
+        ]);
+
         return redirect()->route('worker.partner.account')
             ->with('success', $hadPassword ? __('locale.Password changed successfully.') : __('locale.Password set successfully. You can now log in with your password.'));
     }
@@ -1861,19 +1864,19 @@ class PartnerPortalController extends Controller
 
         $code = (string) random_int(100000, 999999);
 
-        try {
-            // This website's SMTPs in failover order (the partner's own, then
-            // the Global ones; the .env mailer when none is configured).
-            SmtpMailer::forSite()->to($email)->send(new \App\Mail\SendOTPVerification([
-                'name' => $partner->owner_name ?: $partner->rec_off_name,
-                'company' => $partner->rec_off_name,
-                'EmailOtp' => $code,
-                'email' => $email,
-                'view' => 'emails.partner-email-verification',
-                'subject' => 'Your email verification code: ' . $code,
-            ]));
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Partner email-change code not sent', ['partner_id' => $partner->id, 'error' => $e->getMessage()]);
+        // This website's SMTPs in failover order (the partner's own, then
+        // the Global ones; the .env mailer when none is configured) -
+        // logged in Notification Logs, never the code.
+        $sent = \App\Support\NotificationCenter::sendEmail('partner_email_change_code', (int) $partner->id, $email, new \App\Mail\SendOTPVerification([
+            'name' => $partner->owner_name ?: $partner->rec_off_name,
+            'company' => $partner->rec_off_name,
+            'EmailOtp' => $code,
+            'email' => $email,
+            'view' => 'emails.partner-email-verification',
+            'subject' => 'Your email verification code: ' . $code,
+        ]), 'site');
+        if (!$sent) {
+            \Illuminate\Support\Facades\Log::warning('Partner email-change code not sent', ['partner_id' => $partner->id]);
 
             return response()->json(['status' => 'error', 'message' => __('locale.We could not send the verification email. Please try again later.')], 500);
         }
@@ -1925,9 +1928,23 @@ class PartnerPortalController extends Controller
             return response()->json(['status' => 'error', 'message' => __('locale.An account with this email already exists.')], 422);
         }
 
+        $previousEmail = (string) $partner->email;
         $partner->email = $pending['email'];
         $partner->email_verified_at = now();
         $partner->save();
+
+        // Security notice to the PREVIOUS address (Settings -> Security).
+        if ($previousEmail !== '' && strcasecmp($previousEmail, (string) $partner->email) !== 0) {
+            \App\Support\NotificationCenter::notify('partner_email_changed', (int) $partner->id, [
+                'email' => $previousEmail,
+                'recipient_name' => (string) ($partner->owner_name ?: $partner->rec_off_name),
+                'title' => 'Your RecruitmentCV email address was changed',
+                'message' => 'The email address of your RecruitmentCV partner account was changed. Sign-in codes and notifications now go to the new address.',
+                'lines' => [['Previous email', $previousEmail], ['New email', preg_replace('/(?<=^.{2})[^@]*(?=@)/', '***', (string) $partner->email)]],
+                'note' => 'If you did not make this change, contact RecruitmentCV support right away.',
+                'context' => ['ip' => (string) $request->ip()],
+            ]);
+        }
 
         return response()->json(['status' => 'success', 'email' => $partner->email, 'message' => __('locale.Email updated successfully.')]);
     }
@@ -2074,9 +2091,6 @@ class PartnerPortalController extends Controller
             return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
         }
 
-        $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
-        $maxBytes = 2048 * 1024;
-
         $basepathstatus = Basepathstatus::first();
         $uploadPath = ($basepathstatus && $basepathstatus->base_path_status == 1)
             ? base_path('public/admin/assets/images/partner/branches')
@@ -2087,30 +2101,18 @@ class PartnerPortalController extends Controller
         foreach ($request->input('branches') as $i => $branch) {
             $image = trim((string) $branch['image']);
 
-            if (preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/', $image, $matches)) {
-                if (!in_array(strtolower($matches[1]), $allowedMimes, true)) {
+            if (str_starts_with($image, 'data:')) {
+                // JPG / PNG / GIF / WEBP / SVG by content (App\Support\ImageUpload), 2MB.
+                $upload = \App\Support\ImageUpload::fromDataUri($image);
+                if (!$upload['ok']) {
                     return response()->json([
                         'status' => 'error',
-                        'message' => __('locale.Only JPG, PNG or WEBP images are allowed.'),
+                        'message' => __('locale.' . $upload['error']),
                     ], 422);
                 }
 
-                $binary = base64_decode($matches[2]);
-
-                if ($binary === false || strlen($binary) > $maxBytes) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => __('locale.Image must not be larger than 2MB.'),
-                    ], 422);
-                }
-
-                if (!is_dir($uploadPath)) {
-                    mkdir($uploadPath, 0755, true);
-                }
-
-                $extension = strtolower($matches[1]) === 'image/png' ? 'png' : (strtolower($matches[1]) === 'image/webp' ? 'webp' : 'jpg');
-                $filename = 'branch_' . $partner->id . '_' . time() . '_' . $i . '.' . $extension;
-                file_put_contents($uploadPath . '/' . $filename, $binary);
+                $filename = 'branch_' . $partner->id . '_' . time() . '_' . $i . '.' . $upload['extension'];
+                \App\Support\ImageUpload::store($upload, $uploadPath, $filename);
 
                 // New file is written and confirmed before the image URL
                 // below ever points at it - an old, now-replaced image
@@ -2288,17 +2290,33 @@ class PartnerPortalController extends Controller
         $partner = Auth::guard('partner')->user();
 
         // "Append Company Name" switch (same Branding save; optional, so a
-        // logo-only request from elsewhere behaves exactly as before).
+        // logo-only request from elsewhere behaves exactly as before). Sent
+        // only when the partner changed it: true/false = this partner's own
+        // value; "default" = remove it (follow the CRM Global setting).
         $hasCompanyNameSwitch = $request->has('append_company_name');
-        if ($hasCompanyNameSwitch && !in_array($request->input('append_company_name'), [true, false, 0, 1, '0', '1'], true)) {
+        if ($hasCompanyNameSwitch && !in_array($request->input('append_company_name'), [true, false, 0, 1, '0', '1', 'default'], true)) {
             return response()->json(['status' => 'error', 'errors' => ['append_company_name' => ['Invalid value.']]], 422);
         }
 
-        $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
-        $maxBytes = 2048 * 1024;
+        // Header / Footer Logo Width & Height (App\Support\LogoDimensions):
+        // optional, sent only when changed; empty = use the CRM Global value.
+        // Only real overrides are kept (a value equal to the Global one is
+        // removed, so the partner keeps following it).
+        $sizeFields = array_keys(\App\Support\LogoDimensions::FIELDS);
+        $sizeMessages = [];
+        foreach (\App\Support\LogoDimensions::FIELDS as $field => [$label, $min, $max]) {
+            $message = __('locale.:field must be a whole number from :min to :max px.', ['field' => __('locale.' . $label), 'min' => $min, 'max' => $max]);
+            $sizeMessages += [$field . '.integer' => $message, $field . '.min' => $message, $field . '.max' => $message];
+        }
+        $sizeValidator = Validator::make($request->only($sizeFields), \App\Support\LogoDimensions::rules(), $sizeMessages);
+        if ($sizeValidator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $sizeValidator->errors()], 422);
+        }
+        $sizeChanges = \App\Support\LogoDimensions::changes($partner->id, $request->only($sizeFields));
 
+        // JPG / PNG / GIF / WEBP / SVG, recognised by content (App\Support\ImageUpload:
+        // real raster check, SVG sanitized); 2MB each, as before.
         $decoded = [];
-        $mimes = [];
 
         foreach (['english_logo' => 'website_logo', 'arabic_logo' => 'website_logo_ar', 'favicon' => 'website_favicon'] as $input => $column) {
             $value = $request->input($input);
@@ -2307,46 +2325,36 @@ class PartnerPortalController extends Controller
                 continue;
             }
 
-            if (!preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/', $value, $matches)) {
+            $image = \App\Support\ImageUpload::fromDataUri($value);
+            if (!$image['ok']) {
                 return response()->json([
                     'status' => 'error',
-                    'errors' => [$input => ['Invalid image data.']],
+                    'errors' => [$input => [__('locale.' . $image['error'])]],
                 ], 422);
             }
 
-            if (!in_array(strtolower($matches[1]), $allowedMimes, true)) {
-                return response()->json([
-                    'status' => 'error',
-                    'errors' => [$input => ['Only JPG, PNG or WEBP images are allowed.']],
-                ], 422);
-            }
-
-            $binary = base64_decode($matches[2]);
-
-            if ($binary === false || strlen($binary) > $maxBytes) {
-                return response()->json([
-                    'status' => 'error',
-                    'errors' => [$input => ['Image must not be larger than 2MB.']],
-                ], 422);
-            }
-
-            $decoded[$column] = $binary;
-            $mimes[$column] = strtolower($matches[1]);
+            $decoded[$column] = $image;
         }
 
-        if (empty($decoded) && !$hasCompanyNameSwitch) {
+        $sizeSent = (bool) array_intersect($sizeFields, array_keys($request->all()));
+        if (empty($decoded) && !$hasCompanyNameSwitch && !$sizeSent) {
             return response()->json(['status' => 'error', 'message' => __('locale.Choose at least one logo to upload.')], 422);
         }
 
+        $brandingValues = $sizeChanges;
         if ($hasCompanyNameSwitch) {
-            PartnerPageContent::saveBranding($partner->id, ['append_company_name' => (bool) $request->input('append_company_name')]);
+            $appendCompanyName = $request->input('append_company_name');
+            $brandingValues[PartnerPageContent::APPEND_COMPANY_NAME] = $appendCompanyName === 'default' ? null : in_array($appendCompanyName, [true, 1, '1'], true);
+        }
+        if ($brandingValues) {
+            PartnerPageContent::saveBranding($partner->id, $brandingValues);
         }
 
         if (empty($decoded)) {
             return response()->json([
                 'status' => 'success',
                 'message' => __('locale.Branding updated successfully.'),
-                'data' => PartnerPageContent::brandingFor($partner->id),
+                'data' => PartnerPageContent::brandingFor($partner->id) + ['logo_size' => $this->logoSizeData($partner->id)],
             ]);
         }
 
@@ -2363,17 +2371,16 @@ class PartnerPortalController extends Controller
 
         $replaced = [];
 
-        foreach ($decoded as $column => $binary) {
+        foreach ($decoded as $column => $image) {
             $suffix = ['website_logo' => 'en', 'website_logo_ar' => 'ar', 'website_favicon' => 'fav'][$column];
 
-            // Logos keep their existing .png naming; the favicon keeps its real
-            // extension so browsers get the right type for <link rel="icon">.
-            $extension = $column === 'website_favicon'
-                ? (['image/jpeg' => 'jpg', 'image/webp' => 'webp'][$mimes[$column]] ?? 'png')
-                : 'png';
+            // Raster logos keep their existing .png naming; the favicon keeps its
+            // real extension so browsers get the right type for <link rel="icon">;
+            // an SVG is always .svg (served as image/svg+xml).
+            $extension = $image['extension'] === 'svg' || $column === 'website_favicon' ? $image['extension'] : 'png';
             // Unique per domain row (shared folder - see Domain::newBrandingFileName()).
             $name = $domain->newBrandingFileName($suffix, $extension);
-            file_put_contents($uploadPath . '/' . $name, $binary);
+            \App\Support\ImageUpload::store($image, $uploadPath, $name);
 
             if ($domain->{$column}) {
                 $replaced[] = $domain->{$column};
@@ -2396,8 +2403,20 @@ class PartnerPortalController extends Controller
                 'english_logo' => $domain->website_logo ? asset('admin/assets/images/partner/' . $domain->website_logo) : null,
                 'arabic_logo' => $domain->website_logo_ar ? asset('admin/assets/images/partner/' . $domain->website_logo_ar) : null,
                 'favicon' => $domain->website_favicon ? asset('admin/assets/images/partner/' . $domain->website_favicon) : null,
-            ] + PartnerPageContent::brandingFor($partner->id),
+            ] + PartnerPageContent::brandingFor($partner->id) + ['logo_size' => $this->logoSizeData($partner->id)],
         ]);
+    }
+
+    /** Branding tab -> Logo Size after a save: own values, effective values / sources, and the CSS variables to apply. */
+    private function logoSizeData(int $partnerId): array
+    {
+        $data = \App\Support\LogoDimensions::formData($partnerId);
+        $data['css_vars'] = [];
+        foreach (\App\Support\LogoDimensions::CSS_VARS as $field => $var) {
+            $data['css_vars'][$var] = (int) $data['values'][$field] . 'px';
+        }
+
+        return $data;
     }
 
     /**
@@ -2631,9 +2650,15 @@ class PartnerPortalController extends Controller
      */
     public function settingsDomainUpdate(Request $request)
     {
+        // Website addresses (subdomain or Own Domain) are managed only in CRM
+        // (Partner -> Website -> Domain); nothing a partner sends changes them.
+        $mode = \App\Support\PartnerDomains::displayMode(Auth::guard('partner')->user()->domain);
+
         return response()->json([
             'status' => 'error',
-            'message' => __('locale.Your subdomain is managed automatically and cannot be changed here.'),
+            'message' => $mode === 'custom'
+                ? __('locale.Your custom domain is managed automatically and cannot be changed here.')
+                : ($mode === 'subdomain' ? __('locale.Your subdomain is managed automatically and cannot be changed here.') : __('locale.Your domain is managed automatically and cannot be changed here.')),
         ], 403);
     }
 }

@@ -120,6 +120,18 @@ class WorkerPageController extends Controller
             $cand->whereIn('overall_exp', array_unique($request->finalExp));
         }
 
+        // Available / Already Hired (?hiring=hired; default Available) for this
+        // viewer (partner / customer / guest): the same rule as the Already Hired
+        // badge (PartnerCandidateAccess::whereAlreadyHired()). Counts are over the
+        // whole filtered result set, not just this page.
+        $hiring = $request->query('hiring') === 'hired' ? 'hired' : 'available';
+        [$viewerPartnerId, $viewerUserId] = \App\Support\PartnerCandidateAccess::viewer();
+        $hiringCounts = [
+            'available' => \App\Support\PartnerCandidateAccess::whereAlreadyHired(clone $cand, $viewerPartnerId, $viewerUserId, false)->count(),
+            'hired' => \App\Support\PartnerCandidateAccess::whereAlreadyHired(clone $cand, $viewerPartnerId, $viewerUserId, true)->count(),
+        ];
+        \App\Support\PartnerCandidateAccess::whereAlreadyHired($cand, $viewerPartnerId, $viewerUserId, $hiring === 'hired');
+
         $posts = $cand->orderBy('id', 'DESC')->paginate(9)->withQueryString();
 
         $cities = Expecworkcity::whereExists(function ($query) {
@@ -140,7 +152,7 @@ class WorkerPageController extends Controller
         $webconfig = Websiteconfig::first();
 
         if ($request->ajax()) {
-            return view('worker.resumes.partial', compact('posts'));
+            return view('worker.resumes.partial', compact('posts', 'hiring', 'hiringCounts'));
         }
 
         // Banner texts: partner override -> global -> default (Website Config).
@@ -149,6 +161,8 @@ class WorkerPageController extends Controller
         return view('worker.resumes.index', compact(
             'resumesContent',
             'posts',
+            'hiring',
+            'hiringCounts',
             'cities',
             'jobTypes',
             'religions',
@@ -324,7 +338,15 @@ class WorkerPageController extends Controller
             ];
         }
 
+        // "Already Hired" badge + notice, for whoever is looking: a signed-in
+        // partner (its own orders don't count), a customer (its own orders
+        // don't count) or a guest (any live order counts). Hidden when the
+        // viewer already has a live order of their own for this candidate.
+        // Same lookup as the listings (PartnerCandidateAccess::alreadyHiredIds()).
+        $alreadyHired = \App\Support\PartnerCandidateAccess::alreadyHiredIdsForViewer([$post->id]) === [(int) $post->id];
+
         return view('worker.resumes.details', [
+            'alreadyHired' => $alreadyHired,
             'isWishlisted' => $isWishlisted,
             'hire' => $hire,
             'post' => $post,

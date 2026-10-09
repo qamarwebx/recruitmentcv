@@ -37,7 +37,7 @@ class PartnerAuthController extends Controller
 
         // Already signed in (Pending or Approved - only Rejected can't hold a session).
         if ($partner && !$partner->isRegistrationRejected()) {
-            return redirect($partner->portalBaseUrl() . route('worker.partner.candidates', [], false));
+            return redirect(\App\Support\PartnerDomains::siteBaseUrl($partner) . route('worker.partner.candidates', [], false));
         }
 
         // Only same-host relative paths - never "//evil.com" or an absolute
@@ -114,6 +114,9 @@ class PartnerAuthController extends Controller
         if ($partner->isRegistrationRejected()) {
             return response()->json(['status' => 'rejected', 'message' => __('locale.Your registration has been rejected.')], 403);
         }
+        if ($partner->isPortalRevoked()) {
+            return response()->json(['status' => 'portal_unavailable', 'message' => __('locale.Your RecruitmentCV portal is currently unavailable. Please contact support.')], 403);
+        }
 
         Auth::guard('partner')->login($partner);
         OtpVerification::consume($request);
@@ -126,7 +129,7 @@ class PartnerAuthController extends Controller
         // otherwise the app's default host. route(..., [], false) keeps
         // the actual URI in sync with the route definition instead of
         // hardcoding '/partner/candidates' a second time here.
-        $redirect = $partner->portalBaseUrl() . route('worker.partner.candidates', [], false);
+        $redirect = \App\Support\PartnerDomains::siteBaseUrl($partner) . route('worker.partner.candidates', [], false);
 
         return response()->json(['status' => 'success', 'redirect' => $redirect]);
     }
@@ -234,17 +237,34 @@ class PartnerAuthController extends Controller
      * session records the member (App\Support\PartnerTeam). Lands on the
      * partner's own site, on the member's first permitted page.
      */
-    public function completeTeamMemberLogin(Request $request, \App\Models\PartnerTeamMember $member)
+    /** Why this team member may not sign in now (null = may). Same rules for every sign-in path. */
+    public function teamMemberLoginRefusal(\App\Models\PartnerTeamMember $member): ?string
     {
         $partner = $member->partner;
-
         if (!$member->status) {
-            return response()->json(['status' => 'error', 'message' => __('locale.This team member account is disabled. Please contact your partner.')], 403);
+            return __('locale.This team member account is disabled. Please contact your partner.');
         }
         // Same rule as the partner: a Rejected partner's team can't sign in;
         // Pending is fine (Hire Now / Download CV wait for approval).
         if (!$partner || $partner->isRegistrationRejected()) {
-            return response()->json(['status' => 'error', 'message' => __('locale.Your partner account is not active.')], 403);
+            return __('locale.Your partner account is not active.');
+        }
+        if ($partner->isPortalRevoked()) {
+            return __('locale.Your RecruitmentCV portal is currently unavailable. Please contact support.');
+        }
+
+        return null;
+    }
+
+    public function completeTeamMemberLogin(Request $request, \App\Models\PartnerTeamMember $member)
+    {
+        $partner = $member->partner;
+
+        $refusal = $this->teamMemberLoginRefusal($member);
+        if ($refusal) {
+            $status = $partner && !$partner->isRegistrationRejected() && $member->status && $partner->isPortalRevoked() ? 'portal_unavailable' : 'error';
+
+            return response()->json(['status' => $status, 'message' => $refusal], 403);
         }
 
         Auth::guard('partner')->login($partner);   // Login event clears any earlier member marker
@@ -253,7 +273,7 @@ class PartnerAuthController extends Controller
 
         $path = \App\Support\PartnerTeam::homeUrl($member, false) ?? route('worker.partner.account', [], false);
 
-        return response()->json(['status' => 'success', 'redirect' => $partner->portalBaseUrl() . $path]);
+        return response()->json(['status' => 'success', 'redirect' => \App\Support\PartnerDomains::siteBaseUrl($partner) . $path]);
     }
 
     /**
@@ -273,11 +293,14 @@ class PartnerAuthController extends Controller
         if ($partner->isRegistrationRejected()) {
             return response()->json(['status' => 'rejected', 'message' => __('locale.Your registration has been rejected.')], 403);
         }
+        if ($partner->isPortalRevoked()) {
+            return response()->json(['status' => 'portal_unavailable', 'message' => __('locale.Your RecruitmentCV portal is currently unavailable. Please contact support.')], 403);
+        }
 
         Auth::guard('partner')->login($partner);
         $request->session()->regenerate();
 
-        $redirect = $partner->portalBaseUrl() . route('worker.partner.candidates', [], false);
+        $redirect = \App\Support\PartnerDomains::siteBaseUrl($partner) . route('worker.partner.candidates', [], false);
 
         return response()->json(['status' => 'success', 'redirect' => $redirect]);
     }
@@ -446,20 +469,20 @@ class PartnerAuthController extends Controller
         $member = $partner instanceof \App\Models\PartnerTeamMember ? $partner : null;
 
         if ($partner && filled($partner->email)) {
-            try {
-                \App\Support\SmtpMailer::forSite()->to($partner->email)->send(new \App\Mail\SendOTPVerification([
-                    'name' => $member ? $member->full_name : ($partner->owner_name ?: $partner->rec_off_name),
-                    'company' => $member ? optional($member->partner)->rec_off_name : $partner->rec_off_name,
-                    'EmailOtp' => $code,
-                    'email' => $partner->email,
-                    'purpose' => $purpose,
-                    'expires_minutes' => $minutes,
-                    'view' => 'emails.partner-email-verification',
-                    'subject' => $purpose === 'reset' ? 'Your partner password reset code' : 'Your partner login code: ' . $code,
-                ]));
-                $sent = true;
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Partner email code not sent', ['partner_id' => $partner->id, 'purpose' => $purpose, 'exception' => get_class($e)]);
+            // Logged in Notification Logs (never the code); always on - a
+            // sign-in code can't be switched off.
+            $sent = \App\Support\NotificationCenter::sendEmail('partner_login_code', $member ? (int) $member->partner_id : (int) $partner->id, $partner->email, new \App\Mail\SendOTPVerification([
+                'name' => $member ? $member->full_name : ($partner->owner_name ?: $partner->rec_off_name),
+                'company' => $member ? optional($member->partner)->rec_off_name : $partner->rec_off_name,
+                'EmailOtp' => $code,
+                'email' => $partner->email,
+                'purpose' => $purpose,
+                'expires_minutes' => $minutes,
+                'view' => 'emails.partner-email-verification',
+                'subject' => $purpose === 'reset' ? 'Your partner password reset code' : 'Your partner login code: ' . $code,
+            ]), 'site', ['context' => ['purpose' => $purpose] + ($member ? ['team_member_id' => $member->id] : [])]);
+            if (!$sent) {
+                \Illuminate\Support\Facades\Log::warning('Partner email code not sent', ['partner_id' => $partner->id, 'purpose' => $purpose]);
             }
         }
 
@@ -739,6 +762,12 @@ class PartnerAuthController extends Controller
         // survives (an absent value is cleared, not kept).
         $partner->email = $googleData['email'] ?? ($request->email ?: null);
         $partner->google_id = $googleData ? $googleData['google_id'] : null;
+        // Google registration: the address Google authenticated (and reports
+        // verified) is verified now - no separate email code. A typed email
+        // (normal registration) is left exactly as before.
+        if ($googleData) {
+            \App\Support\GoogleEmailVerification::apply($partner, $googleData['email'] ?? null, (bool) ($googleData['email_verified'] ?? false));
+        }
         if (!$partner->exists) {
             $partner->owner_mobile_no = $mobile;
         }
@@ -788,6 +817,25 @@ class PartnerAuthController extends Controller
         OtpVerification::consume($request);
         $request->session()->forget(['Mobile', 'new_partner']);
 
+        // CRM staff: a new partner is waiting for approval (Settings ->
+        // Partner Notification; once per partner).
+        $city = $partner->city_id ? \Illuminate\Support\Facades\DB::table('cities')->where('id', $partner->city_id)->value('name') : null;
+        \App\Support\NotificationCenter::notify('partner_registered', (int) $partner->id, [
+            'title' => 'New partner registration: ' . ($partner->rec_off_name ?: $partner->owner_name),
+            'message' => 'A new partner registered on RecruitmentCV and is waiting for approval.',
+            'partner_name' => (string) ($partner->rec_off_name ?: $partner->owner_name),
+            'lines' => [
+                ['Office', (string) $partner->rec_off_name],
+                ['Owner', (string) $partner->owner_name],
+                ['Mobile', \App\Support\PartnerContact::display(\App\Support\PartnerContact::primaryMobile($partner))],
+                ['Email', (string) $partner->email],
+                ['City', $city],
+            ],
+            'action' => ['Review in CRM', \App\Support\NotificationCenter::crmUrl('admin/partner/view/' . $partner->id)],
+            'dedupe' => 'partner:' . $partner->id,
+            'context' => ['id' => $partner->id],
+        ]);
+
         // Signed in right away (the mobile was just OTP-verified): a Pending
         // partner uses the Portal; Hire Now / Download CV wait for the CRM
         // approval. The "Registration Submitted" screen offers the dashboard.
@@ -797,7 +845,7 @@ class PartnerAuthController extends Controller
         return response()->json([
             'status' => 'pending',
             'message' => __('locale.Thanks for registering! Your account is pending admin approval. We will notify you once approved.'),
-            'redirect' => $partner->portalBaseUrl() . route('worker.partner.dashboard', [], false),
+            'redirect' => \App\Support\PartnerDomains::siteBaseUrl($partner) . route('worker.partner.dashboard', [], false),
         ]);
     }
 
@@ -833,28 +881,115 @@ class PartnerAuthController extends Controller
      */
     public function completeGoogleLogin(Request $request)
     {
-        $token = $request->query('token');
-        $partnerId = $token ? Cache::pull('partner_google_handoff:' . $token) : null;
+        $token = (string) $request->query('token');
+        $data = $token !== '' ? Cache::pull('partner_google_handoff:' . $token) : null;
+        // Older tokens held just the partner id.
+        $data = is_array($data) ? $data : ($data ? ['partner_id' => (int) $data, 'team_member_id' => null, 'host' => null] : null);
+        $back = fn (string $message) => redirect()->route('worker.partner.login.page', ['login' => 1, 'auth_message' => $message]);
 
-        if (!$partnerId) {
-            return redirect()->route('worker.home', [
-                'login' => 1,
-                'auth_message' => 'That Google sign-in link has expired. Please try again.',
-            ]);
+        $partner = $data ? Partner::find($data['partner_id']) : null;
+        if (!$partner) {
+            return $back('That Google sign-in link has expired. Please try again.');
+        }
+        if ($partner->isRegistrationRejected()) {
+            return $back('Your registration has been rejected.');
+        }
+        if ($partner->isPortalRevoked()) {
+            return $back(__('locale.Your RecruitmentCV portal is currently unavailable. Please contact support.'));
         }
 
-        $partner = Partner::find($partnerId);
+        // Only on the website it was issued for, and only one of this
+        // partner's own live addresses (resolved server-side from the host).
+        if (!$this->handoffHostMatches($request, $partner, $data['host'] ?? null)) {
+            return $back('That Google sign-in link has expired. Please try again.');
+        }
 
-        if (!$partner || $partner->isRegistrationRejected()) {
-            $message = $partner ? 'Your registration has been rejected.' : 'That Google sign-in link has expired. Please try again.';
-
-            return redirect()->route('worker.home', ['login' => 1, 'auth_message' => $message]);
+        $member = !empty($data['team_member_id']) ? \App\Models\PartnerTeamMember::where('id', $data['team_member_id'])->where('partner_id', $partner->id)->first() : null;
+        if (!empty($data['team_member_id'])) {
+            $refusal = $member ? $this->teamMemberLoginRefusal($member) : 'That Google sign-in link has expired. Please try again.';
+            if ($refusal) {
+                return $back($refusal);
+            }
         }
 
         Auth::guard('partner')->login($partner);
         $request->session()->regenerate();
+        if ($member) {
+            \App\Support\PartnerTeam::start($member);
+
+            return redirect(\App\Support\PartnerTeam::homeUrl($member, false) ?? route('worker.partner.account', [], false));
+        }
 
         return redirect()->route('worker.partner.candidates');
+    }
+
+    /**
+     * CRM -> Partner -> Account -> "Login As Partner" (App\Services\
+     * PartnerLoginAs in the CRM): completes the sign-in on the partner's own
+     * host. The token is the CRM's encrypted, 60-second, single-use handoff
+     * (both apps share the application key). Everything is checked again
+     * here: purpose, expiry, single use, the partner exists, its Registration
+     * Status is Approved (the CRM's exact condition), its portal isn't revoked, and this
+     * request is on the exact host the CRM resolved for it (one of the
+     * partner's own live addresses - ResolvePartnerWebsiteDomain). Then the
+     * same partner-guard sign-in as every partner login, as the account
+     * owner (never a leftover team-member session), session regenerated.
+     */
+    public function completeCrmLogin(Request $request)
+    {
+        $expired = 'That Login As Partner link has expired. Please start it again from the CRM.';
+        $back = fn (string $message) => redirect()->route('worker.partner.login.page', ['login' => 1, 'auth_message' => $message]);
+
+        try {
+            $data = json_decode(\Illuminate\Support\Facades\Crypt::decryptString((string) $request->query('token')), true);
+        } catch (\Throwable $e) {
+            $data = null;
+        }
+        if (!is_array($data) || ($data['purpose'] ?? null) !== 'crm_login_as' || empty($data['nonce']) || empty($data['host']) || (int) ($data['exp'] ?? 0) < time()) {
+            return $back($expired);
+        }
+        // Single use: a link that was already used (or replayed) is refused.
+        if (!Cache::add('partner_crm_login:' . hash('sha256', (string) $data['nonce']), 1, 300)) {
+            return $back($expired);
+        }
+
+        $partner = Partner::find((int) ($data['partner_id'] ?? 0));
+        if (!$partner || !$partner->isRegistrationApproved() || $partner->isPortalRevoked()) {
+            return $back('This partner account cannot be opened.');
+        }
+        if (!$this->handoffHostMatches($request, $partner, (string) $data['host'])) {
+            return $back($expired);
+        }
+
+        \App\Support\PartnerTeam::clear();
+        Auth::guard('partner')->login($partner);
+        $request->session()->regenerate();
+        // Live Partners: an admin's session, not one of the partner's own logins.
+        \App\Support\PartnerLoginTracker::markStartedBy('crm_admin');
+        \Illuminate\Support\Facades\Log::info('Login As Partner completed', [
+            'admin_id' => (int) ($data['admin_id'] ?? 0),
+            'admin_name' => (string) ($data['admin_name'] ?? ''),
+            'partner_id' => $partner->id,
+            'host' => strtolower($request->getHost()),
+            'ip' => $request->ip(),
+            'at' => now()->toDateTimeString(),
+        ]);
+
+        return redirect()->route('worker.partner.candidates');
+    }
+
+    /**
+     * A handoff sign-in (Google, CRM Login As Partner) only completes on the
+     * website it was issued for: one of this partner's own live addresses,
+     * resolved server-side from the Host header (ResolvePartnerWebsiteDomain
+     * -> currentPartner) - and, when given, exactly that host.
+     */
+    private function handoffHostMatches(Request $request, Partner $partner, ?string $host): bool
+    {
+        $site = app()->bound('currentPartner') ? app('currentPartner') : null;
+        $hostOk = empty($host) || preg_replace('/^www\./', '', strtolower($request->getHost())) === $host;
+
+        return $site && (int) $site->id === (int) $partner->id && $hostOk;
     }
 
     /**

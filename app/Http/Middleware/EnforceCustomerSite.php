@@ -47,7 +47,9 @@ class EnforceCustomerSite
 
             // Customer Google sign-in start. (The callback stays open: partner-
             // subdomain customers' Google sign-in returns through this host.)
-            if ($request->is('auth/google')) {
+            // ... except the signed bounce of a sign-in started on a partner's
+            // Own Domain (SocialLoginController::redirectToGoogle() validates it).
+            if ($request->is('auth/google') && !$request->filled('site')) {
                 return redirect()->route('worker.home');
             }
 

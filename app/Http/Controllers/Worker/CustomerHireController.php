@@ -88,7 +88,8 @@ class CustomerHireController extends Controller
             return response()->json(['status' => 'error', 'message' => __('locale.Candidate not found.')], 404);
         }
 
-        $isAvailable = (int) $candidate->status === 1 && (int) $candidate->publish === 1 && (int) $candidate->cv_execute === 1;
+        // reservation_lock: held / selected / full in the CRM reservation queue - never hireable here.
+        $isAvailable = (int) $candidate->status === 1 && (int) $candidate->publish === 1 && (int) $candidate->cv_execute === 1 && empty($candidate->reservation_lock);
         if (!$isAvailable) {
             return response()->json(['status' => 'error', 'message' => __('locale.This candidate is no longer available to hire.')], 422);
         }
@@ -122,7 +123,10 @@ class CustomerHireController extends Controller
         $settings = Websiteconfig::first();
         $booking = null;
 
-        $response = DB::transaction(function () use ($request, $customer, $candidate, $partnerId, $settings, &$booking) {
+        // The order-number lock shared with the CRM (App\Support\BookingReference)
+        // is held until this transaction - which inserts the order - has committed.
+        $response = \App\Support\BookingReference::withLock(function () use ($request, $customer, $candidate, $partnerId, $settings, &$booking) {
+            return DB::transaction(function () use ($request, $customer, $candidate, $partnerId, $settings, &$booking) {
             // Lock this customer's live orders while checking the limits, so a
             // double click can't create two.
             $liveOrders = Booking::where('user_id', $customer->id)->where('booking_status', '!=', 2)->lockForUpdate()->get(['id', 'cand_id', 'reference_no']);
@@ -157,6 +161,7 @@ class CustomerHireController extends Controller
                 'reference_no' => $booking->reference_no,
                 'orders_url' => route('worker.account.orders'),
             ]);
+            });
         });
 
         // Only for an order this request actually created (a retry/double
@@ -195,6 +200,24 @@ class CustomerHireController extends Controller
             'work_city' => $workCity ? (app()->getLocale() === 'ar' && !empty($workCity->arname) ? $workCity->arname : $workCity->name) : null,
             'embassy' => $embassy ? $embassy->embassy : null,
             'orders_url' => route('worker.account.orders'),
-        ]));
+        ]), 'customer_order_created', ['dedupe' => 'booking:' . $booking->id, 'context' => ['booking_id' => $booking->id]]);
+
+        // The partner hears about its new order by email (its WhatsApp is
+        // the existing order_to_partner job queued by store4()).
+        \App\Support\NotificationCenter::notify('partner_new_customer_order', (int) $booking->partner_id ?: null, [
+            'channels' => ['email'],
+            'title' => 'New customer order ' . $booking->reference_no,
+            'message' => 'A customer placed an order on your RecruitmentCV website.',
+            'lines' => [
+                ['Order No', (string) $booking->reference_no],
+                ['Candidate', (string) $candidate->display_name],
+                ['Customer', (string) $customer->name],
+                ['Work City', $workCity ? (string) $workCity->name : null],
+                ['Embassy', $embassy ? (string) $embassy->embassy : null],
+            ],
+            'action' => ['View Order', \App\Support\NotificationCenter::partnerSiteUrl((int) $booking->partner_id) . '/partner/orders/' . $booking->id],
+            'dedupe' => 'booking:' . $booking->id,
+            'context' => ['booking_id' => $booking->id],
+        ]);
     }
 }

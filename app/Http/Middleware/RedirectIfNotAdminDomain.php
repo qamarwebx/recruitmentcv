@@ -20,7 +20,11 @@ class RedirectIfNotAdminDomain
             }
         }else{
             
-            if (str_starts_with($path, 'admin')) {
+            // Passport + driving licence image files are served by the app on every host
+            // (App\Support\PassportAccess / PassportImage - original or blurred) - not an admin page.
+            $document = str_starts_with($path, 'admin/assets/images/candidate/')
+                && \App\Support\PassportAccess::documentType(substr($path, strlen('admin/assets/images/candidate/'))) !== null;
+            if (str_starts_with($path, 'admin') && !$document && !\App\Support\PassportImage::isPassportPath($path)) {
                 return redirect('/');
             }
         }

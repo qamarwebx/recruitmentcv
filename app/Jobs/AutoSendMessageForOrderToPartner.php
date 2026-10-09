@@ -45,8 +45,18 @@ class AutoSendMessageForOrderToPartner implements ShouldQueue
      */
     protected $sitePartnerId = null;
 
-    public function __construct($bookingId, $templateFor = 'qamarhire', $sitePartnerId = null)
+    /**
+     * Autometanotification trigger_template_type to send. Defaults to the
+     * plain order message; the reservation queue reuses this job with
+     * 'reservation_next_priority_to_partner' for its "your turn" message.
+     */
+    protected $triggerType = 'order_to_partner';
+
+    public function __construct($bookingId, $templateFor = 'qamarhire', $sitePartnerId = null, $triggerType = null)
     {
+        if ($triggerType !== null) {
+            $this->triggerType = (string) $triggerType;
+        }
         $this->bookingId = $bookingId;
         $this->templateFor = array_key_exists((string) $templateFor, (array) config('constants.website_template_for'))
             ? (string) $templateFor
@@ -78,7 +88,7 @@ class AutoSendMessageForOrderToPartner implements ShouldQueue
 
             $autometas = Autometanotification::whereIn(
                     'trigger_template_type',
-                    ['order_to_partner']
+                    [$this->triggerType]
                 )
                 ->where('template_for', $this->templateFor)
                 ->where('status',1)
@@ -134,7 +144,7 @@ class AutoSendMessageForOrderToPartner implements ShouldQueue
                                     'type' => $type
                                 ]
                             );
-                            continue;
+                            break; // was `continue` - identical inside a switch (PHP warns); kept as break to preserve behaviour
                     }
 
                     if ($minutes > 0) {
@@ -338,7 +348,7 @@ class AutoSendMessageForOrderToPartner implements ShouldQueue
                 | 🔥 BUILD PAYLOAD
                 |--------------------------------------------------------------------------
                 */
-                if ($meta->trigger_template_type !== 'order_to_partner') {
+                if ($meta->trigger_template_type !== $this->triggerType) {
                     return;
                 }
                 

@@ -37,6 +37,13 @@ final class SmtpMailer
 
     public const PARTNER = 'partner';
 
+    /**
+     * Which server delivered the last email of this process
+     * (['provider' => 'SMTP smtp.gmail.com (Global #1)'] or the .env mailer) -
+     * read by App\Support\NotificationCenter for its log; never credentials.
+     */
+    public static ?array $lastDelivery = null;
+
     /** AppServiceProvider::boot(): makes "smtp_failover" a mail transport. */
     public static function register(): void
     {

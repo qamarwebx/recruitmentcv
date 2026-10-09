@@ -15,6 +15,8 @@
 
     <link rel="stylesheet" href="{{ asset('worker/css/style.css') }}?v={{ @filemtime(public_path('worker/css/style.css')) ?: time() }}">
     <link rel="stylesheet" href="{{ asset('worker/css/portal.css') }}?v={{ @filemtime(public_path('worker/css/portal.css')) ?: time() }}">
+    {{-- The signed-in partner's own logo sizes (its sidebar shows its own logo on any host). --}}
+    @include('worker.partials.logo-dimensions', ['logoPartnerId' => Auth::guard('partner')->id()])
     @yield('page-style')
 </head>
 <body class="worker-scope wp-body">
@@ -56,17 +58,14 @@
         // a fallback URL (unlike Partner::portalBaseUrl(), which is used for
         // post-login redirects and intentionally falls back to app().url).
         $__partnerDomain = $__partner->domain;
-        $__partnerLiveUrl = ($__partnerDomain && $__partnerDomain->isLiveSubdomain())
-            ? 'https://' . $__partnerDomain->full_domain
-            : null;
+        // Primary live address: active Own Domain or live subdomain (App\Support\PartnerDomains).
+        $__partnerLiveUrl = \App\Support\PartnerDomains::primaryUrl($__partnerDomain);
 
         // Website -> Branding "Append Company Name": the signed-in partner's
-        // Company Profile name beside the logo (same rule as the public site
-        // and Partner Login - SiteBrand::appendedName()); '' = logo only.
-        $__brandName = \App\Support\SiteBrand::appendedName(
-            \App\Support\SiteBrand::companyFromDomain($__partnerDomain),
-            $__partnerDomain ? \App\Models\PartnerPageContent::brandingFor($__partner->id)['append_company_name'] : false
-        );
+        // Company Profile name beside the logo when its effective setting is
+        // on (own value, else the CRM Global one - same rule as the public
+        // site and Partner Login); '' = logo only.
+        $__brandName = \App\Support\SiteBrand::partnerAppendedName($__partner->id, $__partnerDomain);
     @endphp
 
     <div class="wp-shell" data-wp-shell>
@@ -75,7 +74,7 @@
                 {{-- "Append Company Name": logo + name side by side. --}}
                 @if ($__brandName !== '')<div class="wp-sidebar-brand-row">@endif
                 @if ($__partnerLogoUrl)
-                    <img src="{{ $__partnerLogoUrl }}" alt="{{ $__partnerLabel }}" onerror="this.onerror=null;this.src='{{ $__defaultPartnerLogo }}';this.alt='Qamr International';">
+                    <img src="{{ $__partnerLogoUrl }}" class="w-brand-logo" alt="{{ $__partnerLabel }}" onerror="this.onerror=null;this.src='{{ $__defaultPartnerLogo }}';this.alt='Qamr International';">
                 @else
                     <x-brand-logo mode="dark" alt="Qamr International" />
                 @endif
@@ -308,6 +307,10 @@
     <script src="{{ asset('worker/js/portal.js') }}?v={{ @filemtime(public_path('worker/js/portal.js')) ?: time() }}"></script>
     @include('worker.partials.partner-auth-script')
     @yield('page-script')
+    @auth('partner')
+        {{-- Live Partners presence: heartbeat + leave signal of this tab (CRM -> Website -> Live Partners). --}}
+        <script src="{{ asset('worker/js/partner-presence.js') }}?v={{ @filemtime(public_path('worker/js/partner-presence.js')) ?: time() }}" data-url="{{ route('worker.presence') }}" data-visible="{{ \App\Models\PartnerLoginSession::HEARTBEAT_SECONDS }}" data-hidden="{{ \App\Models\PartnerLoginSession::HIDDEN_HEARTBEAT_SECONDS }}"></script>
+    @endauth
     @if ($accountPromptMissing)
         {{-- After page-script: reuses that page's jQuery/select2 when present, else loads them. --}}
         <script src="{{ asset('worker/js/partner-account-prompt.js') }}?v={{ @filemtime(public_path('worker/js/partner-account-prompt.js')) ?: time() }}"

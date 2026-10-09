@@ -31,6 +31,11 @@ class EventServiceProvider extends ServiceProvider
         // Partner Portal "Account Details" prompt: every successful partner
         // login (any login path) starts a new once-per-login cycle.
         Event::listen(Login::class, [\App\Support\PartnerAccountPrompt::class, 'startCycle']);
+        // Pending Partner session limit: every partner login starts a new session clock.
+        Event::listen(Login::class, [\App\Support\PendingPartnerSession::class, 'stamp']);
+        // CRM -> Website -> Live Partners: login-session history (start / end).
+        Event::listen(Login::class, [\App\Support\PartnerLoginTracker::class, 'start']);
+        Event::listen(\Illuminate\Auth\Events\Logout::class, [\App\Support\PartnerLoginTracker::class, 'onLogout']);
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Http\Controllers\Worker\PartnerHireController;
 use App\Http\Controllers\Worker\PartnerPortalController;
 use App\Http\Controllers\Worker\PartnerPaymentController;
 use App\Http\Controllers\Worker\PartnerPriceController;
+use App\Http\Controllers\Worker\PassportImageController;
 use App\Http\Controllers\Worker\WorkerPageController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,6 +24,15 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [WorkerPageController::class, 'home'])->name('worker.home');
 Route::get('/resumes', [WorkerPageController::class, 'resumes'])->name('worker.resumes');
 Route::get('/resumes/details/{id}', [WorkerPageController::class, 'resumeDetails'])->name('worker.resume.details');
+// Passport + driving licence images (App\Support\PassportAccess - Registration
+// Status rule): the blurred copies for the public gallery, and the document
+// files themselves (public/.htaccess routes /admin/assets/images/candidate/
+// *PPFRONT* / *PPBACK* / *-DL-* here): the original only where the rule
+// allows it, else the blurred copy.
+Route::get('/resumes/details/{id}/passport-preview', [PassportImageController::class, 'preview'])->name('worker.resume.passport');
+Route::get('/resumes/details/{id}/licence-preview', [PassportImageController::class, 'licencePreview'])->name('worker.resume.licence');
+Route::get('/admin/assets/images/candidate/{file}', [PassportImageController::class, 'file'])
+    ->where('file', \App\Support\PassportAccess::DOCUMENT_FILE_PATTERN)->name('worker.passport.file');
 Route::get('/privacy-policy', [WorkerPageController::class, 'privacyPolicy'])->name('worker.privacy');
 Route::get('/terms-of-service', [WorkerPageController::class, 'termsOfService'])->name('worker.terms');
 Route::get('/about-us', [WorkerPageController::class, 'aboutUs'])->name('worker.about');
@@ -74,10 +84,21 @@ Route::post('/partner/register-pending', [PartnerAuthController::class, 'registe
 Route::post('/partner/check-mobile', [PartnerAuthController::class, 'checkMobile'])->name('worker.partner.check-mobile');
 Route::post('/partner/logout', [PartnerAuthController::class, 'logout'])->name('worker.partner.logout');
 
+// Live Partners presence: heartbeat / hidden / leave signal of each open tab of a
+// signed-in partner or team member (PartnerPresenceController). Throttle keyed
+// by IP (partners aren't the default guard), so room for several tabs and
+// several people behind one office IP.
+Route::post('/partner-presence', \App\Http\Controllers\Worker\PartnerPresenceController::class)
+    ->middleware('throttle:120,1')->name('worker.presence');
+
 // Lands here after "Continue with Google" completes on qamarhire.com
 // (SocialLoginController::handlePartnerGoogleCallback) and hands off a
 // short-lived token to establish a real session on this domain.
 Route::get('/partner/google/complete', [PartnerAuthController::class, 'completeGoogleLogin'])->name('worker.partner.google.complete');
+// CRM -> Partner -> "Login As Partner": the CRM's one-time, encrypted handoff (PartnerAuthController::completeCrmLogin).
+Route::get('/partner/crm-login', [PartnerAuthController::class, 'completeCrmLogin'])->name('worker.partner.crm-login');
+// Customer "Continue with Google" started on a partner's Own Domain: the sign-in handed back there.
+Route::get('/auth/google/complete', [\App\Http\Controllers\SocialLoginController::class, 'completeCustomerGoogleLogin'])->name('customer.google.complete');
 
 // Partner Portal - only reachable once logged in via the OTP flow above,
 // which already refuses to establish a session unless registration_status
@@ -98,6 +119,23 @@ Route::get('/ar/resumes/details/{id}', function (\Illuminate\Http\Request $reque
 foreach (['resumes/details/booking', 'resumes/details/booking/2', 'resumes/details/booking/3', 'resumes/details/booking/4',
           'ar/resumes/details/booking', 'ar/resumes/details/booking/2', 'ar/resumes/details/booking/3', 'ar/resumes/details/booking/4'] as $legacyBookingUri) {
     Route::post($legacyBookingUri, fn () => abort(404));
+}
+
+// Legacy partner-panel order endpoints (PartnerBookingController via
+// routes/web.php partner/booking/*), closed on this site: they took any
+// booking id with no ownership check (view / confirm / visa / payment /
+// cancel any order). The Partner Portal uses /partner/orders and
+// /partner/candidates/{id}/hire instead. These override the identical
+// web.php routes (same method + URI; worker.php is registered last) and
+// answer 404 to everyone - signed-in partners included - on every host
+// (recruitmentcv.com, partner subdomains, own domains). Data is untouched.
+foreach ([
+    ['GET', 'partner/booking'], ['GET', 'partner/booking/getData'], ['GET', 'partner/booking/view/{id}'],
+    ['POST', 'partner/booking/sendOTP'], ['POST', 'partner/booking/confirm-otp'], ['POST', 'partner/booking/check-otp'],
+    ['POST', 'partner/booking/getVisa'], ['POST', 'partner/booking/getVisa/store'], ['POST', 'partner/booking/getPayment'],
+    ['POST', 'partner/booking/getPay/store'], ['POST', 'partner/booking/cancel'], ['POST', 'partner/booking/filterList/update'],
+] as [$legacyMethod, $legacyPartnerBookingUri]) {
+    Route::match([$legacyMethod], $legacyPartnerBookingUri, fn () => abort(404));
 }
 
 // Customer Sign Up: duplicate email/mobile check before the OTP is sent (the
@@ -131,9 +169,12 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
     Route::get('/candidates/{id}', [PartnerPortalController::class, 'candidateShow'])->name('candidates.show');
     // Download CV = this partner's own B2B CV (executed on demand) - see PartnerPortalController::candidateCv.
     Route::get('/candidates/{id}/cv', [PartnerPortalController::class, 'candidateCv'])->name('candidates.cv');
-    // Blurred passport image for partners not yet fully verified (candidate gallery).
+    // Blurred passport / driving licence image where App\Support\PassportAccess withholds the original (candidate gallery).
     Route::get('/candidates/{id}/passport-preview', [PartnerPortalController::class, 'candidatePassportPreview'])->name('candidates.passport');
+    Route::get('/candidates/{id}/licence-preview', [PartnerPortalController::class, 'candidateLicencePreview'])->name('candidates.licence');
     Route::post('/candidates/{id}/hire', [PartnerHireController::class, 'store'])->name('candidates.hire');
+    // Hire Now's "Already Hired" check (hired by another customer / partner?) - read-only.
+    Route::get('/candidates/{id}/hire-status', [PartnerHireController::class, 'status'])->middleware('throttle:30,1')->name('candidates.hire-status');
     // Partner Activity alerts to CRM staff (App\Support\PartnerActivity): Candidate Detail
     // presence (visit + heartbeats) and Hire Now / Download CV clicks.
     Route::post('/candidates/{id}/activity/visit', [PartnerPortalController::class, 'candidateActivityVisit'])->middleware('throttle:30,1')->name('candidates.activity.visit');

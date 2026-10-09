@@ -46,6 +46,11 @@ final class SmtpAttemptTransport implements TransportInterface
         if ($this->position > 1) {
             Log::info('Email sent by a fallback SMTP', $this->logContext());
         }
+        \App\Support\SmtpMailer::$lastDelivery = [
+            'provider' => 'SMTP ' . $this->smtp->host . ' (' . ($this->smtp->partner_id ? 'Partner' : 'Global') . ' #' . $this->position . ')',
+            'smtp_id' => $this->smtp->id,
+            'position' => $this->position,
+        ];
 
         return $sent;
     }

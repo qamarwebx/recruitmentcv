@@ -15,6 +15,7 @@
 <script src="{{ asset('worker/js/worker-csrf.js') }}?v={{ @filemtime(public_path('worker/js/worker-csrf.js')) ?: time() }}"></script>
 {{-- Password show/hide (worker.partials.password-toggle) - modal and Partner Account. --}}
 <script src="{{ asset('worker/js/password-toggle.js') }}?v={{ @filemtime(public_path('worker/js/password-toggle.js')) ?: time() }}"></script>
+@include('worker.partials.otp-destination-script')
 <script src="{{ asset('worker/js/partner-auth.js') }}?v={{ @filemtime(public_path('worker/js/partner-auth.js')) ?: time() }}"
     data-generate-otp-url="{{ route('worker.partner.otp.send') }}"
     data-validate-otp-url="{{ route('worker.partner.otp.verify') }}"
@@ -78,8 +79,6 @@
         'identifierMobile' => __('locale.Mobile Number'),
         'identifierAccount' => __('locale.Username or Email address'),
         'errIdentifierRequired' => __('locale.Please enter your username or email address.'),
-        'otpHintMobile' => __('locale.Enter the 4-digit code sent to'),
-        'otpHintEmail' => __('locale.If this account has a verified email address, we sent a 6-digit code to it.'),
         'changeNumber' => __('locale.Change number'),
         'changeAccount' => __('locale.Change username or email'),
         'forgotTitle' => __('locale.Forgot Password'),
@@ -88,7 +87,6 @@
         'resetSubtitle' => __('locale.Choose a new password for your partner account.'),
         'resetDoneTitle' => __('locale.Password Updated'),
         'sendResetOtp' => __('locale.Send verification code'),
-        'otpHintReset' => __('locale.If this email is registered, we\'ve sent a 6-digit OTP to'),
         'changeEmail' => __('locale.Change email'),
         'backToLogin' => __('locale.Back to login'),
         'cancel' => __('locale.Cancel'),
@@ -100,4 +98,4 @@
         'errEmailRequired' => __('locale.Please enter a valid email address.'),
         'errPasswordConfirmRequired' => __('locale.Please confirm your new password.'),
         'errPasswordMismatch' => __('locale.The passwords do not match.'),
-    ]) }}"></script>
+    ] + \App\Support\OtpDestination::texts()) }}"></script>

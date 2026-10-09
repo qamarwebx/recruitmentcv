@@ -67,13 +67,16 @@ WorkerPageController::resumeDetails(). --}}
                         </div>
 
                         <div data-customer-hire-verify-step="code" hidden>
-                            <p class="w-form-hint">{{ __('locale.Enter the 4-digit code sent to') }} <strong dir="ltr" data-customer-hire-target></strong></p>
+                            {{-- "Enter the OTP sent to your WhatsApp number ending in 3401." (otp-destination.js). --}}
+                            @include('worker.partials.otp-destination-script')
+                            <p class="w-form-hint" data-customer-hire-target>{{ __('locale.Enter the OTP sent to your WhatsApp number.') }}</p>
                             <div class="w-form-row">
                                 <input type="text" class="w-input w-input-otp" maxlength="4" inputmode="numeric" autocomplete="one-time-code" placeholder="••••" data-customer-hire-otp aria-label="OTP">
                             </div>
                             <button type="button" class="w-btn w-btn-primary w-btn-block" data-customer-hire-verify-btn data-default-text="{{ __('locale.Verify & Continue') }}">{{ __('locale.Verify & Continue') }}</button>
-                            <div class="w-hire-verify-links" style="display:flex;justify-content:space-between;gap:12px;margin-top:12px;">
+                            <div class="w-hire-verify-links" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;">
                                 <button type="button" class="w-auth-forgot-link" data-customer-hire-change>{{ __('locale.Change Number') }}</button>
+                                <span style="color:var(--w-ink-500);font-size:0.85rem;">{{ __("locale.Didn't receive the OTP?") }}</span>
                                 <button type="button" class="w-auth-forgot-link" data-customer-hire-resend data-default-text="{{ __('locale.Resend OTP') }}">{{ __('locale.Resend OTP') }}</button>
                             </div>
                         </div>
@@ -90,7 +93,7 @@ WorkerPageController::resumeDetails(). --}}
                     <div class="w-form-row">
                         <label class="w-form-check">
                             <input type="checkbox" data-customer-hire-salary>
-                            {{ __('locale.Are you offering a salary of') }} {{ $post->exp_sal ?: '---' }}?
+                            {{ __('locale.Are you offering a salary of') }} {{ $post->display_expected_salary ?: '---' }}?
                         </label>
                     </div>
 

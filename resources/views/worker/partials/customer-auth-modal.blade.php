@@ -113,12 +113,14 @@
 
             {{-- Step 2: OTP --}}
             <div data-customer-step="otp" hidden>
-                <p class="w-form-hint">{{ __('locale.Enter the 4-digit code sent to') }} <strong data-customer-mobile-display></strong></p>
+                {{-- "Enter the OTP sent to your WhatsApp number ending in 3401." (otp-destination.js). --}}
+                <p class="w-form-hint" data-customer-otp-hint>{{ __('locale.Enter the OTP sent to your WhatsApp number.') }}</p>
                 <div class="w-form-row">
                     <input type="text" class="w-input w-input-otp" maxlength="4" inputmode="numeric" placeholder="••••" data-customer-otp>
                 </div>
                 <button type="button" class="w-btn w-btn-primary w-btn-block" data-customer-verify-otp>{{ __('locale.Verify & Continue') }}</button>
                 <div class="w-form-resend">
+                    <span>{{ __("locale.Didn't receive the OTP?") }}</span>
                     <span data-customer-resend-timer>{{ __('locale.Resend available in') }} <strong data-customer-countdown>60</strong>s</span>
                     <a href="javascript:void(0)" data-customer-resend-btn hidden>{{ __('locale.Resend OTP') }}</a>
                 </div>
@@ -142,4 +144,5 @@
 </div>
 {{-- Shared CSRF token/retry helper (loads once; also used by the other auth script). --}}
 <script src="{{ asset('worker/js/worker-csrf.js') }}?v={{ @filemtime(public_path('worker/js/worker-csrf.js')) ?: time() }}"></script>
+@include('worker.partials.otp-destination-script')
 <script src="{{ asset('worker/js/customer-auth.js') }}?v={{ @filemtime(public_path('worker/js/customer-auth.js')) ?: time() }}"></script>

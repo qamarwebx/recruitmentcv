@@ -108,6 +108,34 @@ class SocialLoginController extends Controller
 
     public function redirectToGoogle(Request $request)
     {
+        // Started on a partner's Own Domain: its session isn't recruitmentcv.com's
+        // (where Google returns), so the round trip runs there, carrying the
+        // validated domain + the page to return to, signed and short-lived;
+        // the sign-in is then handed back (completeCustomerGoogleLogin()).
+        $site = app()->bound('currentPartner') ? app('currentPartner') : null;
+        $root = \App\Support\PartnerDomains::root();
+        $host = preg_replace('/^www\./', '', strtolower($request->getHost()));
+        if ($site && !str_ends_with($host, '.' . $root) && $site->domain && \App\Support\PartnerDomains::customServes($site->domain)) {
+            $previous = url()->previous();
+            $path = strcasecmp((string) parse_url($previous, PHP_URL_HOST), $request->getHost()) === 0 ? (parse_url($previous, PHP_URL_PATH) ?: '/') : '/';
+            $payload = encrypt(['domain_id' => $site->domain->id, 'host' => $site->domain->custom_domain, 'path' => $path, 'exp' => now()->addMinutes(10)->timestamp]);
+
+            return redirect()->away('https://' . $root . route('googleLogin', ['site' => $payload, 'loginStatus2525' => $request->loginStatus2525], false));
+        }
+        // A customer sign-in: no leftover marker of an abandoned partner attempt applies.
+        $request->session()->forget(['customer_google_handoff', 'partner_google_intent', 'partner_google_site', 'partner_google_return']);
+        if (!$site && $request->filled('site')) {
+            $handoff = self::ownDomainSite((string) $request->query('site'));
+            if (!$handoff) {
+                return redirect()->route('worker.home');
+            }
+            $request->session()->put('customer_google_handoff', $handoff);
+            $request->session()->put('loginStatus2525', $request->loginStatus2525);
+            $request->session()->put('customer_google_site', $handoff['partner_id']);
+
+            return $this->configDriver()->stateless()->redirect();
+        }
+
         $revUrl = url()->previous();
 
         // Remove old session record
@@ -172,9 +200,127 @@ class SocialLoginController extends Controller
      */
     public function redirectToGooglePartner(Request $request)
     {
+        $root = \App\Support\PartnerDomains::root();
+        $host = strtolower($request->getHost());
+        $site = app()->bound('currentPartner') ? app('currentPartner') : null;
+        $onPartnerSubdomain = $site && str_ends_with(preg_replace('/^www\./', '', $host), '.' . $root);
+
+        // Started on a partner's Own Domain: Google only returns to
+        // recruitmentcv.com, whose session that domain doesn't share - so the
+        // whole round trip runs there, carrying which (validated) domain to
+        // hand the sign-in back to, signed and short-lived.
+        if ($site && !$onPartnerSubdomain) {
+            $domain = $site->domain;
+            if ($domain && \App\Support\PartnerDomains::customServes($domain)) {
+                $payload = encrypt(['domain_id' => $domain->id, 'host' => $domain->custom_domain, 'exp' => now()->addMinutes(10)->timestamp]);
+
+                return redirect()->away('https://' . $root . route('partner.google.start', ['site' => $payload], false));
+            }
+        }
+
+        $request->session()->forget(['partner_google_site', 'partner_google_return', 'customer_google_handoff']);
+        if ($request->filled('site') && !$site) {
+            // Back on recruitmentcv.com from an Own Domain (above): accepted only
+            // signed, unexpired, and for a domain that still serves its partner.
+            try {
+                $data = decrypt((string) $request->query('site'));
+                $domain = is_array($data) && ($data['exp'] ?? 0) >= now()->timestamp ? \App\Models\Domain::find($data['domain_id'] ?? 0) : null;
+                if ($domain && \App\Support\PartnerDomains::customServes($domain) && $domain->custom_domain === ($data['host'] ?? null)) {
+                    $request->session()->put('partner_google_site', $domain->id);
+                }
+            } catch (\Throwable $e) {
+                // Tampered / old value: an ordinary sign-in.
+            }
+        } elseif ($onPartnerSubdomain) {
+            // Partner subdomain (same session as recruitmentcv.com): come back here.
+            $request->session()->put('partner_google_return', $host);
+        }
+
         $request->session()->put('partner_google_intent', true);
 
         return $this->configDriver()->stateless()->redirect();
+    }
+
+    /**
+     * The signed "site" value of a Google sign-in started on an Own Domain
+     * (redirectToGoogle()): ['domain_id', 'host', 'path', 'partner_id'] when
+     * valid, unexpired and the domain still serves its partner; else null.
+     */
+    private static function ownDomainSite(string $value): ?array
+    {
+        try {
+            $data = decrypt($value);
+        } catch (\Throwable $e) {
+            return null;
+        }
+        if (!is_array($data) || ($data['exp'] ?? 0) < now()->timestamp) {
+            return null;
+        }
+        $domain = \App\Models\Domain::find($data['domain_id'] ?? 0);
+        if (!$domain || !\App\Support\PartnerDomains::customServes($domain) || $domain->custom_domain !== ($data['host'] ?? null)) {
+            return null;
+        }
+        $path = (string) ($data['path'] ?? '/');
+        if (!str_starts_with($path, '/') || str_starts_with($path, '//') || str_contains($path, '\\')) {
+            $path = '/';
+        }
+
+        return ['domain_id' => $domain->id, 'host' => $domain->custom_domain, 'path' => $path, 'partner_id' => (int) $domain->partner_id];
+    }
+
+    /**
+     * GET /auth/google/complete on an Own Domain: exchanges the single-use
+     * token minted on recruitmentcv.com for a customer session here. Only
+     * on the domain it was issued for, which must still serve its partner.
+     */
+    public function completeCustomerGoogleLogin(Request $request)
+    {
+        $token = (string) $request->query('token');
+        $data = $token !== '' ? \Illuminate\Support\Facades\Cache::pull('customer_google_handoff:' . $token) : null;
+        $site = app()->bound('currentPartner') ? app('currentPartner') : null;
+        $host = preg_replace('/^www\./', '', strtolower($request->getHost()));
+        $user = is_array($data) ? User::find($data['user_id'] ?? 0) : null;
+
+        if (!$user || !$site || $host !== ($data['host'] ?? null)) {
+            return redirect('/')->with('customer_auth_error', __('locale.Google sign-in could not be completed. Please try again.'));
+        }
+
+        Auth::guard('web')->login($user);
+        $request->session()->regenerate();
+
+        return redirect($data['path'] ?? '/');
+    }
+
+    /**
+     * Where a Google sign-in of $partnerId (team member: its partner) ends:
+     * the website it was started on when that is this partner's own live
+     * address, else the partner's primary address, else the main site.
+     * ['host' => ?string, 'custom' => bool] - custom = an Own Domain, which
+     * needs the single-use handoff (its session is not recruitmentcv.com's).
+     */
+    private function googleTarget(Request $request, int $partnerId, ?int $originDomainId, ?string $originHost): array
+    {
+        $domain = \App\Models\Domain::where('partner_id', $partnerId)->first();
+        $hosts = \App\Support\PartnerDomains::hosts($domain);
+
+        if ($originDomainId && $domain && (int) $domain->id === $originDomainId && \App\Support\PartnerDomains::customServes($domain)) {
+            return ['host' => $domain->custom_domain, 'custom' => true];
+        }
+        if ($originHost && in_array(preg_replace('/^www\./', '', $originHost), $hosts, true)) {
+            return ['host' => $originHost, 'custom' => false];
+        }
+        $primary = \App\Support\PartnerDomains::primaryHost($domain);
+
+        return ['host' => $primary, 'custom' => $primary !== null && \App\Support\PartnerDomains::customServes($domain) && $primary === $domain->custom_domain];
+    }
+
+    /** Single-use handoff of a verified Google sign-in to an Own Domain (PartnerAuthController::completeGoogleLogin). */
+    private function handoffToOwnDomain(string $host, int $partnerId, ?int $teamMemberId = null)
+    {
+        $token = \Illuminate\Support\Str::random(64);
+        \Illuminate\Support\Facades\Cache::put('partner_google_handoff:' . $token, ['partner_id' => $partnerId, 'team_member_id' => $teamMemberId, 'host' => $host], now()->addMinutes(2));
+
+        return redirect()->away('https://' . $host . route('worker.partner.google.complete', ['token' => $token], false));
     }
 
     public function handleGoogleCallback(Request $request)
@@ -236,6 +382,15 @@ class SocialLoginController extends Controller
 
             $user->last_login_from = json_encode($last_login_from);
             $user->save();
+
+            // Started on an Own Domain: signed in there, through a single-use token.
+            $handoff = $request->session()->pull('customer_google_handoff');
+            if (is_array($handoff) && !empty($handoff['host'])) {
+                $token = \Illuminate\Support\Str::random(64);
+                \Illuminate\Support\Facades\Cache::put('customer_google_handoff:' . $token, ['user_id' => $user->id, 'host' => $handoff['host'], 'path' => $handoff['path']], now()->addMinutes(2));
+
+                return redirect()->away('https://' . $handoff['host'] . route('customer.google.complete', ['token' => $token], false));
+            }
     
             // Login user
             Auth::login($user);
@@ -294,7 +449,13 @@ class SocialLoginController extends Controller
     private function handlePartnerGoogleCallback($googleUser, Request $request)
     {
         $partner = Partner::where('email', $googleUser->email)->first();
-        $partnerLoginPage = route('worker.partner.login.page');
+        // The website the sign-in started on (set in redirectToGooglePartner()).
+        $originDomainId = (int) $request->session()->pull('partner_google_site') ?: null;
+        $originHost = $request->session()->pull('partner_google_return');
+        $originDomain = $originDomainId ? \App\Models\Domain::find($originDomainId) : null;
+        $partnerLoginPage = $originDomain && \App\Support\PartnerDomains::customServes($originDomain)
+            ? 'https://' . $originDomain->custom_domain . route('worker.partner.login.page', [], false)
+            : route('worker.partner.login.page');
 
         // Not a partner: a team member with this Google account / email
         // (created by its partner) signs in to that partner's portal.
@@ -309,7 +470,20 @@ class SocialLoginController extends Controller
                 $member->google_id = $googleUser->id;
                 $member->save();
             }
+            $target = $this->googleTarget($request, (int) $member->partner_id, $originDomainId, $originHost);
+            if ($target['custom']) {
+                // Same checks as a sign-in here, then the handoff signs in on the Own Domain.
+                $refusal = app(\App\Http\Controllers\Worker\PartnerAuthController::class)->teamMemberLoginRefusal($member);
+                if ($refusal) {
+                    return redirect($partnerLoginPage . '?login=1&auth_message=' . urlencode($refusal));
+                }
+
+                return $this->handoffToOwnDomain($target['host'], (int) $member->partner_id, (int) $member->id);
+            }
             $result = app(\App\Http\Controllers\Worker\PartnerAuthController::class)->completeTeamMemberLogin($request, $member)->getData(true);
+            if (($result['status'] ?? '') === 'success' && $target['host']) {
+                $result['redirect'] = 'https://' . $target['host'] . (parse_url($result['redirect'], PHP_URL_PATH) ?: '/');
+            }
 
             return ($result['status'] ?? '') === 'success'
                 ? redirect($result['redirect'])
@@ -327,6 +501,9 @@ class SocialLoginController extends Controller
                 'name' => $googleUser->name,
                 'email' => $googleUser->email,
                 'google_id' => $googleUser->id,
+                // Google's own "email verified" - register() then marks the
+                // email verified (App\Support\GoogleEmailVerification).
+                'email_verified' => \App\Support\GoogleEmailVerification::claimed($googleUser),
             ], now()->addMinutes(15));
 
             return redirect($partnerLoginPage . '?register=1&google_token=' . $token);
@@ -342,16 +519,32 @@ class SocialLoginController extends Controller
         if ($partner->isRegistrationRejected()) {
             return redirect($partnerLoginPage . '?login=1&auth_message=' . urlencode('Your registration has been rejected.'));
         }
+        // Subdomain removed in CRM: RecruitmentCV portal access revoked.
+        if ($partner->isPortalRevoked()) {
+            return redirect($partnerLoginPage . '?login=1&auth_message=' . urlencode(__('locale.Your RecruitmentCV portal is currently unavailable. Please contact support.')));
+        }
+
+        // Signed in with Google using this partner's own email (verified by
+        // Google): that proves the address - mark it verified if it isn't
+        // yet (never un-verified). App\Support\GoogleEmailVerification.
+        if (\App\Support\GoogleEmailVerification::apply($partner, $googleUser->email, \App\Support\GoogleEmailVerification::claimed($googleUser))) {
+            $partner->save();
+        }
+
+        // Google's OAuth callback always lands on the apex (see
+        // configDriver()'s note above on why): back to the website the
+        // sign-in started on when it is this partner's own address, else the
+        // partner's primary one. An Own Domain gets the single-use handoff
+        // (signs in there); recruitmentcv.com and its subdomains share this
+        // session, so the sign-in happens here.
+        $target = $this->googleTarget($request, (int) $partner->id, $originDomainId, $originHost);
+        if ($target['custom']) {
+            return $this->handoffToOwnDomain($target['host'], (int) $partner->id);
+        }
 
         Auth::guard('partner')->login($partner);
 
-        // Google's OAuth callback always lands on the apex (see
-        // configDriver()'s note above on why), so without this a partner
-        // who started "Continue with Google" from their own subdomain
-        // would otherwise end up back on the apex after completing it.
-        // Partner::portalBaseUrl() sends them to their own configured
-        // subdomain instead, same as the OTP login path.
-        return redirect($partner->portalBaseUrl() . route('worker.partner.candidates', [], false));
+        return redirect(($target['host'] ? 'https://' . $target['host'] : rtrim(config('app.url'), '/')) . route('worker.partner.candidates', [], false));
     }
 
 }

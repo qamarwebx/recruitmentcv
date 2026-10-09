@@ -150,12 +150,16 @@
 
             {{-- Step 2: OTP verification --}}
             <div data-partner-step="otp" hidden>
-                <p class="w-form-hint"><span data-partner-otp-hint>{{ __('locale.Enter the 4-digit code sent to') }}</span> <strong data-partner-mobile-display></strong></p>
+                {{-- "Enter the OTP sent to your WhatsApp number ending in 3401." -
+                masked destination by channel, set by partner-auth.js
+                (otp-destination.js / App\Support\OtpDestination). --}}
+                <p class="w-form-hint" data-partner-otp-hint>{{ __('locale.Enter the OTP sent to your WhatsApp number.') }}</p>
                 <div class="w-form-row">
                     <input type="text" class="w-input w-input-otp" maxlength="4" inputmode="numeric" autocomplete="one-time-code" placeholder="••••" data-partner-otp>
                 </div>
                 <button type="button" class="w-btn w-btn-primary w-btn-block" data-partner-verify-otp>{{ __('locale.Verify & Continue') }}</button>
                 <div class="w-form-resend">
+                    <span>{{ __("locale.Didn't receive the OTP?") }}</span>
                     <span data-partner-resend-timer>{{ __('locale.Resend available in') }} <strong data-partner-countdown>60</strong>s</span>
                     <a href="javascript:void(0)" data-partner-resend-btn hidden>{{ __('locale.Resend OTP') }}</a>
                 </div>

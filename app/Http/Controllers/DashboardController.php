@@ -605,8 +605,12 @@ class DashboardController extends Controller
 
         // Send OTP to Email
 
-        // The code goes in the email only (never the JSON response below).
-        Mail::to($email)->send(new SendOTPVerification($data + ['EmailOtp' => $otp]));
+        // The code goes in the email only (never the JSON response below);
+        // logged in Notification Logs without it.
+        $sent = \App\Support\NotificationCenter::sendEmail('customer_email_change_code', \App\Support\CustomerSite::partnerId(), $email, new SendOTPVerification($data + ['EmailOtp' => $otp]), 'site', ['context' => ['customer_id' => $userData->id]]);
+        if (!$sent) {
+            return response()->json(['message' => __('locale.We could not send the verification email. Please try again later.')], 500);
+        }
 
 
 
@@ -637,7 +641,7 @@ class DashboardController extends Controller
             'new_email' => $user->email,
             'changed_at' => now()->format('d M Y, h:i A') . ' (GMT' . now()->format('P') . ')',
             'account_url' => route('worker.account.profile'),
-        ]));
+        ]), 'customer_email_changed', ['context' => ['customer_id' => $user->id]]);
     }
 
     /** The code sent by getEmailOTPandUpdate(), for that same email. Single use. */
@@ -1062,9 +1066,12 @@ class DashboardController extends Controller
 
         if($cbkc < $cand_limit->cand_booking_limit){
             $cand = Candidate::find($booking->cand_id);
-            $cand->status = true;
-            $cand->publish = true;
-            $cand->save();
+            // Re-shown only if the CRM reservation queue didn't hide it (reservation_lock full / hold / selected).
+            if ($cand && empty($cand->reservation_lock)) {
+                $cand->status = true;
+                $cand->publish = true;
+                $cand->save();
+            }
         }
 
         // Create Timeline

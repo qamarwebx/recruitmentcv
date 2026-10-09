@@ -20,14 +20,15 @@ class MetaWhatsappTemplateSender
     /**
      * @param array $data phone_number, template_name, template_language, field_n...
      * @param array $log  template_for, autometanotification_id, metatemplate_id, reference_id
+     * @return array ['ok' => bool, 'message' => string, 'provider' => string]
      */
-    public static function send(array $data, ?int $metaApiId, array $log): void
+    public static function send(array $data, ?int $metaApiId, array $log): array
     {
         $api = $metaApiId ? Metawhatsappapi::where('id', $metaApiId)->where('status', 1)->first() : null;
         if (!$api) {
             Log::warning('WhatsApp template not sent: no active WhatsApp API for the template', ['metaapi_id' => $metaApiId, 'template_for' => $log['template_for'] ?? null]);
 
-            return;
+            return ['ok' => false, 'message' => 'No active WhatsApp API for this template.', 'provider' => 'WhatsApp API'];
         }
 
         $endpoint = rtrim($api->api_base_url, '/') . '/' . trim($api->vendor_uid, '/') . '/contact/send-template-message';
@@ -55,5 +56,9 @@ class MetaWhatsappTemplateSender
         } catch (\Throwable $e) {
             Log::warning('WhatsApp template response not logged', ['error' => $e->getMessage()]);
         }
+
+        $ok = strcasecmp((string) ($body['result'] ?? ''), 'success') === 0;
+
+        return ['ok' => $ok, 'message' => (string) ($body['message'] ?? ($ok ? 'Sent' : 'Unknown error')), 'provider' => 'WhatsApp API: ' . ($api->api_name ?? ('#' . $api->id))];
     }
 }

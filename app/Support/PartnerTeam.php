@@ -142,6 +142,8 @@ class PartnerTeam
         session()->put(self::SESSION_KEY, ['id' => $member->id, 'partner_id' => $member->partner_id]);
         self::$memo = [];
         $member->forceFill(['last_login_at' => now()])->save();
+        // Live Partners: this login session is the team member's.
+        PartnerLoginTracker::markTeamMember($member);
     }
 
     /** Drops the per-request lookup cache (called at the start of each request). */

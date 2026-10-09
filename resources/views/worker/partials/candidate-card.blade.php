@@ -1,14 +1,20 @@
 {{-- The one candidate card, used everywhere cards are shown (home, /resumes,
 related candidates on the detail page, Partner Portal candidates). Order:
-photo (experience badge), name + blue verified mark, then Experience Type,
+photo (hiring-status pill), name + blue verified mark, then Experience Type,
 Profession, Employment Experience (Candidate::employment_periods - the
 detail page's Period values), Age, Religion, View Profile / Hire Now.
 
 Optional, for the Partner Portal: $cardUrl (profile link, default the public
 resume page), $cardHireUrl/$cardHireLabel (second button, default Hire Now to
-the profile), $cardHired (shows the "Hired" badge next to the name). --}}
+the profile), $cardHired (this partner's own order: never also marked Already
+Hired; no badge of its own - the View Order button says it).
+
+$hiringStatuses (from PartnerCandidateAccess::hiringStatusesForViewer() - one
+lookup per listing): the pill on the photo - Hired by You / Already Hired /
+Candidate Available (worker.partials.candidate-hiring-status). Already Hired
+opens the existing notice, and the card's Hire Now asks first (already-hired.js;
+Continue opens the profile's Hire Now). --}}
 @php
-    $totalExp = $post->experience ? array_sum(array_filter(explode(',', $post->experience), 'is_numeric')) : 0;
     $imagePath = \App\Support\CandidatePhoto::url($post->photo_file);
     $defaultAvatar = \App\Support\CandidatePhoto::defaultUrl();
     $detailsUrl = $cardUrl ?? route('worker.resume.details', $post->slug_text);
@@ -21,30 +27,25 @@ the profile), $cardHired (shows the "Hired" badge next to the name). --}}
     // clock-with-arrow = employment history, open book = religion.
     $periodIcon = sprintf($svg, '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>');
     $religionIcon = sprintf($svg, '<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/>');
+    $hiringStatus = !empty($cardHired) ? \App\Support\PartnerCandidateAccess::STATUS_OWN : ($hiringStatuses[(int) $post->id] ?? null);
+    $isAlreadyHired = $hiringStatus === \App\Support\PartnerCandidateAccess::STATUS_HIRED;
+    $hireHref = $cardHireUrl ?? $detailsUrl;
 @endphp
-<div class="w-candidate-card">
-    <a href="{{ $detailsUrl }}" class="w-candidate-photo">
-        <span class="w-candidate-exp">{{ $totalExp > 0 ? $totalExp . '+ ' . __('locale.Years Experience') : __('locale.Fresher') }}</span>
-        <img src="{{ $imagePath }}" alt="{{ $post->display_name }}" loading="lazy" onerror="this.onerror=null;this.src='{{ $defaultAvatar }}';">
-    </a>
+<div class="w-candidate-card" @if ($isAlreadyHired) data-already-hired-scope @endif>
+    <div class="w-candidate-media">
+        <a href="{{ $detailsUrl }}" class="w-candidate-photo">
+            <img src="{{ $imagePath }}" alt="{{ $post->display_name }}" loading="lazy" onerror="this.onerror=null;this.src='{{ $defaultAvatar }}';">
+        </a>
+        @include('worker.partials.candidate-hiring-status', ['status' => $hiringStatus])
+    </div>
     <div class="w-candidate-body">
-        @if (!empty($cardHired))
-            <div class="w-profile-name">
-                <h3 style="margin:0;">{{ $post->display_name }}@include('worker.partials.candidate-verified-icon')</h3>
-                <span class="w-verified">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 7L2 14l10 5 10-5-10-5Z"/></svg>
-                    {{ __('locale.Hired') }}
-                </span>
-            </div>
-        @else
-            <h3>{{ $post->display_name }}@include('worker.partials.candidate-verified-icon')</h3>
-        @endif
+        <h3>{{ $post->display_name }}@include('worker.partials.candidate-verified-icon')</h3>
         {{-- Same order on every card: Experience Type, Profession, Employment
         Experience (the detail page's Period values), Age, Religion. --}}
         <div class="w-candidate-meta">
             <div>
                 {!! $experienceIcon !!}
-                {{ $post->display_experience_type }}
+                {{ $post->display_experience_label }}
             </div>
             <div>
                 {!! $professionIcon !!}
@@ -65,7 +66,7 @@ the profile), $cardHired (shows the "Hired" badge next to the name). --}}
         </div>
         <div class="w-candidate-actions">
             <a href="{{ $detailsUrl }}" class="w-btn w-btn-outline">{{ __('locale.View Profile') }}</a>
-            <a href="{{ $cardHireUrl ?? $detailsUrl }}" class="w-btn w-btn-primary">{{ $cardHireLabel ?? __('locale.Hire Now') }}</a>
+            <a href="{{ $hireHref }}" class="w-btn w-btn-primary" @if ($isAlreadyHired) data-already-hired-gate data-hire-href="{{ $hireHref . (str_contains($hireHref, '?') ? '&' : '?') . 'hire=1' }}" @endif>{{ $cardHireLabel ?? __('locale.Hire Now') }}</a>
         </div>
     </div>
 </div>

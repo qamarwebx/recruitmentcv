@@ -44,6 +44,30 @@ use Illuminate\Support\Facades\Validator;
  */
 class PartnerHireController extends Controller
 {
+    /**
+     * Hire Now's first step (hire-now.js): is this candidate currently hired
+     * by another customer / partner (App\Support\PartnerCandidateAccess::hiredByOther())?
+     * Only a warning - the page then shows "Already Hired" before the Hire
+     * Now modal; store() below still decides (and re-checks everything) on
+     * submit. Read-only, a yes/no only (never who), for a candidate this
+     * partner may open (same access rule as the candidate page).
+     */
+    public function status($id)
+    {
+        $partnerId = (int) Auth::guard('partner')->id();
+        $post = Candidate::where('slug_text', $id)->where('isdelete', 0)->first();
+
+        if (!$post || !\App\Support\PartnerCandidateAccess::allows($partnerId, $post)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Candidate not found.')], 404)
+                ->header('Cache-Control', 'no-store, private');
+        }
+
+        return response()->json([
+            'status' => 'ok',
+            'hired_by_other' => \App\Support\PartnerCandidateAccess::hiredByOther($partnerId, (int) $post->id),
+        ])->header('Cache-Control', 'no-store, private');
+    }
+
     public function store(Request $request, $id)
     {
         $partner = Auth::guard('partner')->user();
@@ -87,7 +111,9 @@ class PartnerHireController extends Controller
             return response()->json(['status' => 'error', 'message' => __('locale.Candidate not found.')], 404);
         }
 
-        $isAvailable = (int) $post->status === 1 && (int) $post->publish === 1 && (int) $post->cv_execute === 1;
+        // reservation_lock: the CRM reservation queue holds / has selected / is
+        // full for this candidate - never hireable here, even if status says so.
+        $isAvailable = (int) $post->status === 1 && (int) $post->publish === 1 && (int) $post->cv_execute === 1 && empty($post->reservation_lock);
 
         if (!$isAvailable) {
             return response()->json(['status' => 'error', 'message' => __('locale.This candidate is no longer available to hire.')], 422);
@@ -123,7 +149,11 @@ class PartnerHireController extends Controller
             }
         }
 
-        return DB::transaction(function () use ($request, $post, $partner) {
+        $booking = null;
+        // Order number + insert under the order-number lock shared with the CRM
+        // (App\Support\BookingReference), held until the order is committed.
+        $response = \App\Support\BookingReference::withLock(function () use ($request, $post, $partner, &$booking) {
+            return DB::transaction(function () use ($request, $post, $partner, &$booking) {
             // Duplicate guard: a partner should never end up with two live
             // orders for the same candidate, whether from a genuine
             // double-click or a repeated request. Locks the matching rows
@@ -144,12 +174,8 @@ class PartnerHireController extends Controller
                 ], 409);
             }
 
-            // Reference number generation - same "max + 1" pattern as
-            // BookingController::store3().
-            $bookingCount = Booking::count();
-            $referenceNo = $bookingCount > 0
-                ? Booking::latest()->first()->reference_no + 1
-                : 801;
+            // Next free order number (highest + 1), allocated under the shared lock.
+            $referenceNo = \App\Support\BookingReference::next();
 
             // Order-received-panel staff round-robin - same pattern as
             // store3(), so partner self-hire orders route to staff the
@@ -249,7 +275,30 @@ class PartnerHireController extends Controller
                 'booking_id' => $booking->id,
                 'reference_no' => $booking->reference_no,
             ]);
+            });
         });
+
+        // Only for an order this request created, after it committed.
+        if ($booking) {
+            $workCity = Expecworkcity::find($booking->worklocation);
+            \App\Support\NotificationCenter::notify('partner_order_placed', (int) $partner->id, [
+                'title' => 'New partner order ' . $booking->reference_no,
+                'message' => ($partner->rec_off_name ?: $partner->owner_name) . ' placed an order (Hire Now) in the Partner Portal.',
+                'partner_name' => (string) ($partner->rec_off_name ?: $partner->owner_name),
+                'lines' => [
+                    ['Partner', (string) ($partner->rec_off_name ?: $partner->owner_name)],
+                    ['Team Member', optional(\App\Support\PartnerTeam::current())->full_name],
+                    ['Order No', (string) $booking->reference_no],
+                    ['Candidate', trim((string) $post->cand_name) . ' (' . ($post->reference_no ?: '#' . $post->id) . ')'],
+                    ['Work City', $workCity ? (string) $workCity->name : null],
+                ],
+                'action' => ['Open Order in CRM', \App\Support\NotificationCenter::crmUrl('admin/booking/view/' . $booking->id)],
+                'dedupe' => 'booking:' . $booking->id,
+                'context' => ['booking_id' => $booking->id, 'id' => $booking->id],
+            ]);
+        }
+
+        return $response;
     }
 
     public function cancel($id)
@@ -266,7 +315,7 @@ class PartnerHireController extends Controller
             return response()->json(['status' => 'error', 'message' => __('locale.This order is already cancelled.')], 422);
         }
 
-        return DB::transaction(function () use ($booking, $partner) {
+        $response = DB::transaction(function () use ($booking, $partner) {
             $booking->status = true;
             $booking->booking_status = 2;
             $booking->save();
@@ -278,7 +327,8 @@ class PartnerHireController extends Controller
             $liveBookingCount = Booking::where('cand_id', $booking->cand_id)->where('status', 0)->count();
             if ($candLimit && $liveBookingCount < $candLimit->cand_booking_limit) {
                 $cand = Candidate::find($booking->cand_id);
-                if ($cand) {
+                // Re-shown only if the CRM reservation queue didn't hide it (reservation_lock full / hold / selected).
+                if ($cand && empty($cand->reservation_lock)) {
                     $cand->status = true;
                     $cand->publish = true;
                     $cand->save();
@@ -300,5 +350,58 @@ class PartnerHireController extends Controller
                 'message' => __('locale.Order cancelled.'),
             ]);
         });
+
+        $this->notifyCancelled($booking->fresh(), $partner);
+
+        return $response;
+    }
+
+    /**
+     * Order cancelled: CRM staff, and the customer when it is a customer
+     * order (email here, WhatsApp through the existing order job with the
+     * Meta Automation "recruitmentcv / cancel_order" rule). Each follows
+     * CRM -> Website -> Settings and is logged.
+     */
+    private function notifyCancelled(Booking $booking, $partner): void
+    {
+        $candidate = Candidate::find($booking->cand_id);
+        $partnerName = (string) ($partner->rec_off_name ?: $partner->owner_name);
+        $candidateLabel = $candidate ? trim((string) $candidate->cand_name) . ' (' . ($candidate->reference_no ?: '#' . $candidate->id) . ')' : '#' . $booking->cand_id;
+        $context = ['booking_id' => $booking->id, 'id' => $booking->id];
+
+        \App\Support\NotificationCenter::notify('order_cancelled_staff', (int) $partner->id, [
+            'title' => 'Order ' . $booking->reference_no . ' cancelled',
+            'message' => $partnerName . ' cancelled an order in the Partner Portal.',
+            'partner_name' => $partnerName,
+            'lines' => [
+                ['Partner', $partnerName],
+                ['Team Member', optional(\App\Support\PartnerTeam::current())->full_name],
+                ['Order No', (string) $booking->reference_no],
+                ['Candidate', $candidateLabel],
+                ['Order Type', (int) $booking->user_id > 0 ? 'Customer order' : 'Partner order'],
+            ],
+            'action' => ['Open Order in CRM', \App\Support\NotificationCenter::crmUrl('admin/booking/view/' . $booking->id)],
+            'dedupe' => 'cancel:' . $booking->id,
+            'context' => $context,
+        ]);
+
+        if ((int) $booking->user_id <= 0) {
+            return;
+        }
+        $customer = \App\Models\User::find($booking->user_id);
+        \App\Support\NotificationCenter::notify('customer_order_cancelled', (int) $partner->id, [
+            'channels' => ['email'],
+            'customer_id' => (int) $booking->user_id,
+            'title' => 'Your order ' . $booking->reference_no . ' was cancelled',
+            'message' => 'Your order has been cancelled by the recruitment office. If you have any questions, please contact us.',
+            'lines' => [
+                ['Order No', (string) $booking->reference_no],
+                ['Candidate', $candidate ? (string) $candidate->display_name : null],
+            ],
+            'action' => ['View My Orders', \App\Support\NotificationCenter::partnerSiteUrl($customer && $customer->partner_id ? (int) $customer->partner_id : null) . '/account/orders'],
+            'dedupe' => 'cancel:' . $booking->id,
+            'context' => $context,
+        ]);
+        \App\Support\NotificationCenter::queueOrderWhatsapp('customer_order_cancelled', (int) $booking->id, (int) $partner->id, (int) $booking->partner_id);
     }
 }

@@ -22,13 +22,26 @@ use Illuminate\Support\Facades\Log;
  */
 class CustomerMail
 {
-    public static function send(?int $partnerId, ?string $to, Mailable $mail): bool
+    /**
+     * $event: the NotificationEvents key - the email then follows CRM ->
+     * Website -> Settings (on/off per partner) and is logged in
+     * Notification Logs (App\Support\NotificationCenter).
+     */
+    public static function send(?int $partnerId, ?string $to, Mailable $mail, ?string $event = null, array $meta = []): bool
     {
         if (!filter_var((string) $to, FILTER_VALIDATE_EMAIL)) {
+            if ($event) {
+                NotificationCenter::log($event, 'email', 'skipped', $to, 'customer', $partnerId, null, NotificationEvents::get($event)['email'] ?? null, 'No valid email address', null, $meta['context'] ?? []);
+            }
+
             return false;
         }
 
         $mail->locale(app()->getLocale());
+
+        if ($event) {
+            return NotificationCenter::sendEmail($event, $partnerId, $to, $mail, 'partner', $meta);
+        }
 
         try {
             SmtpMailer::forPartner($partnerId)->to($to)->send($mail);
@@ -57,13 +70,17 @@ class CustomerMail
         $name = $name ?: ($partner ? ($partner->portal_rec_off_name ?: $partner->rec_off_name) : null);
 
         $logo = $domain ? $domain->portalLogoFile($isArabic) : null;
+        // Most email clients (Gmail, Outlook) don't show SVG images: emails use the default logo then.
+        if (\App\Support\ImageUpload::isSvg($logo)) {
+            $logo = null;
+        }
 
         return [
             'name' => $name ?: 'RecruitmentCV',
             'logo' => $logo
                 ? asset('admin/assets/images/partner/' . $logo)
                 : asset('user/img/logo/' . ($isArabic ? 'new_logo_Arabic.png' : 'logo_english.png')),
-            'site_url' => $domain && $domain->full_domain ? 'https://' . $domain->full_domain : url('/'),
+            'site_url' => \App\Support\PartnerDomains::primaryUrl($domain) ?? url('/'),
             'whatsapp' => $partner ? PartnerPageContent::effectiveWhatsapp($partner->id)['link'] : null,
             'dir' => $isArabic ? 'rtl' : 'ltr',
             'lang' => $isArabic ? 'ar' : 'en',

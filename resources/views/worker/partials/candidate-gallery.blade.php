@@ -18,22 +18,30 @@
     // when photo_file is empty, and onerror covers a genuinely broken CRM URL.
     $slides[] = ['thumb' => $imagePath, 'html' => '<img src="' . $imagePath . '" alt="' . e($post->display_name) . '" ' . $imgFallback . '>'];
 
-    // Passport: a signed-in partner who is not fully verified (mobile AND
-    // email, Partner::isFullyVerified()) gets a server-blurred copy
-    // (PartnerPortalController::candidatePassportPreview) - the original
-    // file's URL is not put in the page for them. Customers, guests and
-    // verified partners: unchanged.
-    $galleryPartner = \Illuminate\Support\Facades\Auth::guard('partner')->user();
-    $blurPassport = $galleryPartner && !$galleryPartner->isFullyVerified();
-    if (\App\Support\CandidatePhoto::exists($post->pass_file) && $blurPassport) {
-        $passPreview = route('worker.partner.candidates.passport', $post->slug_text);
-        $slides[] = ['thumb' => $passPreview, 'html' => '<div class="w-gallery-blurred"><img src="' . $passPreview . '" alt="Passport photo (blurred)" ' . $imgFallback . '>'
-            . '<span class="w-gallery-blurred-note">' . e(__('locale.Verify your mobile number and email address to view the passport.')) . '</span></div>'];
-    } elseif ($passUrl = \App\Support\CandidatePhoto::urlIfExists($post->pass_file)) {
-        $slides[] = ['thumb' => $passUrl, 'html' => '<img src="' . $passUrl . '" alt="Passport photo" ' . $imgFallback . '>'];
-    }
-    if ($licUrl = \App\Support\CandidatePhoto::urlIfExists($post->lic_file)) {
-        $slides[] = ['thumb' => $licUrl, 'html' => '<img src="' . $licUrl . '" alt="License document" ' . $imgFallback . '>'];
+    // Passport + driving licence (App\Support\PassportAccess - the one rule,
+    // the same for both): a signed-in partner whose Registration Status is
+    // Approved gets the originals; everyone else - guests and customers
+    // included - gets server-blurred copies (main image and thumbnail) with
+    // the red note for that document, and never the original file's URL.
+    $documentProtection = \App\Support\PassportAccess::protection($post);
+    $lockIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+    $documents = [
+        \App\Support\PassportAccess::PASSPORT => [$post->pass_file, 'Passport photo'],
+        \App\Support\PassportAccess::LICENCE => [$post->lic_file, 'License document'],
+    ];
+    foreach ($documents as $document => [$documentFile, $documentAlt]) {
+        if (!\App\Support\CandidatePhoto::exists($documentFile)) {
+            continue;
+        }
+        if ($documentProtection) {
+            $preview = \App\Support\PassportAccess::previewUrl($post->slug_text, $document);
+            $note = \App\Support\PassportAccess::message($documentProtection, $document);
+            $slides[] = ['thumb' => $preview, 'restricted' => $note, 'html' => '<div class="w-gallery-blurred" data-document="' . $document . '"><img src="' . $preview . '" alt="' . $documentAlt . ' (blurred)" ' . $imgFallback . '>'
+                . '<span class="w-gallery-blurred-note" role="note">' . $lockIcon . '<span>' . e($note) . '</span></span></div>'];
+        } else {
+            $documentUrl = \App\Support\CandidatePhoto::url($documentFile);
+            $slides[] = ['thumb' => $documentUrl, 'html' => '<img src="' . $documentUrl . '" alt="' . $documentAlt . '" ' . $imgFallback . '>'];
+        }
     }
     // Videos last, in CRM order: Video Upload, Introduction Video, Trade
     // Test Video (App\Support\CandidateVideos - only the ones that exist).
@@ -79,8 +87,8 @@
         <div class="w-gallery-thumbs">
             @foreach ($slides as $i => $slide)
                 <button type="button" data-gallery-thumb data-slide-html="{{ $slide['html'] }}"
-                    class="{{ $i === 0 ? 'is-active' : '' }}{{ !empty($slide['video']) ? ' is-video' : '' }}"
-                    @if (!empty($slide['video'])) title="{{ $slide['video'] }}" aria-label="{{ $slide['video'] }}" @endif>
+                    class="{{ $i === 0 ? 'is-active' : '' }}{{ !empty($slide['video']) ? ' is-video' : '' }}{{ !empty($slide['restricted']) ? ' is-restricted' : '' }}"
+                    @if (!empty($slide['video'])) title="{{ $slide['video'] }}" aria-label="{{ $slide['video'] }}" @elseif (!empty($slide['restricted'])) title="{{ $slide['restricted'] }}" aria-label="{{ $slide['restricted'] }}" @endif>
                     @if ($slide['thumb'])
                         <img src="{{ $slide['thumb'] }}" alt="{{ $slide['video'] ?? 'Thumbnail ' . ($i + 1) }}" onerror="this.onerror=null;this.src='{{ $defaultAvatar }}';">
                     @endif
@@ -89,6 +97,9 @@
                         <span class="w-gallery-thumb-play" aria-hidden="true">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                         </span>
+                    @elseif (!empty($slide['restricted']))
+                        {{-- Red lock: a blurred (restricted) passport / driving licence. --}}
+                        <span class="w-gallery-thumb-lock" aria-hidden="true">{!! $lockIcon !!}</span>
                     @endif
                 </button>
             @endforeach

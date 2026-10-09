@@ -41,6 +41,7 @@ class EnsureWorkerPartnerAuthenticated
         if ($partner->isRegistrationRejected()) {
             $message = 'Your registration has been rejected.';
 
+            \App\Support\PartnerLoginTracker::close('rejected');   // Live Partners history
             $guard->logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();

@@ -125,8 +125,7 @@ class CustomerSite
             $visible->orWhereNull($partnerColumn);
             // ... or no partner that still exists AND has a live website.
             $visible->addWhereExistsQuery(
-                Domain::query()
-                    ->liveSubdomain()
+                \App\Support\PartnerDomains::whereServing(Domain::query())
                     ->join('partners', 'partners.id', '=', 'domains.partner_id')
                     ->whereColumn('domains.partner_id', $partnerColumn)
                     ->selectRaw('1')

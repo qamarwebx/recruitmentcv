@@ -116,6 +116,32 @@ class PartnerTeamMemberController extends Controller
      * form - saved permissions are left exactly as they are
      * (updatePermissions() is the only place that changes them).
      */
+    /**
+     * Welcome message to a new team member (CRM -> Website -> Settings ->
+     * Team Member): where and how to sign in - never the password.
+     */
+    private function notifyAdded(PartnerTeamMember $member): void
+    {
+        $partner = Auth::guard('partner')->user();
+        $company = (string) ($partner->rec_off_name ?: $partner->owner_name);
+        $loginUrl = \App\Support\NotificationCenter::partnerSiteUrl((int) $member->partner_id) . '/partner/login';
+
+        \App\Support\NotificationCenter::notify('team_member_created', (int) $member->partner_id, [
+            'team_member_id' => (int) $member->id,
+            'partner_name' => $company,
+            'title' => 'You were added to ' . $company . ' on RecruitmentCV',
+            'message' => $company . ' added you as a team member of its RecruitmentCV Partner Portal. Sign in with your username or email and the password your administrator gave you, or use Login with OTP.',
+            'lines' => [
+                ['Company', $company],
+                ['Username', (string) $member->username],
+                ['Email', (string) $member->email],
+            ],
+            'action' => ['Sign in', $loginUrl],
+            'dedupe' => 'team_member:' . $member->id,
+            'context' => ['team_member_id' => $member->id],
+        ]);
+    }
+
     private function save(Request $request, PartnerTeamMember $member)
     {
         $id = $member->id;
@@ -141,6 +167,10 @@ class PartnerTeamMemberController extends Controller
         }
         $member->partner_id = $this->partnerId();   // never from the request
         $member->save();
+
+        if (!$id) {
+            $this->notifyAdded($member);
+        }
 
         // New member -> the listing, where ⋮ -> Permission sets what they can do.
         return ($id

@@ -33,7 +33,7 @@
         accountUpdate route. A failed save comes back in edit mode with the
         typed values; a successful one lands back here in view mode. --}}
         @php
-            $accountFields = ['owner_name', 'username', 'rec_off_name', 'licence_number', 'country_id', 'city_id', 'secondary_email', 'secondary_mob', 'secondary_mob_country_code'];
+            $accountFields = ['owner_name', 'username', 'rec_off_name', 'country_id', 'city_id', 'secondary_email', 'secondary_mob', 'secondary_mob_country_code'];
             $accountEditing = $errors->hasAny($accountFields);
             $accountCountry = optional($countries->firstWhere('id', $partner->country_id))->display_name;
             $accountCity = optional($cities->firstWhere('id', $partner->city_id))->display_name;
@@ -98,9 +98,12 @@
                     <label class="w-form-label">{{ __('locale.Company / Recruitment Office Name') }}</label>
                     <input type="text" name="rec_off_name" class="w-input" value="{{ old('rec_off_name', $partner->rec_off_name) }}" required>
                 </div>
+                {{-- Read-only: managed in the CRM only. No name, so it is never
+                submitted (accountUpdate ignores the field anyway). --}}
                 <div class="w-form-row">
                     <label class="w-form-label" for="partner-licence-number">{{ __('locale.Recruitment Licence Number') }}</label>
-                    <input type="text" name="licence_number" id="partner-licence-number" class="w-input" value="{{ old('licence_number', $partner->licence_number) }}" maxlength="100" autocomplete="off">
+                    <input type="text" id="partner-licence-number" class="w-input" value="{{ $partner->licence_number }}" placeholder="---" readonly aria-readonly="true" aria-describedby="partner-licence-number-hint">
+                    <div class="wp-field-hint" id="partner-licence-number-hint">{{ __('locale.Managed by RecruitmentCV. Contact support to change it.') }}</div>
                 </div>
                 <div class="w-form-row">
                     <label class="w-form-label">{{ __('locale.Country') }}</label>
@@ -270,11 +273,17 @@
                 </div>
 
                 <div data-email-change-step="code" hidden>
+                    {{-- "Enter the OTP sent to your email ending in @example.com." (otp-destination.js). --}}
+                    <p class="w-form-hint" data-email-change-sent></p>
                     <div class="w-form-row">
                         <label class="w-form-label" for="partner-email-code">{{ __('locale.Verification Code') }}</label>
                         <input type="text" id="partner-email-code" class="w-input w-input-otp" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="••••••" data-email-change-code>
                     </div>
                     <button type="button" class="w-btn w-btn-primary w-btn-block" data-email-change-verify>{{ __('locale.Verify & Save') }}</button>
+                    <div class="w-form-resend">
+                        <span>{{ __("locale.Didn't receive the OTP?") }}</span>
+                        <a href="javascript:void(0)" data-email-change-resend>{{ __('locale.Resend OTP') }}</a>
+                    </div>
                     <button type="button" class="w-form-back" data-email-change-back>&larr; {{ __('locale.Use a different email') }}</button>
                 </div>
             </div>
@@ -295,7 +304,7 @@
             'errEmailRequired' => __('locale.Please enter a valid email address.'),
             'errCodeRequired' => __('locale.Please enter the verification code.'),
             'errTechnical' => __('locale.A technical error occurred. Please try again shortly.'),
-        ]) }}"></script>
+        ] + \App\Support\OtpDestination::texts()) }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             // Edit Account Details: view mode <-> the existing form.

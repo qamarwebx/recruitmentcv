@@ -124,9 +124,14 @@
             </div>
 
             @if ($featured->count() > 0)
+                @php
+                    // Hiring-status pills on the photos: one lookup for all featured cards.
+                    $hiringStatuses = \App\Support\PartnerCandidateAccess::hiringStatusesForViewer($featured);
+                    $alreadyHiredIds = array_keys($hiringStatuses, \App\Support\PartnerCandidateAccess::STATUS_HIRED, true);
+                @endphp
                 <div class="w-candidate-grid w-cols-4 w-fade">
                     @foreach ($featured as $post)
-                        @include('worker.partials.candidate-card', ['post' => $post])
+                        @include('worker.partials.candidate-card', ['post' => $post, 'hiringStatuses' => $hiringStatuses])
                     @endforeach
                 </div>
             @else
@@ -192,9 +197,17 @@
         </div>
     </section>
 
+    @if (!empty($alreadyHiredIds))
+    {{-- "Already Hired" notice (one instance) for the cards' badges and Hire Now. --}}
+    @include('worker.partials.already-hired-modal')
+    @endif
+
 @endsection
 
 @section('page-script')
     <script src="{{ asset('admin/assets/vendor/libs/jquery/jquery.js') }}"></script>
     <script src="{{ asset('admin/assets/vendor/libs/select2/select2.js') }}"></script>
+    @if (!empty($alreadyHiredIds))
+    <script src="{{ asset('worker/js/already-hired.js') }}?v={{ @filemtime(public_path('worker/js/already-hired.js')) ?: time() }}"></script>
+    @endif
 @endsection

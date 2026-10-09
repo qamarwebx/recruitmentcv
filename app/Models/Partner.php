@@ -46,15 +46,17 @@ class Partner extends Authenticatable
     ];
 
     /**
-     * Partner Account -> Edit Account Details fields that are still empty
-     * (form field names): Full Name, Company / Recruitment Office Name,
-     * Recruitment Licence Number, Country, City. Drives the once-per-login
-     * "Account Details" prompt (App\Support\PartnerAccountPrompt).
+     * Partner Account -> Edit Account Details fields the partner can complete
+     * that are still empty (form field names): Full Name, Company /
+     * Recruitment Office Name, Country, City. Drives the once-per-login
+     * "Account Details" prompt (App\Support\PartnerAccountPrompt). The
+     * Recruitment Licence Number is not one of them: it is read-only for
+     * partners (managed in the CRM), so it never triggers the prompt.
      */
     public function missingAccountDetails(): array
     {
         $missing = [];
-        foreach (['owner_name', 'rec_off_name', 'licence_number', 'country_id', 'city_id'] as $field) {
+        foreach (['owner_name', 'rec_off_name', 'country_id', 'city_id'] as $field) {
             $value = $this->{$field};
             $isId = str_ends_with($field, '_id');
             if (blank($value) || ($isId && (int) $value <= 0)) {
@@ -133,6 +135,35 @@ class Partner extends Authenticatable
     }
 
     /**
+     * Recruitment Licence Number is always stored normalized (App\Support\
+     * LicenceNumber::normalize(): trimmed, empty = null), whichever code
+     * path saves it - the uniqueness rule compares that same form.
+     */
+    public function setLicenceNumberAttribute($value): void
+    {
+        $this->attributes['licence_number'] = \App\Support\LicenceNumber::normalize($value);
+    }
+
+    /**
+     * RecruitmentCV portal access revoked: the partner's subdomain was removed
+     * in CRM (Domain::isSubdomainRemoved()). Such a partner can't sign in or
+     * keep a session anywhere on RecruitmentCV until a new subdomain is saved
+     * (PartnerAuthController / SocialLoginController, EnforcePartnerPortalAccess).
+     * A partner that never had a subdomain (e.g. a new registration) is not
+     * revoked.
+     */
+    public function isPortalRevoked(): bool
+    {
+        // A website address was removed in CRM (Remove Subdomain / Remove
+        // Own Domain) and no other address of this partner serves now.
+        $domain = $this->domain;
+
+        return $domain !== null
+            && ($domain->isSubdomainRemoved() || $domain->custom_domain_removed_at !== null)
+            && \App\Support\PartnerDomains::hosts($domain) === [];
+    }
+
+    /**
      * Single source of truth for "which logo file should the Worker
      * Partner Portal header show for this partner, in the given locale" -
      * the English/Arabic Website-tab logo when one has actually been
@@ -206,15 +237,10 @@ class Partner extends Authenticatable
      */
     public function portalBaseUrl(): string
     {
-        $domain = $this->domain;
-
-        // Same "is this subdomain live" rule ResolvePartnerWebsiteDomain
-        // serves sites by - a live subdomain whose status is still the
-        // default 'pending' is a working site to land on.
-        if ($domain && $domain->isLiveSubdomain()) {
-            return 'https://' . $domain->full_domain;
-        }
-
-        return rtrim(config('app.url'), '/');
+        // The partner's primary live address - its active Own Domain when
+        // that is the selected Domain Type, else its live subdomain - by the
+        // same rules ResolvePartnerWebsiteDomain serves sites by
+        // (App\Support\PartnerDomains); else the main site.
+        return \App\Support\PartnerDomains::primaryUrl($this->domain) ?? rtrim(config('app.url'), '/');
     }
 }

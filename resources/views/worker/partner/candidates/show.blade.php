@@ -38,13 +38,7 @@
 
             <div class="w-profile-card">
                 <div class="w-profile-name">
-                    <h1>{{ $post->display_name }}@include('worker.partials.candidate-verified-icon')</h1>
-                    @if ($hasBooking)
-                        <span class="w-verified">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 7L2 14l10 5 10-5-10-5Z"/></svg>
-                            {{ __('locale.Linked to you') }}
-                        </span>
-                    @endif
+                    <h1>{{ $post->display_name }}@include('worker.partials.candidate-verified-icon')@if ($alreadyHired)@include('worker.partials.already-hired-badge')@endif</h1>
                 </div>     
                 
                  
@@ -57,7 +51,7 @@
                     go through the existing __('locale.*') translation
                     system the same way. --}}
                     <span class="w-tag">
-                        {{ $post->display_profession_label }}
+                        {{ $post->display_experience_label }}
                     </span>
                </div>
 
@@ -82,9 +76,10 @@
                         {{-- data-*-verified: hire-now.js's UX gate (mobile -> OTP
                         modal, email -> the notice below); the server re-checks
                         (Partner::isFullyVerified()). --}}
-                        <button type="button" class="w-btn w-btn-accent" data-hire-now-trigger
+                        <button type="button" class="w-btn w-btn-accent" data-hire-now-trigger data-already-hired-hire
                             data-partner-activity-click="hire"
                             data-hire-url="{{ route('worker.partner.candidates.hire', $post->slug_text) }}"
+                            data-hire-status-url="{{ route('worker.partner.candidates.hire-status', $post->slug_text) }}"
                             data-mobile-verified="{{ $viewingPartner->hasVerifiedMobile() ? '1' : '0' }}"
                             data-email-verified="{{ $viewingPartner->hasVerifiedEmail() ? '1' : '0' }}">
                             {{ __('locale.Hire Now') }}
@@ -92,7 +87,7 @@
                     @else
                         {{-- Not approved yet ("not approved" modal), or hiring switched off
                         for everyone ("Hire Candidate - contact support" modal). --}}
-                        <button type="button" class="w-btn w-btn-accent" data-partner-hire-support data-partner-activity-click="hire">
+                        <button type="button" class="w-btn w-btn-accent" data-partner-hire-support data-partner-activity-click="hire" data-already-hired-hire @if ($alreadyHired) data-already-hired-gate @endif>
                             {{ __('locale.Hire Now') }}
                         </button>
                     @endif
@@ -343,6 +338,11 @@
         </div>
     </div>
 
+    {{-- "Already Hired" notice (one instance): before Hire Now when another customer /
+    partner has hired this candidate (hire-now.js server check), and from the badge. --}}
+    @if (!$hasBooking && ($hireEnabled || $alreadyHired))
+        @include('worker.partials.already-hired-modal')
+    @endif
     @if (!$hasBooking && $hireEnabled)
         @include('worker.partials.hire-now-modal')
     @endif
@@ -362,6 +362,9 @@
     just this page is safe. --}}
     <script src="{{ asset('worker/js/main.js') }}?v={{ @filemtime(public_path('worker/js/main.js')) ?: time() }}"></script>
 
+    @if (!$hasBooking && ($hireEnabled || $alreadyHired))
+        <script src="{{ asset('worker/js/already-hired.js') }}?v={{ @filemtime(public_path('worker/js/already-hired.js')) ?: time() }}"></script>
+    @endif
     @if (!$hasBooking && $hireEnabled)
         <script src="{{ asset('admin/assets/vendor/libs/jquery/jquery.js') }}"></script>
         <script src="{{ asset('admin/assets/vendor/libs/select2/select2.js') }}"></script>

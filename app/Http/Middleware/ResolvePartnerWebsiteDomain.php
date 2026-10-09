@@ -8,27 +8,20 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\View;
 
 /**
- * Resolves which Partner's branding (if any) the current request should
- * show, from the Host header alone - the single place this happens for
- * the whole recruitmentcv.com install (never duplicate this lookup in a
- * controller/blade instead). Shares `partnerBrand` globally; consumed by
- * resources/views/components/brand-logo.blade.php.
+ * Resolves which Partner's website (if any) the current request is, from
+ * the Host header - the single place this happens for the whole
+ * recruitmentcv.com install (never duplicate this lookup in a controller /
+ * blade). The rules live in App\Support\PartnerDomains: the main site, a
+ * live "{sub_domain}.recruitmentcv.com" subdomain, or a partner's active
+ * Own Domain (custom_domain, verified + HTTPS, selected Domain Type) - all
+ * the same application. Anything else is a 404. Shares `partnerBrand`
+ * (brand-logo component, SiteBrand) and binds `currentPartner`.
  *
- * Reads App\Models\Domain's `sub_domain` column (added alongside the
- * pre-existing `domain_name`/website_logo/website_logo_ar columns that
- * back the CRM's "Website" tab) - one Domain row per partner now carries
- * both an optional custom domain_name AND an optional *.recruitmentcv.com
- * sub_domain, sharing the same status/logo fields. This project's own
- * app/Http/Controllers/Worker/PartnerPortalController::settingsDomainUpdate()
- * (the Partner Portal's own "Domain" settings tab) writes the very same
- * column, so a Partner's own subdomain change here is immediately what
- * this middleware resolves on their next request - no separate table.
- *
- * This ONLY ever resolves branding, never identity: an authenticated
- * partner's session/guard is completely unaffected by which host they're
- * on, so Partner A visiting Partner B's subdomain can never see Partner
- * B's data through this middleware - it can only ever change which logo
- * renders for anonymous/all visitors on that host.
+ * This ONLY ever resolves branding/content, never identity: an
+ * authenticated partner's session/guard is unaffected by the host, so
+ * Partner A visiting Partner B's website can never see Partner B's data
+ * through this middleware (EnsureWorkerPartnerAuthenticated keeps a signed-
+ * in partner on its own website).
  */
 class ResolvePartnerWebsiteDomain
 {
@@ -41,44 +34,45 @@ class ResolvePartnerWebsiteDomain
             // Partner Company Profile for public titles/meta/footer
             // (App\Support\SiteBrand); null = main site, global branding.
             'company' => null,
-            // Website -> Branding "Append Company Name" (see
-            // SiteBrand::appendedName()); off on the main site.
+            // Effective "Append Company Name" (App\Support\CompanyProfile:
+            // the partner's own value, else the CRM Global one; the main site
+            // = the Global one; see SiteBrand::currentAppendedName()).
             'append_company_name' => false,
         ];
 
         $currentPartner = null;
 
-        // "{label}.{root}" (root = configured RecruitmentCV domain, see
-        // App\Support\RecruitmentDomain); null for the root itself or any
-        // other host.
-        $label = \App\Support\RecruitmentDomain::subdomainFromHost($request->getHost());
+        // The one host -> partner resolution (App\Support\PartnerDomains):
+        // the main site, a live "{label}.{root}" subdomain, or a partner's
+        // active Own Domain. Never falls back to the default site or another
+        // partner - an unconfigured / not-yet-live / disabled / removed
+        // address, or one whose partner no longer exists, is a hard 404.
+        $resolved = \App\Support\PartnerDomains::resolve($request->getHost());
 
-        if ($label !== null) {
+        // Own Domain routing check (CRM "Verify Domain"): answered for a
+        // verified domain (also before it is active), with a proof keyed by
+        // that domain's secret - no partner data, no session.
+        $challenge = $this->challenge($request);
+        if ($challenge) {
+            return $challenge;
+        }
 
-            // Gated on hostinger_status, not the legacy status column: status
-            // (pending/active/inactive/suspended) belongs to the older
-            // custom-domain_name flow (manual DNS/SSL verification before
-            // cutover) and nothing anywhere ever transitions it to 'active'
-            // for a *.recruitmentcv.com sub_domain - every subdomain sits at
-            // its 'pending' default forever regardless of how well it's
-            // provisioned. hostinger_status is the column HostingerSubdomainService/
-            // DomainController::subdomainUpdate() actually maintain automatically,
-            // so it's the real "is this subdomain live" signal here. status is
-            // still honored for its two explicit kill-switch values, in case
-            // a partner's subdomain is ever deliberately disabled that way.
-            $record = Domain::where('sub_domain', $label)
-                ->liveSubdomain()
-                ->first();
+        if ($resolved['kind'] === 'unknown') {
+            abort(404);
+        }
 
-            // Never falls back to the default site or another partner - an
-            // unconfigured/not-yet-provisioned/disabled subdomain is a hard
-            // 404, and so is a live subdomain whose partner no longer exists
-            // (e.g. the partner was deleted but its domains row remains):
-            // with no partner it would otherwise be served as the main site.
-            if (!$record || !$record->partner) {
-                abort(404);
-            }
+        if ($resolved['kind'] === 'custom') {
+            // The session/CSRF cookies of *.recruitmentcv.com (SESSION_DOMAIN)
+            // would be refused by the browser on another domain: on an Own
+            // Domain they are host-only cookies of that domain.
+            config(['session.domain' => null]);
+            // Queued cookies (e.g. the partner guard's remember-me) too.
+            app('cookie')->setDefaultPathAndDomain(config('session.path', '/'), null, config('session.secure'), config('session.same_site'));
+        }
 
+        $record = $resolved['domain'];
+
+        if ($record) {
             $englishLogo = $record->portalLogoFile(false);
             $arabicLogo = $record->portalLogoFile(true);
 
@@ -90,23 +84,49 @@ class ResolvePartnerWebsiteDomain
             // Website -> Company Profile); raw values, the locale and the
             // per-field global fallback are applied by SiteBrand at render.
             $brand['company'] = \App\Support\SiteBrand::companyFromDomain($record);
-            $brand['append_company_name'] = \App\Models\PartnerPageContent::brandingFor($record->partner_id)['append_company_name'];
+            $brand['append_company_name'] = \App\Models\PartnerPageContent::brandingFor((int) $record->partner_id)[\App\Models\PartnerPageContent::APPEND_COMPANY_NAME];
 
-            // Same already-loaded $record, just following its existing
-            // partner() relation - not a second Domain lookup. This is the
-            // single place "which Partner's public website is this" gets
-            // resolved (Website Config's public-page content); still only
-            // ever identity for CONTENT selection, never auth - the
-            // partner guard/session is completely untouched by this.
+            // Identity for CONTENT selection only (which partner's public
+            // website this is), never auth - the partner guard/session is
+            // untouched by this.
             $currentPartner = $record->partner;
         }
 
-        // Any other host (apex, www, or a non-recruitmentcv.com dev/local
-        // domain) keeps the default (empty) $brand/no partner and is never
-        // rejected.
+        // The main site keeps the default (empty) $brand / no partner, with
+        // the Global "Append Company Name" (shown with the Global Company Name).
+        if (!$record) {
+            $brand['append_company_name'] = \App\Support\CompanyProfile::appendSetting(null)[\App\Support\CompanyProfile::APPEND];
+        }
         View::share('partnerBrand', $brand);
         app()->instance('currentPartner', $currentPartner);
 
         return $next($request);
+    }
+
+    /**
+     * GET /.well-known/recruitmentcv-domain-check/{nonce} on a verified Own
+     * Domain: {"domain": host, "proof": HMAC(nonce, domain secret)} - shows
+     * the CRM that this domain reaches this application. Null otherwise.
+     */
+    private function challenge(Request $request): ?\Illuminate\Http\JsonResponse
+    {
+        $prefix = \App\Support\PartnerDomains::CHALLENGE_PATH . '/';
+        $path = ltrim($request->path(), '/');
+        if (!$request->isMethod('GET') || !str_starts_with($path, $prefix)) {
+            return null;
+        }
+        $nonce = substr($path, strlen($prefix));
+        if (!preg_match('/^[A-Za-z0-9]{16,64}$/', $nonce)) {
+            return null;
+        }
+        $domain = \App\Support\PartnerDomains::challengeDomain($request->getHost());
+        if (!$domain) {
+            return null;
+        }
+
+        return response()->json([
+            'domain' => $domain->custom_domain,
+            'proof' => \App\Support\PartnerDomains::challengeProof($domain->custom_domain_token, $nonce),
+        ])->header('Cache-Control', 'no-store');
     }
 }

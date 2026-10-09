@@ -46,6 +46,12 @@ class Kernel extends HttpKernel
             // Public page views -> website_visitors (records after the response is sent).
             \App\Http\Middleware\TrackWebsiteVisitor::class,
             \App\Http\Middleware\EnforceCustomerSite::class,
+            // Partner whose RecruitmentCV subdomain was removed in CRM: no session anywhere.
+            \App\Http\Middleware\EnforcePartnerPortalAccess::class,
+            // Pending partners: session ends after the configured duration (CRM -> Website -> Settings).
+            \App\Http\Middleware\ExpirePendingPartnerSession::class,
+            // Partner / team member activity for CRM -> Website -> Live Partners (after the response).
+            \App\Http\Middleware\TrackPartnerActivity::class,
             // Partner Portal team members: permissions on every request.
             \App\Http\Middleware\EnforcePartnerTeamPermissions::class,
         ],

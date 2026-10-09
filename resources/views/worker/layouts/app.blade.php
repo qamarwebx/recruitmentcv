@@ -19,6 +19,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="{{ asset('worker/css/style.css') }}?v={{ @filemtime(public_path('worker/css/style.css')) ?: time() }}">
+    {{-- This website's partner (host-resolved; none on recruitmentcv.com = global). --}}
+    @include('worker.partials.logo-dimensions', ['logoPartnerId' => app()->bound('currentPartner') ? optional(app('currentPartner'))->id : null])
     @yield('page-style')
 </head>
 <body class="worker-scope">
@@ -58,5 +60,9 @@
     @endauth
     @include('worker.partials.partner-auth-script')
     @yield('page-script')
+    @auth('partner')
+        {{-- Live Partners presence: heartbeat + leave signal of this tab (CRM -> Website -> Live Partners). --}}
+        <script src="{{ asset('worker/js/partner-presence.js') }}?v={{ @filemtime(public_path('worker/js/partner-presence.js')) ?: time() }}" data-url="{{ route('worker.presence') }}" data-visible="{{ \App\Models\PartnerLoginSession::HEARTBEAT_SECONDS }}" data-hidden="{{ \App\Models\PartnerLoginSession::HIDDEN_HEARTBEAT_SECONDS }}"></script>
+    @endauth
 </body>
 </html>

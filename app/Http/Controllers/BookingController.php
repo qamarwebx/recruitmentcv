@@ -3868,8 +3868,14 @@ class BookingController extends Controller
         if($ordrrUserID != ''){
             $post->orderrecuser_id = $ordrrUserID;
         }
-      
-        $post->save();
+
+        // Order number allocated under the lock shared with the CRM
+        // (App\Support\BookingReference); CustomerHireController holds it
+        // until its transaction commits.
+        \App\Support\BookingReference::withLock(function () use ($post) {
+            $post->reference_no = \App\Support\BookingReference::next();
+            $post->save();
+        });
 
         $total_bk_c = $cbkc + 1;
 
@@ -3912,9 +3918,11 @@ class BookingController extends Controller
 
         // recruitmentcv.com template set (never qamarhire's), with the partner
         // site resolved from the request host (null = main recruitmentcv.com).
+        // Each follows CRM -> Website -> Settings (Customer Notifications /
+        // Order & Hiring) and is logged in Notification Logs.
         $sitePartnerId = \App\Support\CustomerSite::partnerId();
-        AutoSendMessageForOrder::dispatch($post->id, 'recruitmentcv', $sitePartnerId)->onQueue('default');
-        AutoSendMessageForOrderToPartner::dispatch($post->id, 'recruitmentcv', $sitePartnerId)->onQueue('default');
+        \App\Support\NotificationCenter::queueOrderWhatsapp('customer_order_created', (int) $post->id, (int) $post->partner_id ?: null, $sitePartnerId);
+        \App\Support\NotificationCenter::queueOrderWhatsapp('partner_new_customer_order', (int) $post->id, (int) $post->partner_id ?: null, $sitePartnerId);
 
 
         // $data = 'Thank you! your booking reference no is BK800'.$post->reference_no;

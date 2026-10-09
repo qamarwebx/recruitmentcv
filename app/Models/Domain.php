@@ -32,6 +32,24 @@ class Domain extends Model
         'hostinger_error',
         'hostinger_reference',
 
+        // "Remove Subdomain" (CRM): set = RecruitmentCV portal access revoked
+        // until a new subdomain is saved.
+        'subdomain_removed_at',
+        'subdomain_removed_by',
+        'removed_sub_domain',
+
+        // Own Domain (App\Support\PartnerDomains): selected Domain Type and
+        // the partner's verified custom domain (Hostinger parked domain).
+        'domain_type',
+        'custom_domain',
+        'custom_domain_status',
+        'custom_domain_token',
+        'custom_domain_verified_at',
+        'custom_domain_active_at',
+        'custom_domain_checks',
+        'custom_domain_removed_at',
+        'removed_custom_domain',
+
         // Branding
         'company_name',
         'company_name_ar',
@@ -66,6 +84,8 @@ class Domain extends Model
     |--------------------------------------------------------------------------
     */
 
+    protected $hidden = ['custom_domain_token'];
+
     protected $casts = [
 
         'dns_verified'     => 'boolean',
@@ -77,6 +97,11 @@ class Domain extends Model
         'ssl_expiry_date'  => 'date',
 
         'hostinger_created_at' => 'datetime',
+        'subdomain_removed_at' => 'datetime',
+        'custom_domain_verified_at' => 'datetime',
+        'custom_domain_active_at' => 'datetime',
+        'custom_domain_removed_at' => 'datetime',
+        'custom_domain_checks' => 'array',
     ];
 
     /*
@@ -173,7 +198,8 @@ class Domain extends Model
         return $query->whereNotNull('domains.sub_domain')
             ->where('domains.sub_domain', '!=', '')
             ->where('domains.hostinger_status', 'success')
-            ->whereNotIn('domains.status', ['inactive', 'suspended']);
+            ->whereNotIn('domains.status', ['inactive', 'suspended'])
+            ->whereNull('domains.subdomain_removed_at');
     }
 
     public function scopeDnsVerified($query)
@@ -202,7 +228,8 @@ class Domain extends Model
     {
         return !empty($this->sub_domain)
             && $this->hostinger_status === 'success'
-            && !in_array($this->status, ['inactive', 'suspended'], true);
+            && !in_array($this->status, ['inactive', 'suspended'], true)
+            && !$this->isSubdomainRemoved();
     }
 
     public function isDnsVerified()
@@ -315,5 +342,15 @@ class Domain extends Model
         $path = rtrim($directory, '/') . '/' . $file;
 
         return !$inUse && is_file($path) && unlink($path);
+    }
+
+    /**
+     * The partner's RecruitmentCV subdomain was removed (CRM -> Partner ->
+     * Website -> Domain -> Remove Subdomain): its portal access stays revoked
+     * until a new subdomain is saved.
+     */
+    public function isSubdomainRemoved(): bool
+    {
+        return $this->subdomain_removed_at !== null;
     }
 }

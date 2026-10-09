@@ -61,6 +61,10 @@ class LoginRequest extends FormRequest
             : ((int) $partner->registration_status === 2
                 ? __('locale.Your registration has been rejected.')
                 : ((int) $partner->registration_status !== 1 ? __('locale.Your registration is pending approval.') : null));
+        // Subdomain removed in CRM: RecruitmentCV portal access revoked.
+        if ($message === null && $partner->isPortalRevoked()) {
+            $message = __('locale.Your RecruitmentCV portal is currently unavailable. Please contact support.');
+        }
 
         if ($message !== null) {
             Auth::guard('partner')->logout();

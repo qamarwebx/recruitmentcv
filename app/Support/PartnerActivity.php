@@ -135,6 +135,7 @@ class PartnerActivity
         return [
             'event' => $event->event,
             'event_id' => $event->id,
+            'partner_id' => (int) $event->partner_id,
             'activity' => self::EVENTS[$event->event]['activity'],
             'subject' => self::EVENTS[$event->event]['subject'],
             'partner_name' => trim((string) ($partner->rec_off_name ?: $partner->owner_name)) ?: '---',

@@ -660,23 +660,39 @@ class PartnerPageContent extends Model
     }
 
     /**
-     * Partner Website -> Branding settings row (not a page, like WHATSAPP).
-     * content = {append_company_name: bool} - show the Company Profile name
-     * under the logo in the Partner Portal sidebar. Partner rows only.
+     * Branding settings row (not a page, like WHATSAPP; the same row also
+     * holds BrandingAssets' footer logos). content.append_company_name =
+     * show the Company Profile name under the logo ("Append Company Name").
+     * Two contexts: the partner's own row (Partner Website -> Branding) and
+     * the central row (CRM -> Website -> Global -> Company Profile), which
+     * is the default for every partner that hasn't set its own value.
      */
     public const BRANDING = 'branding';
 
-    public static function brandingFor(int $partnerId): array
-    {
-        $saved = static::rowFor($partnerId, static::BRANDING)->content ?? [];
+    public const APPEND_COMPANY_NAME = \App\Support\CompanyProfile::APPEND;
 
-        return ['append_company_name' => (bool) ($saved['append_company_name'] ?? false)];
+    /**
+     * Effective "Append Company Name" (public site, Partner Login, Partner
+     * Portal sidebar, on every host): the partner's explicit value (on OR
+     * off) -> the global value -> off. The rule itself lives in the twin
+     * App\Support\CompanyProfile::appendSetting() (same code in the CRM).
+     *
+     * @return array{append_company_name: bool, append_company_name_configured: bool, append_company_name_default: bool, append_company_name_source: string}
+     */
+    public static function brandingFor(?int $partnerId): array
+    {
+        return \App\Support\CompanyProfile::appendSetting($partnerId);
     }
 
+    /** A partner's own Branding values; a null value removes the key (back to the global default). */
     public static function saveBranding(int $partnerId, array $values): void
     {
         $row = static::firstOrNew(['partner_id' => $partnerId, 'page' => static::BRANDING]);
-        $row->content = array_merge($row->content ?? [], $values);
+        $content = array_merge($row->content ?? [], $values);
+        foreach (array_keys($values, null, true) as $key) {
+            unset($content[$key]);
+        }
+        $row->content = $content;
         $row->save();
     }
 }

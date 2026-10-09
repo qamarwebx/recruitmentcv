@@ -70,6 +70,16 @@ return [
             'activity'       => 'activity.activity',
             'team member'    => 'activity.team_member',
         ],
+        // RecruitmentCV notification events (App\Support\NotificationEvents,
+        // CRM -> Website -> Settings); values set by NotificationCenter.
+        'recruitmentcv_events' => [
+            'recipient name' => 'event.recipient_name',
+            'partner name'   => 'event.partner_name',
+            'title'          => 'event.title',
+            'details'        => 'event.details',
+            'link'           => 'event.link',
+            'date time'      => 'event.occurred_at',
+        ],
     ],
 
     // Website template sets offered in the Template / Meta Automation
@@ -84,6 +94,8 @@ return [
     // same Template / Meta Automation "Template For" dropdowns.
     'partner_activity_template_for' => [
         'partner_activity' => 'Partner Activity',
+        // Partner / order / team / security events (Website -> Settings).
+        'recruitmentcv_events' => 'RecruitmentCV Notifications',
     ],
 
 ];

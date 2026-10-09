@@ -11,4 +11,5 @@
     $brandSlot = ($mode === 'dark' ? 'footer' : 'header') . '_logo_' . ($isArabic ? 'ar' : 'en');
     $brandPartnerId = app()->bound('currentPartner') ? optional(app('currentPartner'))->id : null;
 @endphp
-<img src="{{ \App\Support\BrandingAssets::url($brandSlot, $brandPartnerId) }}" {{ $attributes }}>
+{{-- .w-brand-logo (style.css): the shared fit-any-logo display rule. --}}
+<img src="{{ \App\Support\BrandingAssets::url($brandSlot, $brandPartnerId) }}" {{ $attributes->merge(['class' => 'w-brand-logo']) }}>

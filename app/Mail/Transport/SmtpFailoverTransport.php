@@ -49,7 +49,10 @@ final class SmtpFailoverTransport implements TransportInterface
         }
 
         if (!$transports) {
-            return SmtpMailer::fallbackTransport()->send($message, $envelope);
+            $sent = SmtpMailer::fallbackTransport()->send($message, $envelope);
+            SmtpMailer::$lastDelivery = ['provider' => 'Default (.env) mailer', 'smtp_id' => null, 'position' => null];
+
+            return $sent;
         }
 
         try {

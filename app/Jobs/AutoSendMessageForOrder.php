@@ -46,8 +46,18 @@ class AutoSendMessageForOrder implements ShouldQueue
      */
     protected $sitePartnerId = null;
 
-    public function __construct($bookingId, $templateFor = 'qamarhire', $sitePartnerId = null)
+    /**
+     * Autometanotification trigger_template_type to send. Defaults to the
+     * plain order message; the reservation queue reuses this job with
+     * 'reservation_next_priority' for its "your turn" message.
+     */
+    protected $triggerType = 'order';
+
+    public function __construct($bookingId, $templateFor = 'qamarhire', $sitePartnerId = null, $triggerType = null)
     {
+        if ($triggerType !== null) {
+            $this->triggerType = (string) $triggerType;
+        }
         $this->bookingId = $bookingId;
         $this->templateFor = array_key_exists((string) $templateFor, (array) config('constants.website_template_for'))
             ? (string) $templateFor
@@ -80,7 +90,7 @@ class AutoSendMessageForOrder implements ShouldQueue
 
             $autometas = Autometanotification::whereIn(
                     'trigger_template_type',
-                    ['order']
+                    [$this->triggerType]
                 )
                 ->where('template_for', $this->templateFor)
                 ->where('status',1)
@@ -137,7 +147,7 @@ class AutoSendMessageForOrder implements ShouldQueue
                                     'type' => $type
                                 ]
                             );
-                            continue;
+                            break; // was `continue` - identical inside a switch (PHP warns); kept as break to preserve behaviour
                     }
 
                     if ($minutes > 0) {
@@ -337,7 +347,7 @@ class AutoSendMessageForOrder implements ShouldQueue
                 */
                 $phone_number = '';
 
-                if($meta->trigger_template_type == 'order'){
+                if($meta->trigger_template_type == $this->triggerType){
                     if(isset($country->country_code)){
                         $phone_number = $country->country_code.$user->mobile_no;
                     }else{

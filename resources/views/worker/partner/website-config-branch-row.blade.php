@@ -26,8 +26,8 @@ hook the JS reads generically (no per-row wiring needed after a clone). --}}
         <div class="wp-logo-upload">
             <img data-branch-image-preview src="{{ $branch['image'] ?? asset('user/img/real-estate/illustrations/contact.svg') }}" alt="">
             <div>
-                <input type="file" class="w-input" accept="image/png,image/jpeg,image/webp" data-branch-image-input>
-                <div class="form-text" style="color:var(--w-ink-500);font-size:0.82rem;margin-top:4px;">{{ __('locale.JPG, PNG or WEBP, up to 2MB.') }}</div>
+                <input type="file" class="w-input" accept="{{ \App\Support\ImageUpload::ACCEPT }}" data-branch-image-input>
+                <div class="form-text" style="color:var(--w-ink-500);font-size:0.82rem;margin-top:4px;">{{ __('locale.JPG, PNG, GIF, WEBP or SVG, up to 2MB.') }}</div>
             </div>
         </div>
         <input type="hidden" data-branch-field="image" value="{{ $branch['image'] ?? '' }}">

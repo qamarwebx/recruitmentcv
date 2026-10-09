@@ -463,9 +463,12 @@ class PartnerBookingController extends Controller
 
         if($cbkc < $cand_limit->cand_booking_limit){
             $cand = Candidate::find($post->cand_id);
-            $cand->status = true;
-            $cand->publish = true;
-            $cand->save();
+            // Re-shown only if the CRM reservation queue didn't hide it (reservation_lock full / hold / selected).
+            if ($cand && empty($cand->reservation_lock)) {
+                $cand->status = true;
+                $cand->publish = true;
+                $cand->save();
+            }
         }
 
 

@@ -3,10 +3,11 @@
 namespace App\Jobs;
 
 use App\Mail\PartnerActivityAlert;
-use App\Models\Autometanotification;
 use App\Models\Metawhatsapptemplate;
-use App\Support\SmtpMailer;
+use App\Models\PartnerActivityEvent;
 use App\Support\MetaWhatsappTemplateSender;
+use App\Support\NotificationCenter;
+use App\Support\NotificationSettings;
 use App\Support\PartnerActivity;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -27,6 +28,11 @@ use Illuminate\Support\Facades\Log;
  *   template (variables from config constants.template_for_map) through the
  *   existing WhatsApp API (MetaWhatsappTemplateSender).
  *
+ * Each channel follows CRM -> Website -> Settings -> Candidate/Recruitment
+ * (NotificationSettings: partner override -> Global; the event key is the
+ * trigger name) and every message is logged in Notification Logs
+ * (NotificationCenter).
+ *
  * $context is built server-side when the event fires (partner, candidate,
  * URL). Dispatched from RecruitmentCV, run by the CRM queue worker - twin
  * file in both apps. Not retried, so an alert is never sent twice.
@@ -43,36 +49,53 @@ class SendPartnerActivityNotification implements ShouldQueue
 
     public function handle()
     {
+        $event = PartnerActivity::EVENTS[$this->context['event'] ?? '']['trigger'] ?? null;
+        if (!$event) {
+            return;
+        }
+        NotificationSettings::forget();   // latest settings for every job (long-running worker)
+        $partnerId = isset($this->context['partner_id'])
+            ? (int) $this->context['partner_id']
+            : ((int) PartnerActivityEvent::whereKey($this->context['event_id'] ?? 0)->value('partner_id') ?: null);
+        $log = ['activity_event_id' => $this->context['event_id'] ?? null, 'candidate' => $this->context['candidate_ref'] ?? null];
+
         $recipients = PartnerActivity::recipients();
         if (!$recipients) {
+            NotificationCenter::log($event, 'email', 'skipped', null, 'staff', $partnerId, null, 'Partner Activity alert', 'No Partner Notification recipients configured', null, $log);
+
             return;
         }
 
-        foreach ($recipients as $recipient) {
-            if (!$recipient['email']) {
-                continue;
-            }
-            try {
-                SmtpMailer::global()->to($recipient['email'])->send(new PartnerActivityAlert($this->context));
-            } catch (\Throwable $e) {
-                Log::warning('Partner activity email not sent', ['event_id' => $this->context['event_id'] ?? null, 'admin_id' => $recipient['admin_id'], 'error' => $e->getMessage()]);
+        if (!NotificationSettings::enabled($event, 'email', $partnerId)) {
+            NotificationCenter::log($event, 'email', 'skipped', null, 'staff', $partnerId, null, 'Partner Activity alert', 'Disabled in Notification Settings', null, $log);
+        } else {
+            foreach ($recipients as $recipient) {
+                if (!$recipient['email']) {
+                    NotificationCenter::log($event, 'email', 'skipped', $recipient['name'], 'staff', $partnerId, null, 'Partner Activity alert', 'No Work Email CRM Notification', null, $log);
+                    continue;
+                }
+                NotificationCenter::sendEmail($event, $partnerId, $recipient['email'], new PartnerActivityAlert($this->context), 'global', [
+                    'recipient_type' => 'staff', 'dedupe' => 'activity:' . ($this->context['event_id'] ?? ''), 'context' => $log,
+                ]);
             }
         }
 
-        $this->sendWhatsapp($recipients);
+        if (!NotificationSettings::enabled($event, 'whatsapp', $partnerId)) {
+            NotificationCenter::log($event, 'whatsapp', 'skipped', null, 'staff', $partnerId, null, $event, 'Disabled in Notification Settings', null, $log);
+
+            return;
+        }
+        $this->sendWhatsapp($event, $partnerId, $recipients, $log);
     }
 
-    private function sendWhatsapp(array $recipients): void
+    private function sendWhatsapp(string $event, ?int $partnerId, array $recipients, array $log): void
     {
-        $trigger = PartnerActivity::EVENTS[$this->context['event'] ?? '']['trigger'] ?? null;
-        if (!$trigger) {
+        $rules = NotificationCenter::whatsappRules($event);
+        if (!$rules->count()) {
+            NotificationCenter::log($event, 'whatsapp', 'skipped', null, 'staff', $partnerId, null, $event, 'Template Not Configured (Meta Automation: ' . PartnerActivity::TEMPLATE_FOR . ' / ' . $event . ')', null, $log);
+
             return;
         }
-
-        $rules = Autometanotification::where('template_for', PartnerActivity::TEMPLATE_FOR)
-            ->where('trigger_template_type', $trigger)
-            ->where('status', 1)
-            ->get();
 
         $mapping = (array) config('constants.template_for_map.' . PartnerActivity::TEMPLATE_FOR);
 
@@ -97,13 +120,20 @@ class SendPartnerActivityNotification implements ShouldQueue
 
             foreach ($recipients as $recipient) {
                 if (!$recipient['mobile']) {
+                    NotificationCenter::log($event, 'whatsapp', 'skipped', $recipient['name'], 'staff', $partnerId, null, $template->template_name, 'No Work Mobile No CRM Notification', null, $log);
                     continue;
                 }
-                MetaWhatsappTemplateSender::send(
+                $key = NotificationCenter::dedupeKey($event, 'whatsapp:' . $template->id, $recipient['mobile'], 'activity:' . ($this->context['event_id'] ?? ''));
+                if (NotificationCenter::alreadySent($key)) {
+                    NotificationCenter::log($event, 'whatsapp', 'skipped', $recipient['mobile'], 'staff', $partnerId, null, $template->template_name, 'Duplicate - already sent for this event', $key, $log);
+                    continue;
+                }
+                $result = MetaWhatsappTemplateSender::send(
                     ['phone_number' => $recipient['mobile'], 'template_name' => $template->template_name, 'template_language' => $template->language_code ?: 'en'] + $values,
                     $template->metaapi_id ? (int) $template->metaapi_id : null,
                     ['template_for' => PartnerActivity::TEMPLATE_FOR, 'autometanotification_id' => $rule->id, 'metatemplate_id' => $template->id, 'reference_id' => $this->context['event_id'] ?? null]
                 );
+                NotificationCenter::log($event, 'whatsapp', $result['ok'] ? 'sent' : 'failed', $recipient['mobile'], 'staff', $partnerId, $result['provider'], $template->template_name, $result['ok'] ? null : $result['message'], $key, $log);
             }
         }
     }

@@ -11,7 +11,7 @@ class Candidate extends Model
 
     /**
      * candidates.gulfexperience codes => translation key (same codes as the
-     * CRM's customercosts.exp_type). Used by display_profession_label and the
+     * CRM's customercosts.exp_type). Used by display_experience_type and the
      * Partner Price Update page.
      */
     public const EXPERIENCE_TYPES = [
@@ -37,8 +37,9 @@ class Candidate extends Model
 
     /**
      * Experience type + profession, e.g. "Indian Experience House Driver" /
-     * "Ex-Abroad House Driver" ("---" when no profession) - shown on the
-     * candidate detail pages and under the name on every candidate card.
+     * "Ex-Abroad House Driver" ("---" when no profession) - kept for the
+     * customer booking e-mail (CustomerHireController). The pages show
+     * display_experience_label instead.
      * Locale-aware through __('locale.*') and Profession::display_name.
      */
     public function getDisplayProfessionLabelAttribute()
@@ -53,8 +54,29 @@ class Candidate extends Model
     }
 
     /**
+     * The candidate label on the pages: experience type + the word
+     * "Experience" in place of the profession, e.g. "Ex-Abroad Experience" -
+     * the tag on both candidate detail pages and the first line of every
+     * candidate card. A type whose own label already contains the word
+     * ("Indian Experience"; both types in Arabic, "خبرة ...") is shown as
+     * is, never "... Experience Experience"; no type -> "---". Display only -
+     * the stored type / profession are untouched.
+     */
+    public function getDisplayExperienceLabelAttribute(): string
+    {
+        $type = $this->display_experience_type;
+        if ($type === '---') {
+            return '---';
+        }
+
+        $word = __('locale.Experience');
+
+        return mb_stripos($type, $word) !== false ? $type : $type . ' ' . $word;
+    }
+
+    /**
      * Experience type alone, e.g. "Ex-Abroad" / "Indian Experience" ("---"
-     * when not set) - the first line of every candidate card.
+     * when not set).
      */
     public function getDisplayExperienceTypeAttribute()
     {
@@ -206,6 +228,16 @@ class Candidate extends Model
     public function getWorkCityIdAttribute()
     {
         return optional($this->work_employer)->wpcity_id;
+    }
+
+    /**
+     * Expected Salary with its currency code, e.g. "2000 SAR"
+     * (App\Support\SalaryCurrency - display only); the amount as stored when
+     * no currency is set; '' when there is no salary.
+     */
+    public function getDisplayExpectedSalaryAttribute(): string
+    {
+        return \App\Support\SalaryCurrency::format($this->exp_sal, $this->exp_sal_currency);
     }
 
     // Local Scope

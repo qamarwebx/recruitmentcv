@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\View;
  */
 class SiteBrand
 {
-    public const GLOBAL_NAME = 'Qamr International';
+    /** The literal brand in translated titles/meta (brandEscapedText()); the shown global name is CompanyProfile::globalName(). */
+    public const GLOBAL_NAME = CompanyProfile::DEFAULT_NAME;
 
     public const GLOBAL_PORTAL_NAME = 'Qamr Worker Portal';
 
@@ -28,27 +29,44 @@ class SiteBrand
     }
 
     /**
-     * Website -> Branding "Append Company Name": the Company Profile name
-     * shown with the partner logo - Company Name in English, Company Name
-     * (Arabic) in Arabic (no cross-language fallback); '' when the switch
-     * is off or that name is empty (= logo only). The one rule for the
-     * Partner Portal sidebar, the Partner Login page and the public site.
+     * Website -> Branding "Append Company Name": the effective Company
+     * Profile name shown with the logo - Company Name in English, Company
+     * Name (Arabic) in Arabic (no cross-language mixing): the partner's
+     * ($company), else the CRM Global one ($company null = the main site);
+     * '' when the setting is off or no name is set (= logo only). The one
+     * rule (App\Support\CompanyProfile, twin of the CRM's) for the Partner
+     * Portal sidebar, the Partner Login page and the public site.
      */
     public static function appendedName(?array $company, bool $on, ?string $locale = null): string
     {
-        if (!$on || !$company) {
-            return '';
-        }
-
-        return trim((string) (($locale ?? app()->getLocale()) === 'ar' ? ($company['name_ar'] ?? '') : ($company['name'] ?? '')));
+        return CompanyProfile::appendedName($company, $on, $locale);
     }
 
-    /** appendedName() for the current partner site (public pages, Partner Login); '' on the main site. */
+    /**
+     * appendedName() for a partner (Partner Portal sidebar): its Company
+     * Profile ($domain = its domains row) when its effective "Append Company
+     * Name" is on - PartnerPageContent::brandingFor(): own value, else global.
+     */
+    public static function partnerAppendedName(int $partnerId, $domain, ?string $locale = null): string
+    {
+        return self::appendedName(
+            self::companyFromDomain($domain),
+            \App\Models\PartnerPageContent::brandingFor($partnerId)[\App\Models\PartnerPageContent::APPEND_COMPANY_NAME],
+            $locale
+        );
+    }
+
+    /**
+     * appendedName() for the current site (public pages, Partner Login) -
+     * partnerBrand carries the effective setting resolved by
+     * ResolvePartnerWebsiteDomain (the main site: the CRM Global setting
+     * and Global Company Name).
+     */
     public static function currentAppendedName(): string
     {
         $brand = View::shared('partnerBrand');
 
-        return is_array($brand) ? self::appendedName(self::company(), (bool) ($brand['append_company_name'] ?? false)) : '';
+        return is_array($brand) ? self::appendedName(self::company(), ($brand['append_company_name'] ?? null) === true) : '';
     }
 
     public static function isPartnerSite(): bool
@@ -74,7 +92,11 @@ class SiteBrand
             'address_ar' => $domain->company_address_ar,
             'mobile' => $domain->company_mobile,
             'email' => $domain->company_email,
-            'host' => $domain->full_domain,
+            // The address this website is shown on: the current host when it
+            // is one of this partner's live addresses, else its primary one.
+            'host' => in_array(strtolower((string) optional(request())->getHost()), \App\Support\PartnerDomains::hosts($domain), true)
+                ? strtolower(request()->getHost())
+                : (\App\Support\PartnerDomains::primaryHost($domain) ?? $domain->full_domain),
         ];
     }
 
@@ -128,10 +150,10 @@ class SiteBrand
         return self::legalOperator(self::company(), app()->getLocale());
     }
 
-    /** Company name shown for this site (partner name, else Qamr International). */
+    /** Company name shown for this site (partner name, else the CRM Global Company Name - default Qamr International). */
     public static function name(): string
     {
-        return self::localized('name') ?? self::GLOBAL_NAME;
+        return self::localized('name') ?? CompanyProfile::globalName();
     }
 
     /**
@@ -208,7 +230,7 @@ class SiteBrand
                     'Instagram' => $frontwebsite->bottom_contact_us_instagram_link ?? null,
                     'LinkedIn' => $frontwebsite->bottom_contact_us_linkedin_link ?? null,
                 ],
-                'copyright' => self::GLOBAL_NAME,
+                'copyright' => CompanyProfile::globalName($locale),
                 'tagline_host' => RecruitmentDomain::root(),
             ];
         }

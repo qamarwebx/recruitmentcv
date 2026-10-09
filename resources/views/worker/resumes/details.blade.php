@@ -4,6 +4,11 @@
 @section('meta_description', 'View the full verified profile for ' . $post->display_name . ' including experience, education and passport details.')
 
 @section('content')
+    {{-- Hiring-status pills on the related candidate cards: one lookup for all of them. --}}
+    @php
+        $relatedStatuses = \App\Support\PartnerCandidateAccess::hiringStatusesForViewer($relatedPosts ?? []);
+        $relatedHiredIds = array_keys($relatedStatuses, \App\Support\PartnerCandidateAccess::STATUS_HIRED, true);
+    @endphp
 
     @php
         $totalExp = $totalExperience;
@@ -27,7 +32,7 @@
 
                     <div class="w-profile-card">
                         <div class="w-profile-name">
-                            <h1>{{ $post->display_name }}@include('worker.partials.candidate-verified-icon')</h1>
+                            <h1>{{ $post->display_name }}@include('worker.partials.candidate-verified-icon')@if ($alreadyHired)@include('worker.partials.already-hired-badge')@endif</h1>
                         </div>
 
                         {{-- Locale-aware: Profession::display_name (existing
@@ -41,7 +46,7 @@
                         (worker.partner.candidates.show), reused verbatim. --}}
                         <div class="w-profile-tags">
                             <span class="w-tag">
-                                {{ $post->display_profession_label }}
+                                {{ $post->display_experience_label }}
                             </span>
                         </div>
 
@@ -62,24 +67,24 @@
                             sign in at /partner/login. --}}
                             @php $isPartnerSite = \App\Support\CustomerSite::isPartnerSite(); @endphp
                             @auth('partner')
-                                <a href="{{ route('worker.partner.candidates.show', $post->slug_text) }}?hire=1" class="w-btn w-btn-accent">
+                                <a href="{{ route('worker.partner.candidates.show', $post->slug_text) }}?hire=1" class="w-btn w-btn-accent" @if ($alreadyHired) data-already-hired-gate @endif>
                                     {{ __('locale.Hire Now') }}
                                 </a>
                             @else
                                 @if ($isPartnerSite)
                                     @auth('web')
-                                        <button type="button" class="w-btn w-btn-accent" data-customer-hire-open>
+                                        <button type="button" class="w-btn w-btn-accent" data-customer-hire-open @if ($alreadyHired) data-already-hired-gate @endif>
                                             {{ __('locale.Hire Now') }}
                                         </button>
                                     @else
-                                        <button type="button" class="w-btn w-btn-accent" data-customer-auth-trigger>
+                                        <button type="button" class="w-btn w-btn-accent" data-customer-auth-trigger @if ($alreadyHired) data-already-hired-gate @endif>
                                             {{ __('locale.Hire Now') }}
                                         </button>
                                     @endauth
                                 @else
                                     {{-- Main site = partner entry point: original
                                     partner login/register, then partner hire. --}}
-                                    <button type="button" class="w-btn w-btn-accent" data-partner-auth-trigger data-redirect="{{ route('worker.partner.candidates.show', $post->slug_text) }}?hire=1">
+                                    <button type="button" class="w-btn w-btn-accent" data-partner-auth-trigger data-redirect="{{ route('worker.partner.candidates.show', $post->slug_text) }}?hire=1" @if ($alreadyHired) data-already-hired-gate @endif>
                                         {{ __('locale.Hire Now') }}
                                     </button>
                                 @endif
@@ -354,7 +359,7 @@
                 </div>
                 <div class="w-candidate-grid w-fade">
                     @foreach ($relatedPosts as $related)
-                        @include('worker.partials.candidate-card', ['post' => $related])
+                        @include('worker.partials.candidate-card', ['post' => $related, 'hiringStatuses' => $relatedStatuses])
                     @endforeach
                 </div>
             </div>
@@ -363,6 +368,12 @@
 
     @if ($hire)
         @include('worker.partials.customer-hire-modal', ['hire' => $hire, 'post' => $post])
+    @endif
+
+    {{-- "Already Hired" notice (one instance): from the badge, and in front of
+    this page's Hire Now while the candidate is hired by someone else. --}}
+    @if ($alreadyHired || $relatedHiredIds)
+        @include('worker.partials.already-hired-modal')
     @endif
 
     {{-- Signed-in partner whose registration is not approved yet: the support
@@ -377,6 +388,9 @@
 @endsection
 
 @section('page-script')
+    @if ($alreadyHired || $relatedHiredIds)
+        <script src="{{ asset('worker/js/already-hired.js') }}?v={{ @filemtime(public_path('worker/js/already-hired.js')) ?: time() }}"></script>
+    @endif
     @if ($hire)
         <script src="{{ asset('worker/js/customer-hire.js') }}?v={{ @filemtime(public_path('worker/js/customer-hire.js')) ?: time() }}"></script>
     @endif

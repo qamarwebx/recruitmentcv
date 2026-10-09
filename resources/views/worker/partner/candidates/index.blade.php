@@ -50,16 +50,29 @@
             <option value="1" @selected(request('expcity_id') == 1)>{{ __('locale.Indian Experience') }}</option>
             <option value="2" @selected(request('expcity_id') == 2)>{{ __('locale.Gulf / Abroad Experience') }}</option>
         </select>
+        {{-- Search / filters stay inside the selected category (Available / Already Hired). --}}
+        @if ($hiring === 'hired')
+            <input type="hidden" name="hiring" value="hired">
+        @endif
         <button type="submit" class="w-btn w-btn-primary w-btn-sm">{{ __('locale.Search') }}</button>
         @if (request()->anyFilled(['search', 'profession_id', 'location_id', 'expcity_id']))
-            <a href="{{ route('worker.partner.candidates') }}" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.Reset') }}</a>
+            <a href="{{ route('worker.partner.candidates', $hiring === 'hired' ? ['hiring' => 'hired'] : []) }}" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.Reset') }}</a>
         @endif
     </form>
 
     <div class="wp-listing-toolbar">
-        <p class="wp-result-count">
-            <strong>{{ $candidates->total() }}</strong> {{ $candidates->total() == 1 ? __('locale.candidate available') : __('locale.candidates available') }}
-        </p>
+        {{-- Available / Already Hired with their counts (the complete filtered result
+        set - PartnerPortalController::candidates()), same switch as Partner Orders.
+        Switching keeps the search / filters and starts again at page 1. --}}
+        <div class="wp-view-switch wp-hiring-switch" role="tablist" aria-label="{{ __('locale.Candidate availability') }}">
+            @foreach (['available' => __('locale.Available Candidates'), 'hired' => __('locale.Already Hired Candidates')] as $hiringKey => $hiringLabel)
+                <a href="{{ request()->fullUrlWithQuery(['hiring' => $hiringKey === 'hired' ? 'hired' : null, 'page' => null]) }}"
+                   class="wp-view-btn {{ $hiring === $hiringKey ? 'is-active' : '' }}" role="tab"
+                   aria-selected="{{ $hiring === $hiringKey ? 'true' : 'false' }}" @if ($hiring === $hiringKey) aria-current="page" @endif
+                   data-hiring-filter="{{ $hiringKey }}">{{ $hiringLabel }} ({{ $hiringCounts[$hiringKey] }})</a>
+            @endforeach
+        </div>
+        <div class="wp-listing-toolbar-actions">
         <div class="wp-view-switch" data-wp-view-switch role="tablist" aria-label="Candidate view">
             <button type="button" class="wp-view-btn" data-wp-view-btn="card" aria-pressed="true">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
@@ -70,23 +83,32 @@
                 {{ __('locale.Table View') }}
             </button>
         </div>
+        </div>
     </div>
 
     @if ($candidates->count() > 0)
+        {{-- Hiring status (card photo pill + table Status column): one lookup for this page
+        (PartnerCandidateAccess::hiringStatusesForViewer()) - Hired by You / Already Hired / Candidate Available. --}}
+        @php
+            $hiringStatuses = \App\Support\PartnerCandidateAccess::hiringStatusesForViewer($candidates);
+            $alreadyHiredIds = array_keys($hiringStatuses, \App\Support\PartnerCandidateAccess::STATUS_HIRED, true);
+        @endphp
+
         {{-- Card view --}}
         <div class="w-candidate-grid w-cols-4 wp-fade-in" data-wp-view-panel="card">
             @foreach ($candidates as $candidate)
                 @php
                     $partnerBooking = $partnerBookings->get($candidate->id);
                 @endphp
-                {{-- Same shared card as the public pages; partner links, Hired badge
-                and View Order (when this partner already booked the candidate). --}}
+                {{-- Same shared card as the public pages; partner links, View Order and the
+                Hired by You pill (when this partner already booked the candidate). --}}
                 @include('worker.partials.candidate-card', [
                     'post' => $candidate,
                     'cardUrl' => route('worker.partner.candidates.show', $candidate->slug_text),
                     'cardHireUrl' => $partnerBooking ? route('worker.partner.orders.show', $partnerBooking->id) : null,
                     'cardHireLabel' => $partnerBooking ? __('locale.View Order') : null,
                     'cardHired' => (bool) $partnerBooking,
+                    'hiringStatuses' => $hiringStatuses,
                 ])
             @endforeach
         </div>
@@ -101,6 +123,7 @@
                             <th>{{ __('locale.Profession') }}</th>
                             <th>{{ __('locale.Experience') }}</th>
                             <th>{{ __('locale.Nationality') }}</th>
+                            <th>{{ __('locale.Status') }}</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -111,27 +134,28 @@
                                 $totalExp = $candidate->experience ? array_sum(array_filter(explode(',', $candidate->experience), 'is_numeric')) : 0;
                                 $nation = $candidate->nation_id ? \App\Models\Country::find($candidate->nation_id) : null;
                                 $partnerBooking = $partnerBookings->get($candidate->id);
+                                $rowStatus = $partnerBooking ? \App\Support\PartnerCandidateAccess::STATUS_OWN : ($hiringStatuses[(int) $candidate->id] ?? null);
+                                $rowAlreadyHired = $rowStatus === \App\Support\PartnerCandidateAccess::STATUS_HIRED;
+                                $rowShowUrl = route('worker.partner.candidates.show', $candidate->slug_text);
                             @endphp
-                            <tr>
+                            <tr @if ($rowAlreadyHired) data-already-hired-scope @endif>
                                 <td>
                                     <div style="display:flex;align-items:center;gap:10px;">
                                         <img src="{{ $imagePath }}" alt="{{ $candidate->display_name }}" style="width:38px;height:38px;border-radius:9px;object-fit:cover;flex-shrink:0;" onerror="this.onerror=null;this.src='{{ \App\Support\CandidatePhoto::defaultUrl() }}';">
                                         <span class="wp-cell-title">{{ $candidate->display_name }}@include('worker.partials.candidate-verified-icon')</span>
-                                        @if ($partnerBooking)
-                                            <span class="w-verified">{{ __('locale.Hired') }}</span>
-                                        @endif
                                     </div>
                                 </td>
                                 <td>{{ optional($candidate->profession)->display_name ?? '---' }}</td>
                                 <td>{{ $totalExp > 0 ? $totalExp . ' ' . __('locale.Years Experience') : __('locale.Fresher') }}</td>
                                 <td>{{ $nation->display_name ?? '---' }}</td>
+                                <td>@include('worker.partials.candidate-hiring-status', ['status' => $rowStatus, 'inline' => true])</td>
                                 <td>
                                     <div style="display:flex;gap:8px;">
                                         <a href="{{ route('worker.partner.candidates.show', $candidate->slug_text) }}" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.View Profile') }}</a>
                                         @if ($partnerBooking)
                                             <a href="{{ route('worker.partner.orders.show', $partnerBooking->id) }}" class="w-btn w-btn-primary w-btn-sm">{{ __('locale.View Order') }}</a>
                                         @else
-                                            <a href="{{ route('worker.partner.candidates.show', $candidate->slug_text) }}" class="w-btn w-btn-primary w-btn-sm">{{ __('locale.Hire Now') }}</a>
+                                            <a href="{{ $rowShowUrl }}" class="w-btn w-btn-primary w-btn-sm" @if ($rowAlreadyHired) data-already-hired-gate data-hire-href="{{ $rowShowUrl }}?hire=1" @endif>{{ __('locale.Hire Now') }}</a>
                                         @endif
                                     </div>
                                 </td>
@@ -143,10 +167,15 @@
         </div>
 
         {{ $candidates->links('worker.partials.pagination') }}
+
+        @if ($alreadyHiredIds)
+            {{-- "Already Hired" notice (one instance) for the badges / Hire Now above. --}}
+            @include('worker.partials.already-hired-modal')
+        @endif
     @else
         <div class="wp-empty">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <h3>{{ __('locale.No candidates found') }}</h3>
+            <h3>{{ $hiring === 'hired' ? __('locale.No already hired candidates found.') : __('locale.No candidates found') }}</h3>
             <p>{{ __('locale.Try adjusting your search or filters.') }}</p>
         </div>
     @endif
@@ -157,4 +186,7 @@
     <script src="{{ asset('admin/assets/vendor/libs/select2/select2.js') }}"></script>
     <script src="{{ asset('worker/js/candidate-vendor-init.js') }}?v={{ @filemtime(public_path('worker/js/candidate-vendor-init.js')) ?: time() }}"></script>
     <script src="{{ asset('worker/js/candidate-view-toggle.js') }}?v={{ @filemtime(public_path('worker/js/candidate-view-toggle.js')) ?: time() }}"></script>
+    @if (!empty($alreadyHiredIds))
+        <script src="{{ asset('worker/js/already-hired.js') }}?v={{ @filemtime(public_path('worker/js/already-hired.js')) ?: time() }}"></script>
+    @endif
 @endsection

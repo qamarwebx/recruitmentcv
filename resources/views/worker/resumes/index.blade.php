@@ -43,6 +43,9 @@
                     </h3>
 
                     <form data-resume-filter-form data-endpoint="{{ route('worker.resumes') }}">
+                        {{-- Available / Already Hired (set by the switch in the results, main.js):
+                        sent with every search / filter / page so the category stays; Reset keeps it. --}}
+                        <input type="hidden" name="hiring" value="{{ $hiring === 'hired' ? 'hired' : '' }}" data-hiring-input>
 
                         <div class="w-filter-group">
                             <label for="expcity_id">{{ __('locale.Experience Type') }}</label>
@@ -117,10 +120,14 @@
 
     <div class="w-filter-backdrop" data-filter-backdrop></div>
 
+    {{-- "Already Hired" notice (one instance) for the cards' badges and Hire Now. --}}
+    @include('worker.partials.already-hired-modal')
+
 @endsection
 
 @section('page-script')
     <script src="{{ asset('admin/assets/vendor/libs/jquery/jquery.js') }}"></script>
     <script src="{{ asset('admin/assets/vendor/libs/select2/select2.js') }}"></script>
     <script src="{{ asset('worker/js/resumes-vendor-init.js') }}?v={{ @filemtime(public_path('worker/js/resumes-vendor-init.js')) ?: time() }}"></script>
+    <script src="{{ asset('worker/js/already-hired.js') }}?v={{ @filemtime(public_path('worker/js/already-hired.js')) ?: time() }}"></script>
 @endsection

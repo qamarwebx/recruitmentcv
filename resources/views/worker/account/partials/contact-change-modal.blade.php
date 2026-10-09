@@ -48,11 +48,17 @@ is verified server-side. Expects $customer. --}}
             </div>
 
             <div data-contact-step="verify" hidden>
-                <p class="w-form-hint">{{ __('locale.Enter the 4-digit code sent to') }} <strong data-contact-target></strong></p>
+                {{-- "Enter the OTP sent to your WhatsApp number ending in 3401." /
+                     "...your email ending in @example.com." (otp-destination.js). --}}
+                <p class="w-form-hint" data-contact-target></p>
                 <div class="w-form-row">
                     <input type="text" class="w-input w-input-otp" maxlength="4" inputmode="numeric" placeholder="••••" data-contact-otp>
                 </div>
                 <button type="button" class="w-btn w-btn-primary w-btn-block" data-contact-verify>{{ __('locale.Verify & Continue') }}</button>
+                <div class="w-form-resend">
+                    <span>{{ __("locale.Didn't receive the OTP?") }}</span>
+                    <a href="javascript:void(0)" data-contact-resend>{{ __('locale.Resend OTP') }}</a>
+                </div>
             </div>
         </div>
     </div>

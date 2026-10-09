@@ -86,31 +86,20 @@
             </h2>
             <div class="w-form-alert" style="display:none;" data-settings-alert="company"></div>
             <form data-settings-form="company">
+                {{-- Fields, order and labels: App\Support\CompanyProfile::FIELDS - the
+                same definition CRM -> Website -> Company Profile uses. Empty =
+                the CRM Global value is used on the website. --}}
                 <div class="wp-info-grid" style="grid-template-columns:repeat(2,1fr);">
+                    @foreach (\App\Support\CompanyProfile::FIELDS as $__field => [$__input, $__label, $__type])
                     <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.Company Name') }}</label>
-                        <input type="text" name="company_name" class="w-input" value="{{ $domain->company_name }}">
+                        <label class="w-form-label">{{ __('locale.' . $__label) }}</label>
+                        @if ($__type === 'textarea')
+                        <textarea name="{{ $__input }}" class="w-input" @if (\App\Support\CompanyProfile::isArabic($__field)) dir="rtl" @endif rows="3">{{ $domain->{$__input} }}</textarea>
+                        @else
+                        <input type="{{ $__type }}" name="{{ $__input }}" class="w-input" @if (\App\Support\CompanyProfile::isArabic($__field)) dir="rtl" @endif value="{{ $domain->{$__input} }}">
+                        @endif
                     </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.Company Name (Arabic)') }}</label>
-                        <input type="text" name="company_name_ar" class="w-input" dir="rtl" value="{{ $domain->company_name_ar }}">
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.Company Address') }}</label>
-                        <textarea name="company_address" class="w-input" rows="3">{{ $domain->company_address }}</textarea>
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.Company Address (Arabic)') }}</label>
-                        <textarea name="company_address_ar" class="w-input" dir="rtl" rows="3">{{ $domain->company_address_ar }}</textarea>
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.Company Mobile') }}</label>
-                        <input type="text" name="company_mobile" class="w-input" value="{{ $domain->company_mobile }}">
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.Company Email') }}</label>
-                        <input type="email" name="company_email" class="w-input" value="{{ $domain->company_email }}">
-                    </div>
+                    @endforeach
                 </div>
                 <button type="submit" class="w-btn w-btn-primary" data-settings-submit>{{ __('locale.Save Changes') }}</button>
             </form>
@@ -129,21 +118,21 @@
                 {{ __('locale.Branding') }}
             </h2>
             <div class="w-form-alert" style="display:none;" data-settings-alert="branding"></div>
-            <form data-settings-form="branding">
+            <form data-settings-form="branding" data-msg-no-changes="{{ __('locale.No changes to save.') }}">
                 {{-- English Logo / Arabic Logo / Favicon side by side, wrapping on narrow screens. --}}
                 <div class="wp-branding-grid">
                     <div class="w-form-row">
                         <label class="w-form-label">{{ __('locale.English Logo') }}</label>
                         <div class="wp-logo-upload">
                             <img src="{{ $domain->website_logo ? asset('admin/assets/images/partner/'.$domain->website_logo) : asset('user/img/logo/Logo_eng_dark.webp') }}" alt="English logo" data-logo-preview="en">
-                            <input type="file" class="w-input" accept="image/png,image/jpeg,image/webp" data-logo-input="en">
+                            <input type="file" class="w-input" accept="{{ \App\Support\ImageUpload::ACCEPT }}" data-logo-input="en">
                         </div>
                     </div>
                     <div class="w-form-row">
                         <label class="w-form-label">{{ __('locale.Arabic Logo') }}</label>
                         <div class="wp-logo-upload">
                             <img src="{{ $domain->website_logo_ar ? asset('admin/assets/images/partner/'.$domain->website_logo_ar) : asset('user/img/logo/new_logo_Arabic.png') }}" alt="Arabic logo" data-logo-preview="ar">
-                            <input type="file" class="w-input" accept="image/png,image/jpeg,image/webp" data-logo-input="ar">
+                            <input type="file" class="w-input" accept="{{ \App\Support\ImageUpload::ACCEPT }}" data-logo-input="ar">
                         </div>
                     </div>
                     {{-- Same Domain row / folder as the logos (website_favicon). Preview =
@@ -153,23 +142,60 @@
                         <label class="w-form-label">{{ __('locale.Favicon') }}</label>
                         <div class="wp-logo-upload">
                             <img src="{{ \App\Support\BrandingAssets::url('favicon', $partner->id) }}" alt="Favicon" class="wp-favicon-preview" data-logo-preview="fav">
-                            <input type="file" class="w-input" accept="image/png,image/jpeg,image/webp" data-logo-input="fav">
+                            <input type="file" class="w-input" accept="{{ \App\Support\ImageUpload::ACCEPT }}" data-logo-input="fav">
                         </div>
                         <div class="form-text" style="color:var(--w-ink-500);font-size:0.8rem;margin-top:6px;">{{ __('locale.Square image recommended, e.g. 64 × 64 px.') }}</div>
                     </div>
                 </div>
-                <div class="form-text" style="color:var(--w-ink-500);font-size:0.82rem;margin-bottom:16px;">{{ __('locale.JPG, PNG or WEBP, up to 2MB.') }}</div>
+                <div class="form-text" style="color:var(--w-ink-500);font-size:0.82rem;margin-bottom:16px;">{{ __('locale.JPG, PNG, GIF, WEBP or SVG, up to 2MB.') }}</div>
+                {{-- Header / Footer Logo Width & Height (App\Support\LogoDimensions,
+                same 'branding' row): the maximum area the logo is fitted into on
+                this partner's website + Partner Portal. A field holds this
+                partner's own value; empty = the CRM Global value (shown as the
+                placeholder). Saved with this form, only fields that changed. --}}
+                @php $logoSize = \App\Support\LogoDimensions::formData($partner->id); @endphp
+                <div class="w-form-row">
+                    <label class="w-form-label">{{ __('locale.Logo Size') }}</label>
+                    <p class="wp-field-hint" style="margin-top:0;">{{ __('locale.The maximum space your logo can use, in pixels. Your logo keeps its proportions: it is fitted inside, never stretched or cropped, and gets smaller on phones and tablets. Leave a field empty to use the default size.') }}</p>
+                    <div class="wp-logo-size-grid">
+                        @foreach (\App\Support\LogoDimensions::FIELDS as $field => [$label, $min, $max])
+                        <div>
+                            <label class="w-form-label" for="logo-size-{{ $field }}">{{ __('locale.' . $label) }}</label>
+                            <div class="wp-input-unit" dir="ltr">
+                                <input type="number" id="logo-size-{{ $field }}" name="{{ $field }}" class="w-input"
+                                    min="{{ $min }}" max="{{ $max }}" step="1" inputmode="numeric"
+                                    value="{{ $logoSize['own'][$field] }}" placeholder="{{ $logoSize['fallback'][$field] }}"
+                                    data-logo-size data-saved="{{ $logoSize['own'][$field] }}">
+                                <span class="wp-input-unit-suffix" aria-hidden="true">px</span>
+                            </div>
+                            <p class="wp-field-hint">{{ __('locale.:min–:max px. Default: :value px.', ['min' => $min, 'max' => $max, 'value' => $logoSize['fallback'][$field]]) }}</p>
+                        </div>
+                        @endforeach
+                    </div>
+                </div>
                 {{-- Company Profile name under the logo in this Partner Portal's
                 sidebar (English / Arabic name per page language). Saved with
-                this form (partner_page_contents 'branding' row). --}}
-                @php $appendCompanyName = \App\Models\PartnerPageContent::brandingFor(Auth::guard('partner')->id())['append_company_name']; @endphp
+                this form (partner_page_contents 'branding' row) only when
+                changed; until then the CRM Global setting applies
+                (PartnerPageContent::brandingFor()). "Use default" removes
+                this partner's own value again. --}}
+                @php $appendCompanyName = \App\Models\PartnerPageContent::brandingFor(Auth::guard('partner')->id()); @endphp
                 <div class="w-form-row">
                     <label class="wp-switch">
-                        <input type="checkbox" role="switch" name="append_company_name" value="1" data-append-company-name @checked($appendCompanyName)>
+                        <input type="checkbox" role="switch" name="append_company_name" value="1" data-append-company-name
+                            data-saved="{{ $appendCompanyName['append_company_name'] ? '1' : '0' }}" @checked($appendCompanyName['append_company_name'])>
                         <span class="wp-switch-track" aria-hidden="true"></span>
                         <span class="wp-switch-text">{{ __('locale.Append Company Name') }}</span>
                     </label>
                     <p class="wp-field-hint">{{ __('locale.Shows your Company Profile name under the logo in the dashboard sidebar.') }}</p>
+                    <p class="wp-field-hint" data-append-hint="default" @if ($appendCompanyName['append_company_name_configured']) hidden @endif>
+                        {{ $appendCompanyName['append_company_name_default'] ? __('locale.Using the default setting (On).') : __('locale.Using the default setting (Off).') }}
+                    </p>
+                    <p class="wp-field-hint" data-append-hint="custom" @unless ($appendCompanyName['append_company_name_configured']) hidden @endunless>
+                        {{ __('locale.Using your own setting.') }}
+                        <button type="button" data-append-company-name-default
+                            style="background:none;border:0;padding:0;font:inherit;color:var(--w-primary);text-decoration:underline;cursor:pointer;">{{ __('locale.Use default') }}</button>
+                    </p>
                 </div>
                 <button type="submit" class="w-btn w-btn-primary" data-settings-submit>{{ __('locale.Save Changes') }}</button>
             </form>
@@ -221,21 +247,64 @@
     </div>
     @endif
 
-    {{-- Domain - the sub_domain column on the SAME Domain row, resolved by
-    ResolvePartnerWebsiteDomain middleware on *.recruitmentcv.com requests. --}}
-    {{-- Display-only: subdomain provisioning now runs entirely through the
-    CRM's automatic Hostinger creation flow, so there is nothing left for a
-    Partner to submit here - no <form>/submit button, and the input is
-    disabled (excluded from any accidental submission too, not just
-    visually locked). PartnerPortalController::settingsDomainUpdate()
-    independently rejects any direct POST regardless of what the UI does. --}}
+    {{-- Domain - the signed-in partner's own website address, read-only.
+    Which one comes from the partner's own domains row (never the request
+    host) through App\Support\PartnerDomains: its Own Domain when that is
+    the selected Domain Type, else its *.recruitmentcv.com subdomain, else
+    "not configured". Both are managed only in CRM (Partner -> Website ->
+    Domain): no <form>/submit button here and the inputs are disabled;
+    PartnerPortalController::settingsDomainUpdate() independently rejects
+    any direct POST regardless of what the UI does. --}}
     @if (in_array('domain', $allowedTabs, true))
-    <div class="wp-settings-tab-pane {{ $activeTopTab === 'domain' ? 'is-active' : '' }}" data-settings-tab-pane="domain">
+    @php
+        $domainMode = \App\Support\PartnerDomains::displayMode($domain->exists ? $domain : null);
+        $ownDomain = $domainMode === 'custom' ? \App\Support\PartnerDomains::ownDomainState($domain) : null;
+        $domainBadge = ['active' => 'success', 'verified' => 'success', 'pending' => 'warning', 'unknown' => 'neutral', 'inactive' => 'neutral'];
+        $domainLabel = [
+            'active' => __('locale.Active'),
+            'verified' => __('locale.Verified'),
+            'pending' => __('locale.Pending'),
+            'unknown' => __('locale.Not available'),
+            'inactive' => __('locale.Inactive'),
+        ];
+    @endphp
+    <div class="wp-settings-tab-pane {{ $activeTopTab === 'domain' ? 'is-active' : '' }}" data-settings-tab-pane="domain" data-domain-mode="{{ $domainMode }}">
         <div class="w-info-card wp-fade-in">
             <h2>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/></svg>
                 {{ __('locale.Domain') }}
             </h2>
+            @if ($domainMode === 'custom')
+                <div class="w-form-row">
+                    <label class="w-form-label" for="wpOwnDomain">{{ __('locale.Your Own Domain') }}</label>
+                    <div class="wp-domain-preview">
+                        <input type="text" id="wpOwnDomain" value="{{ $ownDomain['domain'] }}" dir="ltr" disabled readonly aria-readonly="true">
+                        <span title="{{ __('locale.Your custom domain is managed automatically and cannot be changed here.') }}" aria-hidden="true">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                        </span>
+                    </div>
+                    <div class="form-text" style="color:var(--w-ink-500);font-size:0.82rem;margin-top:8px;">{{ __('locale.Your custom domain is managed automatically and cannot be changed here.') }}</div>
+                </div>
+                @foreach (['status' => __('locale.Status'), 'verification' => __('locale.Verification Status'), 'provisioning' => __('locale.Provisioning Status'), 'ssl' => __('locale.SSL')] as $key => $label)
+                    <div class="w-form-row">
+                        <span class="w-form-label">{{ $label }}</span>
+                        <div>
+                            <span class="wp-badge is-{{ $domainBadge[$ownDomain[$key]] }}" data-own-domain-{{ $key }}="{{ $ownDomain[$key] }}">{{ $domainLabel[$ownDomain[$key]] }}</span>
+                            @if ($key === 'status' && $ownDomain['status'] === 'pending')
+                                <span style="color:var(--w-ink-500);font-size:0.82rem;margin-inline-start:8px;">{{ __('locale.Your own domain is being set up by the administrator.') }}</span>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+                @if ($ownDomain['live_url'])
+                    <div class="w-form-row">
+                        <span class="w-form-label">{{ __('locale.Live URL') }}</span>
+                        <div>
+                            <a href="{{ $ownDomain['live_url'] }}" target="_blank" rel="noopener" dir="ltr">{{ $ownDomain['live_url'] }}</a>
+                        </div>
+                    </div>
+                @endif
+            @elseif ($domainMode === 'subdomain')
             <div class="w-form-row">
                 <label class="w-form-label">{{ __('locale.Your RecruitmentCV Subdomain') }}</label>
                 <div class="wp-domain-preview">
@@ -273,6 +342,26 @@
                     <span class="w-form-label">{{ __('locale.Live URL') }}</span>
                     <div>
                         <a href="https://{{ $domain->full_domain }}" target="_blank" rel="noopener">https://{{ $domain->full_domain }}</a>
+                    </div>
+                </div>
+            @endif
+            @else
+                <div class="w-form-row">
+                    <label class="w-form-label">{{ __('locale.Domain') }}</label>
+                    <div class="wp-domain-preview">
+                        <input type="text" value="{{ __('locale.Domain not configured') }}" disabled readonly aria-readonly="true" data-domain-not-configured>
+                    </div>
+                    <div class="form-text" style="color:var(--w-ink-500);font-size:0.82rem;margin-top:8px;">{{ __('locale.Your website address is set up by the administrator.') }}</div>
+                </div>
+                <div class="w-form-row">
+                    <span class="w-form-label">{{ __('locale.Status') }}</span>
+                    <div>
+                        <span class="wp-badge is-{{ $accountStatusBadges[$accountStatus] }}" data-domain-account-status="{{ $accountStatus }}">
+                            {{ $accountStatusLabels[$accountStatus] }}
+                        </span>
+                        @if (isset($accountStatusNotes[$accountStatus]))
+                            <span style="color:var(--w-ink-500);font-size:0.82rem;margin-inline-start:8px;">{{ $accountStatusNotes[$accountStatus] }}</span>
+                        @endif
                     </div>
                 </div>
             @endif

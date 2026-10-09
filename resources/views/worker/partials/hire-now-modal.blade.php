@@ -1,5 +1,5 @@
 @php
-    $__hireSalary = $post->exp_sal ?: '---';
+    $__hireSalary = $post->display_expected_salary ?: '---';
 @endphp
 <div class="w-modal-backdrop" data-hire-now-backdrop></div>
 <div class="w-modal" data-hire-now-modal role="dialog" aria-modal="true" aria-labelledby="hireNowTitle">

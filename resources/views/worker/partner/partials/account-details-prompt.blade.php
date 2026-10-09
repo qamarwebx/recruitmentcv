@@ -32,9 +32,11 @@ again until the next login. $missing = form field names still empty. --}}
                     <label class="w-form-label" for="prompt-rec-off-name">{{ __('locale.Company / Recruitment Office Name') }} {!! $isMissing('rec_off_name') ? $requiredTag : '' !!}</label>
                     <input type="text" name="rec_off_name" id="prompt-rec-off-name" class="w-input" value="{{ $promptPartner->rec_off_name }}" maxlength="255">
                 </div>
-                <div class="w-form-row {{ $isMissing('licence_number') ? 'wp-prompt-missing' : '' }}" data-prompt-field="licence_number">
-                    <label class="w-form-label" for="prompt-licence-number">{{ __('locale.Recruitment Licence Number') }} {!! $isMissing('licence_number') ? $requiredTag : '' !!}</label>
-                    <input type="text" name="licence_number" id="prompt-licence-number" class="w-input" value="{{ $promptPartner->licence_number }}" maxlength="100" autocomplete="off">
+                {{-- Read-only (managed in the CRM): shown, never required or submitted. --}}
+                <div class="w-form-row">
+                    <label class="w-form-label" for="prompt-licence-number">{{ __('locale.Recruitment Licence Number') }}</label>
+                    <input type="text" id="prompt-licence-number" class="w-input" value="{{ $promptPartner->licence_number }}" placeholder="---" readonly aria-readonly="true" aria-describedby="prompt-licence-number-hint">
+                    <div class="wp-field-hint" id="prompt-licence-number-hint">{{ __('locale.Managed by RecruitmentCV. Contact support to change it.') }}</div>
                 </div>
                 <div class="w-form-row {{ $isMissing('country_id') ? 'wp-prompt-missing' : '' }}" data-prompt-field="country_id">
                     <label class="w-form-label" for="prompt-country">{{ __('locale.Country') }} {!! $isMissing('country_id') ? $requiredTag : '' !!}</label>
