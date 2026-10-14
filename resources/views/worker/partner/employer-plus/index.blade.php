@@ -77,9 +77,17 @@
                                 ->filter()
                                 ->implode(', ');
                         @endphp
+                        @php
+                            // The employer assigned on one of this partner's orders (App\Support\OrderEmployer):
+                            // kept in line with that order's visa details - changed there, not here.
+                            $fromOrder = \App\Support\OrderEmployer::isOrderLinked($employer);
+                        @endphp
                         <tr id="employer-row-{{ $employer->id }}">
                             <td>
                                 <span class="wp-cell-title">{{ $employer->employer_name }}</span>
+                                @if ($fromOrder)
+                                    <span class="wp-badge is-info" style="margin-inline-start:6px;">{{ __('locale.From order #:id', ['id' => $employer->booking_id]) }}</span>
+                                @endif
                             </td>
                             <td>{{ $employer->visa_no ?: '---' }}</td>
                             <td>{{ $employer->id_no ?: '---' }}</td>
@@ -101,6 +109,10 @@
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
                                     </button>
                                     <div class="wp-dropdown" data-employer-actions-menu="{{ $employer->id }}">
+                                        @if ($fromOrder)
+                                        <a href="{{ route('worker.partner.employer.show', $employer->id) }}" class="wp-menu-item">{{ __('locale.View Profile') }}</a>
+                                        <a href="{{ route('worker.partner.orders.show', $employer->booking_id) }}" class="wp-menu-item">{{ __('locale.View Order') }}</a>
+                                        @else
                                         <button type="button" class="wp-menu-item" data-assign-candidate-trigger data-employer-id="{{ $employer->id }}">{{ __('locale.Assign Candidate') }}</button>
                                         <a href="{{ route('worker.partner.employer.show', $employer->id) }}" class="wp-menu-item">{{ __('locale.View Profile') }}</a>
                                         <button type="button" class="wp-menu-item"
@@ -126,6 +138,7 @@
                                             data-employer-row="employer-row-{{ $employer->id }}">
                                             {{ __('locale.Delete') }}
                                         </button>
+                                        @endif
                                     </div>
                                 </div>
                             </td>

@@ -67,6 +67,7 @@
         'verifying' => __('locale.Verifying…'),
         'verifyContinue' => __('locale.Verify & Continue'),
         'errOtpIncorrect' => __('locale.Incorrect OTP. Please try again.'),
+        'errOtpExpired' => __('locale.This OTP has expired. Please request a new one.'),
         'errBothFields' => __('locale.Please fill in both fields.'),
         'submitting' => __('locale.Submitting…'),
         'register' => __('locale.Register'),

@@ -22,6 +22,12 @@ use Illuminate\Validation\ValidationException;
  * so one website's SMTP can never be read or changed through another's.
  * Passwords are write-only: blank keeps the saved one; never returned,
  * rendered or logged.
+ *
+ * Google SMTPs (WebsiteSmtpSetting::MAILER_GOOGLE, "Add SMTP With Google"):
+ * added only through saveGoogle() with an account connected by OAuth (its
+ * refresh token is the "password"), always connection-checked first; an
+ * edit changes only the name, From name and status - the server, login
+ * and From address stay those of the authorized Gmail account.
  */
 final class SmtpSettings
 {
@@ -35,6 +41,10 @@ final class SmtpSettings
         'limit' => 'At most :max SMTPs can be added.',
         'auth_failed' => 'The SMTP server rejected the username or password.',
         'connect_failed' => 'Could not connect to the SMTP server. Please check the host, port and encryption.',
+        'google_not_configured' => 'Google sign-in for SMTP is not set up yet. Please contact support.',
+        'google_revoked' => 'Google no longer allows sending with this account (access removed or expired). Please connect the account again.',
+        'google_unavailable' => 'Google could not be reached. Please try again in a moment.',
+        'google_auth_failed' => 'Gmail refused the sign-in for this account. For a Google Workspace account, the administrator may need to allow SMTP access for it.',
     ];
 
     /** A website's SMTPs in sending order. */
@@ -76,6 +86,10 @@ final class SmtpSettings
      */
     public static function save(?int $partnerId, ?WebsiteSmtpSetting $smtp, array $input, ?int $actorId, array $options = []): WebsiteSmtpSetting
     {
+        if ($smtp && $smtp->isGoogle()) {
+            return self::saveGoogle($partnerId, $smtp, $input, $actorId, $options);
+        }
+
         $msg = fn (string $key, array $replace = []) => self::message($options, $key, $replace);
         $isPartner = $partnerId !== null;
 
@@ -166,12 +180,115 @@ final class SmtpSettings
             throw ValidationException::withMessages(['smtp' => $error]);
         }
 
-        $smtp->save();
-        if ($isNew) {
-            self::renumber($partnerId);
-        }
+        self::persist($smtp, $isNew, $partnerId);
 
         return $smtp;
+    }
+
+    /**
+     * A Google SMTP: adds one ($smtp null + $connection = ['email' => verified
+     * Gmail address, 'refresh_token' => ...] from GoogleSmtpOAuth::connect())
+     * or edits one (name / From name / status only). The server, port,
+     * encryption, login and From address come from the connection and
+     * GoogleSmtpOAuth::smtpDefaults() - never from the request. A new one is
+     * connection-checked (XOAUTH2) before anything is saved, whatever its
+     * status; nothing is written when the check fails, so the list - and
+     * which SMTP sends first - stays as it was. Added last in the order.
+     *
+     * @throws ValidationException
+     */
+    public static function saveGoogle(?int $partnerId, ?WebsiteSmtpSetting $smtp, array $input, ?int $actorId, array $options = [], ?array $connection = null): WebsiteSmtpSetting
+    {
+        $msg = fn (string $key, array $replace = []) => self::message($options, $key, $replace);
+        $isNew = !$smtp;
+        if ($isNew && (!filter_var($connection['email'] ?? null, FILTER_VALIDATE_EMAIL) || !filled($connection['refresh_token'] ?? null))) {
+            throw ValidationException::withMessages(['smtp' => $msg('google_revoked')]);
+        }
+        if ($smtp && !$smtp->isGoogle()) {
+            throw ValidationException::withMessages(['smtp' => $msg('google_revoked')]);
+        }
+
+        $validator = Validator::make($input, [
+            'name' => ['nullable', 'string', 'max:100'],
+            'from_name' => [$partnerId !== null ? 'nullable' : 'required', 'string', 'max:255'],
+            'status' => ['nullable', 'boolean'],
+        ], [], $options['attributes'] ?? []);
+
+        $defaults = GoogleSmtpOAuth::smtpDefaults();
+        $email = $isNew ? strtolower(trim((string) $connection['email'])) : (string) $smtp->username;
+        $validator->after(function ($validator) use ($input, $partnerId, $smtp, $isNew, $defaults, $email, $msg) {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+            // Adding / enabling needs the OAuth client; disabling or renaming never does.
+            if (($isNew || filter_var($input['status'] ?? false, FILTER_VALIDATE_BOOLEAN)) && !GoogleSmtpOAuth::canRefresh()) {
+                $validator->errors()->add('smtp', $msg('google_not_configured'));
+
+                return;
+            }
+            if ($isNew && WebsiteSmtpSetting::ofWebsite($partnerId)->count() >= WebsiteSmtpSetting::MAX_PER_WEBSITE) {
+                $validator->errors()->add('smtp', $msg('limit', ['max' => WebsiteSmtpSetting::MAX_PER_WEBSITE]));
+
+                return;
+            }
+            $duplicate = WebsiteSmtpSetting::ofWebsite($partnerId)
+                ->whereRaw('LOWER(host) = ?', [$defaults['host']])
+                ->where('port', $defaults['port'])
+                ->whereRaw('LOWER(username) = ?', [strtolower($email)])
+                ->when($smtp, fn ($query) => $query->whereKeyNot($smtp->id))
+                ->exists();
+            if ($duplicate) {
+                $validator->errors()->add('smtp', $msg('duplicate'));
+            }
+        });
+
+        $data = $validator->validate();
+
+        $smtp ??= new WebsiteSmtpSetting([
+            'partner_id' => $partnerId,
+            'priority' => (int) WebsiteSmtpSetting::ofWebsite($partnerId)->max('priority') + 1,
+        ]);
+        $name = trim(strip_tags((string) ($data['name'] ?? '')));
+        $smtp->fill([
+            'name' => $name !== '' ? $name : null,
+            'from_name' => trim(strip_tags((string) ($data['from_name'] ?? ''))),
+            'status' => filter_var($data['status'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'updated_by' => $actorId,
+        ]);
+        if ($isNew) {
+            $smtp->fill([
+                'mailer' => WebsiteSmtpSetting::MAILER_GOOGLE,
+                'host' => $defaults['host'],
+                'port' => $defaults['port'],
+                'encryption' => $defaults['encryption'],
+                'username' => $email,
+                'from_address' => $email,
+            ]);
+            $smtp->password = (string) $connection['refresh_token'];
+        }
+
+        if (($isNew || $smtp->status) && ($error = self::connectionError($smtp, $options))) {
+            throw ValidationException::withMessages(['smtp' => $error]);
+        }
+
+        self::persist($smtp, $isNew, $partnerId);
+
+        return $smtp;
+    }
+
+    /**
+     * Saves (+ renumbers a new one) as ONE transaction, after any connection
+     * check passed: a database failure leaves no half-added SMTP and the
+     * list / sending order exactly as before (the exception goes to the caller).
+     */
+    private static function persist(WebsiteSmtpSetting $smtp, bool $isNew, ?int $partnerId): void
+    {
+        DB::transaction(function () use ($smtp, $isNew, $partnerId) {
+            $smtp->save();
+            if ($isNew) {
+                self::renumber($partnerId);
+            }
+        });
     }
 
     public static function delete(WebsiteSmtpSetting $smtp): void
@@ -180,6 +297,41 @@ final class SmtpSettings
             $smtp->delete();
             self::renumber($smtp->partner_id);
         });
+
+        // A deleted Google SMTP: its authorization is revoked at Google too,
+        // unless the same Gmail account still sends for another SMTP (one
+        // revoke ends the whole grant).
+        if ($smtp->isGoogle()) {
+            try {
+                $token = (string) $smtp->password;
+            } catch (\Throwable $e) {
+                $token = '';
+            }
+            self::revokeGoogleUnlessInUse($token, (string) $smtp->username);
+        }
+    }
+
+    /**
+     * Revokes a Google authorization nobody will use (a deleted / abandoned
+     * connection) - skipped while any saved Google SMTP (any website) still
+     * uses that Gmail account, because revoking ends the app's whole grant
+     * for the account. Best effort, never throws.
+     */
+    public static function revokeGoogleUnlessInUse(string $token, string $email): void
+    {
+        if ($token === '') {
+            return;
+        }
+        $inUse = $email !== '' && WebsiteSmtpSetting::query()
+            ->where('mailer', WebsiteSmtpSetting::MAILER_GOOGLE)
+            ->whereRaw('LOWER(username) = ?', [strtolower(trim($email))])
+            ->exists();
+        if ($inUse) {
+            GoogleSmtpOAuth::forgetAccessToken($token);
+
+            return;
+        }
+        GoogleSmtpOAuth::revoke($token);
     }
 
     /** Moves an SMTP one place up/down, or to the top (= tried first). */
@@ -216,11 +368,35 @@ final class SmtpSettings
             $transport->stop();
 
             return null;
+        } catch (GoogleSmtpException $e) {
+            Log::info('SMTP connection check failed', ['smtp_id' => $smtp->id, 'partner_id' => $smtp->partner_id, 'google' => $e->reason]);
+
+            return self::message($options, self::googleMessageKey($e->reason));
         } catch (\Throwable $e) {
             Log::info('SMTP connection check failed', ['smtp_id' => $smtp->id, 'partner_id' => $smtp->partner_id, 'exception' => get_class($e)]);
+            $authFailed = str_contains(strtolower($e->getMessage()), 'authenticat');
+            if ($smtp->isGoogle()) {
+                // A refused access token is never reused.
+                try {
+                    GoogleSmtpOAuth::forgetAccessToken((string) $smtp->password);
+                } catch (\Throwable $ignored) {
+                }
 
-            return self::message($options, str_contains(strtolower($e->getMessage()), 'authenticat') ? 'auth_failed' : 'connect_failed');
+                return self::message($options, $authFailed ? 'google_auth_failed' : 'connect_failed');
+            }
+
+            return self::message($options, $authFailed ? 'auth_failed' : 'connect_failed');
         }
+    }
+
+    /** The message key for a GoogleSmtpException reason. */
+    public static function googleMessageKey(string $reason): string
+    {
+        return match ($reason) {
+            GoogleSmtpException::NOT_CONFIGURED => 'google_not_configured',
+            GoogleSmtpException::REFRESH_FAILED => 'google_unavailable',
+            default => 'google_revoked',
+        };
     }
 
     /**
@@ -238,14 +414,7 @@ final class SmtpSettings
 
             return null;
         } catch (\Throwable $e) {
-            $error = $e->getMessage();
-            try {
-                $password = (string) $smtp->password;
-                if ($password !== '') {
-                    $error = str_replace([$password, base64_encode($password)], '********', $error);
-                }
-            } catch (\Throwable $ignored) {
-            }
+            $error = $e instanceof GoogleSmtpException ? self::message([], self::googleMessageKey($e->reason)) : $smtp->scrub($e->getMessage());
             $error = Str::limit(preg_replace('/\s+/', ' ', $error), 200);
             Log::warning('SMTP test email failed', ['smtp_id' => $smtp->id, 'partner_id' => $smtp->partner_id, 'error' => $error]);
 

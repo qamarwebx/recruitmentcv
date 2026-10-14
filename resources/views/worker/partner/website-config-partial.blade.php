@@ -58,12 +58,30 @@
         'about' => [
             ['title' => __('locale.Page Header'), 'fields' => [
                 ['key' => 'header_title', 'label' => __('locale.Title'), 'type' => 'text'],
+                ['key' => 'header_title_highlight', 'label' => __('locale.Highlighted Title (green)'), 'type' => 'text'],
                 ['key' => 'header_subtitle', 'label' => __('locale.Subtitle'), 'type' => 'textarea'],
-                ['key' => 'intro_text', 'label' => __('locale.Lead Text'), 'type' => 'textarea'],
+                ['key' => 'hero_primary_text', 'label' => __('locale.Main Button Text (opens Browse Resumes)'), 'type' => 'text'],
+                ['key' => 'hero_secondary_text', 'label' => __('locale.Second Button Text (opens Contact Us)'), 'type' => 'text'],
+            ]],
+            ['title' => __('locale.Find a Driver Section'), 'fields' => [
+                ['key' => 'search_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
+                ['key' => 'search_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+                ['key' => 'search_subheading', 'label' => __('locale.Subheading'), 'type' => 'textarea'],
+            ]],
+            ['title' => __('locale.Who We Are Section'), 'fields' => [
+                ['key' => 'who_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
+                ['key' => 'who_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+                ['key' => 'body', 'label' => __('locale.Text (rich text)'), 'type' => 'textarea-lg'],
+                ['key' => 'who_cta_text', 'label' => __('locale.Button Text (opens How It Works)'), 'type' => 'text'],
+                ['key' => 'who_photo_tag', 'label' => __('locale.Photo Label'), 'type' => 'text'],
             ]],
             ['title' => __('locale.Why Choose Us Section'), 'fields' => [
                 ['key' => 'why_choose_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
                 ['key' => 'why_choose_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+            ]],
+            ['title' => __('locale.Mission, Vision & Values'), 'fields' => [
+                ['key' => 'mvv_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
+                ['key' => 'mvv_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
             ]],
             ['title' => __('locale.Mission'), 'fields' => [
                 ['key' => 'mission_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
@@ -77,26 +95,20 @@
                 ['key' => 'values_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
                 ['key' => 'values_text', 'label' => __('locale.Text'), 'type' => 'textarea'],
             ]],
-            ['title' => __('locale.Value Added Services Section'), 'fields' => [
-                ['key' => 'value_added_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
-                ['key' => 'value_added_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+            ['title' => __('locale.Offices Section'), 'fields' => [
+                ['key' => 'offices_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
+                ['key' => 'offices_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+                ['key' => 'offices_subheading', 'label' => __('locale.Subheading'), 'type' => 'textarea'],
+                ['key' => 'offices_photo_tag', 'label' => __('locale.Photo Label'), 'type' => 'text'],
             ]],
-            ['title' => __('locale.Item') . ' 1', 'fields' => [
-                ['key' => 'value_added_1_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
-                ['key' => 'value_added_1_text', 'label' => __('locale.Text'), 'type' => 'textarea'],
-            ]],
-            ['title' => __('locale.Item') . ' 2', 'fields' => [
-                ['key' => 'value_added_2_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
-                ['key' => 'value_added_2_text', 'label' => __('locale.Text'), 'type' => 'textarea'],
-            ]],
-            ['title' => __('locale.Item') . ' 3', 'fields' => [
-                ['key' => 'value_added_3_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
-                ['key' => 'value_added_3_text', 'label' => __('locale.Text'), 'type' => 'textarea'],
+            ['title' => __('locale.Gallery Section'), 'fields' => [
+                ['key' => 'gallery_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
+                ['key' => 'gallery_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
             ]],
             ['title' => __('locale.CTA Banner'), 'fields' => [
                 ['key' => 'cta_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
                 ['key' => 'cta_text', 'label' => __('locale.Text'), 'type' => 'textarea'],
-                ['key' => 'cta_button_text', 'label' => __('locale.Button Text'), 'type' => 'text'],
+                ['key' => 'cta_button_text', 'label' => __('locale.Button Text (opens Contact Us)'), 'type' => 'text'],
             ]],
         ],
         'contact' => [
@@ -142,12 +154,92 @@
                 ['key' => 'address', 'label' => __('locale.Address'), 'type' => 'textarea'],
             ]],
         ],
+        // How It Works / Pricing (App\Support\InfoPages) - their steps / plans and lists have their own editors below.
+        'how_it_works' => [
+            ['title' => __('locale.Page Header'), 'fields' => [
+                ['key' => 'header_title', 'label' => __('locale.Title'), 'type' => 'text'],
+                ['key' => 'header_title_highlight', 'label' => __('locale.Highlighted Title (green)'), 'type' => 'text'],
+                ['key' => 'header_subtitle', 'label' => __('locale.Subtitle'), 'type' => 'textarea'],
+                ['key' => 'hero_primary_text', 'label' => __('locale.Main Button Text (opens Contact Us)'), 'type' => 'text'],
+                ['key' => 'hero_secondary_text', 'label' => __('locale.Second Button Text (opens Pricing)'), 'type' => 'text'],
+            ]],
+            ['title' => __('locale.Partner Setup Card'), 'fields' => [
+                ['key' => 'setup_title', 'label' => __('locale.Title'), 'type' => 'text'],
+                ['key' => 'setup_subtitle', 'label' => __('locale.Subtitle'), 'type' => 'text'],
+                ['key' => 'setup_badge', 'label' => __('locale.Badge'), 'type' => 'text'],
+            ]],
+            ['title' => __('locale.Introduction'), 'fields' => [
+                ['key' => 'body', 'label' => __('locale.Introduction (rich text)'), 'type' => 'textarea-lg'],
+            ]],
+            ['title' => __('locale.Steps Section'), 'fields' => [
+                ['key' => 'steps_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
+                ['key' => 'steps_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+                ['key' => 'steps_subheading', 'label' => __('locale.Subheading'), 'type' => 'textarea'],
+            ]],
+            ['title' => __('locale.Compare Section'), 'fields' => [
+                ['key' => 'compare_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
+                ['key' => 'compare_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+                ['key' => 'compare_col_with', 'label' => __('locale.Column Title: with RecruitmentCV'), 'type' => 'text'],
+                ['key' => 'compare_col_without', 'label' => __('locale.Column Title: without'), 'type' => 'text'],
+            ]],
+            ['title' => __('locale.FAQ Section'), 'fields' => [
+                ['key' => 'faq_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
+                ['key' => 'faq_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+            ]],
+            ['title' => __('locale.CTA Banner'), 'fields' => [
+                ['key' => 'cta_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+                ['key' => 'cta_text', 'label' => __('locale.Text'), 'type' => 'textarea'],
+                ['key' => 'cta_button_text', 'label' => __('locale.Button Text'), 'type' => 'text'],
+                ['key' => 'cta_url', 'label' => __('locale.Button Link (blank = Browse Resumes)'), 'type' => 'text'],
+            ]],
+        ],
+        'pricing' => [
+            ['title' => __('locale.Page Header'), 'fields' => [
+                ['key' => 'header_title', 'label' => __('locale.Title'), 'type' => 'text'],
+                ['key' => 'header_title_highlight', 'label' => __('locale.Highlighted Title (green)'), 'type' => 'text'],
+                ['key' => 'header_subtitle', 'label' => __('locale.Subtitle'), 'type' => 'textarea'],
+                ['key' => 'hero_primary_text', 'label' => __('locale.Main Button Text (opens Contact Us)'), 'type' => 'text'],
+                ['key' => 'hero_secondary_text', 'label' => __('locale.Second Button Text (opens How It Works)'), 'type' => 'text'],
+            ]],
+            ['title' => __('locale.Introduction'), 'fields' => [
+                ['key' => 'body', 'label' => __('locale.Introduction (rich text)'), 'type' => 'textarea-lg'],
+            ]],
+            ['title' => __('locale.Plans Section'), 'fields' => [
+                ['key' => 'plans_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+                ['key' => 'plans_subheading', 'label' => __('locale.Subheading'), 'type' => 'textarea'],
+                ['key' => 'empty_text', 'label' => __('locale.Text when no plans are set'), 'type' => 'textarea'],
+            ]],
+            ['title' => __('locale.Driver Categories Section'), 'fields' => [
+                ['key' => 'categories_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
+                ['key' => 'categories_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+                ['key' => 'categories_col_name', 'label' => __('locale.Column Title: category'), 'type' => 'text'],
+                ['key' => 'categories_col_meaning', 'label' => __('locale.Column Title: meaning'), 'type' => 'text'],
+                ['key' => 'categories_col_charge', 'label' => __('locale.Column Title: service charge'), 'type' => 'text'],
+            ]],
+            ['title' => __('locale.How Billing Works Section'), 'fields' => [
+                ['key' => 'billing_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
+                ['key' => 'billing_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+                ['key' => 'billing_text', 'label' => __('locale.Text (an empty line starts a new paragraph)'), 'type' => 'textarea'],
+            ]],
+            ['title' => __('locale.FAQ Section'), 'fields' => [
+                ['key' => 'faq_eyebrow', 'label' => __('locale.Eyebrow'), 'type' => 'text'],
+                ['key' => 'faq_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+            ]],
+            ['title' => __('locale.CTA Banner'), 'fields' => [
+                ['key' => 'cta_heading', 'label' => __('locale.Heading'), 'type' => 'text'],
+                ['key' => 'cta_text', 'label' => __('locale.Text'), 'type' => 'textarea'],
+                ['key' => 'cta_button_text', 'label' => __('locale.Button Text'), 'type' => 'text'],
+                ['key' => 'cta_url', 'label' => __('locale.Button Link (blank = Contact Us)'), 'type' => 'text'],
+            ]],
+        ],
     ];
 
     $wcPages = [
         'home' => __('locale.Home'),
         'resumes' => __('locale.Browse Resumes'),
         'about' => __('locale.About Us'),
+        'how_it_works' => __('locale.How It Works'),
+        'pricing' => __('locale.Pricing'),
         'contact' => __('locale.Contact Us'),
         'privacy' => __('locale.Privacy Policy'),
         'terms' => __('locale.Terms of Service'),
@@ -173,8 +265,12 @@
         ],
         'about' => [
             ['title' => __('locale.Page Header'), 'groupTitles' => [__('locale.Page Header')]],
-            ['title' => __('locale.Why Choose Us Section'), 'groupTitles' => [__('locale.Why Choose Us Section'), __('locale.Mission'), __('locale.Vision'), __('locale.Values')]],
-            ['title' => __('locale.Value Added Services Section'), 'groupTitles' => [__('locale.Value Added Services Section'), __('locale.Item') . ' 1', __('locale.Item') . ' 2', __('locale.Item') . ' 3']],
+            ['title' => __('locale.Find a Driver Section'), 'groupTitles' => [__('locale.Find a Driver Section')]],
+            ['title' => __('locale.Who We Are Section'), 'groupTitles' => [__('locale.Who We Are Section')]],
+            ['title' => __('locale.Why Choose Us Section'), 'groupTitles' => [__('locale.Why Choose Us Section')]],
+            ['title' => __('locale.Mission, Vision & Values'), 'groupTitles' => [__('locale.Mission, Vision & Values'), __('locale.Mission'), __('locale.Vision'), __('locale.Values')]],
+            ['title' => __('locale.Offices Section'), 'groupTitles' => [__('locale.Offices Section')]],
+            ['title' => __('locale.Gallery Section'), 'groupTitles' => [__('locale.Gallery Section')]],
             ['title' => __('locale.CTA Banner'), 'groupTitles' => [__('locale.CTA Banner')]],
         ],
         'contact' => [
@@ -193,6 +289,24 @@
         'footer' => [
             ['title' => __('locale.Footer Description'), 'groupTitles' => [__('locale.Footer Description')]],
             ['title' => __('locale.Get In Touch'), 'groupTitles' => [__('locale.Get In Touch')]],
+        ],
+        'how_it_works' => [
+            ['title' => __('locale.Page Header'), 'groupTitles' => [__('locale.Page Header')]],
+            ['title' => __('locale.Partner Setup Card'), 'groupTitles' => [__('locale.Partner Setup Card')]],
+            ['title' => __('locale.Introduction'), 'groupTitles' => [__('locale.Introduction')]],
+            ['title' => __('locale.Steps Section'), 'groupTitles' => [__('locale.Steps Section')]],
+            ['title' => __('locale.Compare Section'), 'groupTitles' => [__('locale.Compare Section')]],
+            ['title' => __('locale.FAQ Section'), 'groupTitles' => [__('locale.FAQ Section')]],
+            ['title' => __('locale.CTA Banner'), 'groupTitles' => [__('locale.CTA Banner')]],
+        ],
+        'pricing' => [
+            ['title' => __('locale.Page Header'), 'groupTitles' => [__('locale.Page Header')]],
+            ['title' => __('locale.Introduction'), 'groupTitles' => [__('locale.Introduction')]],
+            ['title' => __('locale.Plans Section'), 'groupTitles' => [__('locale.Plans Section')]],
+            ['title' => __('locale.Driver Categories Section'), 'groupTitles' => [__('locale.Driver Categories Section')]],
+            ['title' => __('locale.How Billing Works Section'), 'groupTitles' => [__('locale.How Billing Works Section')]],
+            ['title' => __('locale.FAQ Section'), 'groupTitles' => [__('locale.FAQ Section')]],
+            ['title' => __('locale.CTA Banner'), 'groupTitles' => [__('locale.CTA Banner')]],
         ],
     ];
 @endphp
@@ -276,7 +390,8 @@
                                                             MutationObserver already handles - it lazily initializes the
                                                             first time this collapse is opened, no changes needed there. --}}
                                                             @php
-                                                                $wcEditorSlug = ($pageKey === 'privacy' ? 'privacy-policy' : 'terms-of-service') . '-' . $locale;
+                                                                $wcEditorSlug = ['privacy' => 'privacy-policy', 'terms' => 'terms-of-service'][$pageKey] ?? str_replace('_', '-', $pageKey) . '-intro';
+                                                                $wcEditorSlug .= '-' . $locale;
                                                             @endphp
                                                             <div class="wp-quill-wrap" data-wc-quill-group dir="{{ $locale === 'ar' ? 'rtl' : 'ltr' }}">
                                                                 <div class="wp-quill-editor" id="{{ $wcEditorSlug }}-editor" data-wc-quill></div>
@@ -341,6 +456,15 @@
                     @include('worker.partner.website-config-branch-row', ['branch' => ['name_en' => '', 'name_ar' => '', 'image' => asset('user/img/real-estate/illustrations/contact.svg')], 'index' => null])
                 </template>
             @endif
+
+            @if ($pageKey === \App\Support\InfoPages::HOW)
+                @include('worker.partner.website-config-info-list', ['listKey' => 'steps', 'rows' => $pageContents['how_it_works']['steps'] ?? [], 'own' => $pageContents['how_it_works']['steps_own'] ?? false])
+            @elseif ($pageKey === \App\Support\InfoPages::PRICING)
+                @include('worker.partner.website-config-info-list', ['listKey' => 'plans', 'rows' => $pageContents['pricing']['plans'] ?? [], 'own' => $pageContents['pricing']['plans_own'] ?? false])
+            @endif
+            @foreach (array_keys(\App\Support\PageLists::LISTS[$pageKey] ?? []) as $listKey)
+                @include('worker.partner.website-config-page-list', ['page' => $pageKey, 'listKey' => $listKey, 'state' => $pageContents[$pageKey]['lists'][$listKey] ?? []])
+            @endforeach
         </div>
     @endforeach
         </div>

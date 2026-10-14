@@ -35,7 +35,9 @@ class SendOTPVerification extends Mailable
         // Optional per-caller subject/view (Partner email change passes its
         // own); defaults unchanged for every other caller.
         return new Envelope(
-            subject: $this->data['subject'] ?? 'OTP Verification '.$this->data['EmailOtp'],
+            // Default: the branded email-verification subject (the code itself
+            // stays out of the subject line / lock-screen previews).
+            subject: $this->data['subject'] ?? 'Email Verification OTP | QAMAR HIRE',
         );
     }
 

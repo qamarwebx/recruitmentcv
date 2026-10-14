@@ -28,17 +28,22 @@
     <section class="w-section" style="padding-top:40px;">
         <div class="w-container">
 
-            <button type="button" class="w-btn w-btn-outline w-filter-toggle" data-filter-open style="margin-bottom:20px;">
+            <button type="button" class="w-btn w-btn-outline w-filter-toggle" data-filter-open aria-controls="worker-filter-panel" aria-expanded="false" aria-haspopup="dialog" style="margin-bottom:20px;">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 3H2l8 9.5V19l4 2v-8.5L22 3z"/></svg>
                 {{ __('locale.Filters') }}
             </button>
 
             <div class="w-listing">
-                <aside class="w-filter-panel" data-filter-panel>
-                    <h3>
-                        {{ __('locale.Filter Candidates') }}
-                        <button type="button" class="w-nav-toggle w-filter-toggle" data-filter-close aria-label="Close filters">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                {{-- Sidebar on desktop; below 940px a slide-in drawer (style.css), opened
+                by the Filters button above or the mobile bottom navigation's Filter
+                (data-filter-open, main.js initFilterPanel): header and Search / Reset
+                stay in view while the fields scroll. Same form and filters either way. --}}
+                <aside class="w-filter-panel" id="worker-filter-panel" data-filter-panel aria-labelledby="worker-filter-title">
+                    <h3 id="worker-filter-title">
+                        <span class="w-filter-desktop-only">{{ __('locale.Filter Candidates') }}</span>
+                        <span class="w-filter-drawer-only">{{ __('locale.Filters') }}</span>
+                        <button type="button" class="w-nav-toggle w-filter-toggle w-filter-close" data-filter-close aria-label="{{ __('locale.Close filters') }}">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M18 6 6 18M6 6l12 12"/></svg>
                         </button>
                     </h3>
 
@@ -47,61 +52,72 @@
                         sent with every search / filter / page so the category stays; Reset keeps it. --}}
                         <input type="hidden" name="hiring" value="{{ $hiring === 'hired' ? 'hired' : '' }}" data-hiring-input>
 
-                        <div class="w-filter-group">
-                            <label for="expcity_id">{{ __('locale.Experience Type') }}</label>
-                            <select name="expcity_id" id="expcity_id" class="w-select select2">
-                                <option value="">{{ __('locale.Any experience') }}</option>
-                                <option value="1" @selected(request('expcity_id') == 1)>{{ __('locale.Indian Experience') }}</option>
-                                <option value="2" @selected(request('expcity_id') == 2)>{{ __('locale.Gulf / Abroad Experience') }}</option>
-                            </select>
-                        </div>
+                        {{-- The filters, in the reference order (Job Type, Experienced, Work Place, Age,
+                        Religion). Scrolls inside the drawer; Search / Reset below stay visible. --}}
+                        <div class="w-filter-fields">
+                            <div class="w-filter-group">
+                                <label for="proff_id">{{ __('locale.Profession') }}</label>
+                                <select name="proff_id" id="proff_id" class="w-select select2">
+                                    <option value="">{{ __('locale.All professions') }}</option>
+                                    @foreach ($jobTypes as $jobType)
+                                        <option value="{{ $jobType->id }}" @selected(request('proff_id') == $jobType->id)>{{ $jobType->display_name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
 
-                        <div class="w-filter-group">
-                            <label for="proff_id">{{ __('locale.Profession') }}</label>
-                            <select name="proff_id" id="proff_id" class="w-select select2">
-                                <option value="">{{ __('locale.All professions') }}</option>
-                                @foreach ($jobTypes as $jobType)
-                                    <option value="{{ $jobType->id }}" @selected(request('proff_id') == $jobType->id)>{{ $jobType->display_name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
+                            <div class="w-filter-group">
+                                <label for="expcity_id">{{ __('locale.Experience Type') }}</label>
+                                <select name="expcity_id" id="expcity_id" class="w-select select2">
+                                    <option value="">{{ __('locale.Any experience') }}</option>
+                                    <option value="1" @selected(request('expcity_id') == 1)>{{ __('locale.Indian Experience') }}</option>
+                                    <option value="2" @selected(request('expcity_id') == 2)>{{ __('locale.Gulf / Abroad Experience') }}</option>
+                                </select>
+                            </div>
 
-                        <div class="w-filter-group">
-                            <label for="location_id">{{ __('locale.Work Location') }}</label>
-                            <select name="location_id" id="location_id" class="w-select select2">
-                                <option value="">{{ __('locale.Any location') }}</option>
-                                @foreach ($cities as $city)
-                                    <option value="{{ $city->id }}" @selected(request('location_id') == $city->id)>{{ $city->display_name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
+                            <div class="w-filter-group">
+                                <label for="location_id">{{ __('locale.Work Location') }}</label>
+                                <select name="location_id" id="location_id" class="w-select select2">
+                                    <option value="">{{ __('locale.Any location') }}</option>
+                                    @foreach ($cities as $city)
+                                        <option value="{{ $city->id }}" @selected(request('location_id') == $city->id)>{{ $city->display_name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
 
-                        <div class="w-filter-group">
-                            <label for="age">{{ __('locale.Age Range') }}</label>
-                            <select name="age" id="age" class="w-select select2">
-                                <option value="">{{ __('locale.Any age') }}</option>
-                                <option value="22-25" @selected(request('age') == '22-25')>22 – 25</option>
-                                <option value="26-30" @selected(request('age') == '26-30')>26 – 30</option>
-                                <option value="31-35" @selected(request('age') == '31-35')>31 – 35</option>
-                                <option value="36-40" @selected(request('age') == '36-40')>36 – 40</option>
-                                <option value="41-45" @selected(request('age') == '41-45')>41 – 45</option>
-                                <option value="46-50" @selected(request('age') == '46-50')>46 – 50</option>
-                            </select>
-                        </div>
+                            <div class="w-filter-group">
+                                <label for="age">{{ __('locale.Age Range') }}</label>
+                                <select name="age" id="age" class="w-select select2">
+                                    <option value="">{{ __('locale.Any age') }}</option>
+                                    <option value="22-25" @selected(request('age') == '22-25')>22 – 25</option>
+                                    <option value="26-30" @selected(request('age') == '26-30')>26 – 30</option>
+                                    <option value="31-35" @selected(request('age') == '31-35')>31 – 35</option>
+                                    <option value="36-40" @selected(request('age') == '36-40')>36 – 40</option>
+                                    <option value="41-45" @selected(request('age') == '41-45')>41 – 45</option>
+                                    <option value="46-50" @selected(request('age') == '46-50')>46 – 50</option>
+                                </select>
+                            </div>
 
-                        <div class="w-filter-group">
-                            <label for="religions">{{ __('locale.Religion') }}</label>
-                            <select name="religions" id="religions" class="w-select select2">
-                                <option value="">{{ __('locale.Any religion') }}</option>
-                                @foreach ($religions as $religion)
-                                    <option value="{{ $religion->id }}" @selected(request('religions') == $religion->id)>{{ $religion->display_name }}</option>
-                                @endforeach
-                            </select>
+                            <div class="w-filter-group">
+                                <label for="religions">{{ __('locale.Religion') }}</label>
+                                <select name="religions" id="religions" class="w-select select2">
+                                    <option value="">{{ __('locale.Any religion') }}</option>
+                                    @foreach ($religions as $religion)
+                                        <option value="{{ $religion->id }}" @selected(request('religions') == $religion->id)>{{ $religion->display_name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
                         </div>
 
                         <div class="w-filter-actions">
-                            <button type="button" class="w-btn w-btn-primary w-btn-block" data-filter-search>{{ __('locale.Search') }}</button>
-                            <button type="button" class="w-btn w-btn-outline w-btn-block" data-filter-reset>{{ __('locale.Reset') }}</button>
+                            <button type="button" class="w-btn w-btn-primary w-btn-block" data-filter-search>
+                                <svg class="w-filter-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                                {{ __('locale.Search') }}
+                            </button>
+                            <button type="button" class="w-btn w-btn-outline w-btn-block" data-filter-reset>
+                                <svg class="w-filter-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+                                <span class="w-filter-desktop-only">{{ __('locale.Reset') }}</span>
+                                <span class="w-filter-drawer-only">{{ __('locale.Reset Filters') }}</span>
+                            </button>
                         </div>
                     </form>
                 </aside>

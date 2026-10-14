@@ -1,38 +1,19 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Account Deactivated</title>
-</head>
+{{-- Admin account deactivated - no todo created in 24 hours (App\Mail\AdminNoTodoLast24HoursDeactivatedMail).
+Shared QAMAR HIRE layout. Variables: $admin, $date. Twin file in both apps. --}}
+@extends('emails.layouts.brand')
+@php($T = \App\Support\EmailTheme::class)
 
-<body style="font-family: Arial, sans-serif; background:#f5f5f5; padding:20px;">
+@section('title', 'Account Deactivated')
+@section('preheader', 'Your account has been temporarily deactivated.')
 
-<div style="max-width:600px; margin:0 auto; background:white; padding:25px; border-radius:8px;">
+@section('content')
+    <h1 style="{{ $T::H1 }} color:{{ $T::RED }};">Account Deactivated</h1>
+    <p style="{{ $T::P }}">Dear <span dir="auto" style="{{ $T::STRONG }}">{{ $admin->name ?? 'Admin' }}</span>,</p>
+    <p style="{{ $T::P }}">We noticed that there was <strong>no todo Created in the last 24 hours</strong> ({{ $date }}).</p>
+    @include('emails.partials.note', ['tone' => 'red', 'text' => 'As per company policy, your account has been temporarily deactivated.'])
+    <p style="{{ $T::P }}">If you believe this is a mistake, please contact the system administrator.</p>
+@endsection
 
-    <h2 style="color:#d9534f;">Account Deactivated</h2>
-
-    <p>Dear {{ $admin->name ?? 'Admin' }},</p>
-
-    <p>
-        We noticed that there was <strong>no todo Created in the last 24 hours</strong>
-        ({{ $date }}).
-    </p>
-
-    <p>
-        As per company policy, your account has been temporarily
-        <strong style="color:#d9534f;">deactivated</strong>.
-    </p>
-
-    <p style="margin-top:25px;">
-        If you believe this is a mistake, please contact the system administrator.
-    </p>
-
-    <p>
-        Regards,<br>
-        <strong>System Automation</strong>
-    </p>
-
-</div>
-
-</body>
-</html>
+@section('signoff')
+    Regards,<br><span style="{{ $T::STRONG }}">System Automation</span>
+@endsection

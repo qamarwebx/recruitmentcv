@@ -42,6 +42,11 @@
         $tabSections = ['company' => 'company_profile', 'branding' => 'branding', 'whatsapp' => 'whatsapp', 'website-config' => 'website_configuration', 'smtp' => 'smtp', 'domain' => 'domain'];
         $allowedTabs = array_keys(array_filter($tabSections, fn ($section) => \App\Support\PartnerTeam::allowsSection('website', $section)));
         $activeTopTab = ($openWcPage && in_array('website-config', $allowedTabs, true)) ? 'website-config' : ($allowedTabs[0] ?? null);
+        // Back from "Add SMTP With Google" (PartnerSmtpGoogleController::complete()): the SMTP tab.
+        if (request()->query('tab') === 'smtp' && in_array('smtp', $allowedTabs, true)) {
+            $activeTopTab = 'smtp';
+        }
+        $smtpGoogleNotice = session('smtp_google_notice');
         $activeWcPage = in_array($openWcPage, \App\Models\PartnerPageContent::PAGES, true) ? $openWcPage : 'home';
     @endphp
 
@@ -382,7 +387,8 @@
                 {{ __('locale.SMTP') }}
             </h2>
             <p class="wp-field-hint wp-smtp-intro">{{ __('locale.Emails from your website and dashboard (order confirmations, verification codes, email changes) are sent with your SMTPs, one at a time in this order: the next SMTP is used only if the one before it fails. When none is enabled or all fail, the default RecruitmentCV email settings are used.') }}</p>
-            <div class="w-form-alert" style="display:none;" data-settings-alert="smtp"></div>
+            {{-- Also the result of an "Add SMTP With Google" sign-in (flashed by PartnerSmtpGoogleController::complete()). --}}
+            <div class="w-form-alert {{ is_array($smtpGoogleNotice) ? ($smtpGoogleNotice[0] === 'success' ? 'is-success' : 'is-error') : '' }}" @unless (is_array($smtpGoogleNotice)) style="display:none;" @endunless data-settings-alert="smtp" role="status">{{ is_array($smtpGoogleNotice) ? $smtpGoogleNotice[1] : '' }}</div>
             <div data-smtp-root data-error-generic="{{ __('locale.Something went wrong. Please try again.') }}">
                 @include('worker.partner.partials.smtp-list', ['smtps' => $smtps])
             </div>
@@ -415,6 +421,7 @@
     <script src="{{ asset('worker/js/partner-smtp.js') }}?v={{ @filemtime(public_path('worker/js/partner-smtp.js')) ?: time() }}"></script>
     <script src="{{ asset('worker/js/partner-website-config.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config.js')) ?: time() }}"></script>
     <script src="{{ asset('worker/js/partner-website-config-branches.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config-branches.js')) ?: time() }}"></script>
+    <script src="{{ asset('worker/js/partner-website-config-lists.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config-lists.js')) ?: time() }}"></script>
     <script src="{{ asset('worker/js/partner-website-config-collapse.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config-collapse.js')) ?: time() }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
     <script src="{{ asset('worker/js/partner-website-config-quill.js') }}?v={{ @filemtime(public_path('worker/js/partner-website-config-quill.js')) ?: time() }}"></script>

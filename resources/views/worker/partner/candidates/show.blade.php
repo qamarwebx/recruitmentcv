@@ -117,6 +117,7 @@
                     @endif
                 </div>
                 @include('worker.partials.partner-verification-notice')
+                @include('worker.partials.hiring-limit-notice', ['hlClass' => 'wp-hiring-limit-candidate'])
                 {{-- Partner Activity alerts to CRM staff: presence on this page + Hire Now clicks
                 (partner-candidate-activity.js; partner and candidate are decided server-side).
                 Download CV is recorded server-side when the CV is served (candidateCv). --}}

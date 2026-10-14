@@ -180,6 +180,9 @@ class PartnerPortalController extends Controller
                 'booking.visa_status',
                 'booking.booking_status',
                 'booking.ord_status_id',
+                // the order stages' CRM workflow link (App\Support\OrderPipeline)
+                'booking.cand_id',
+                'booking.partner_id',
                 'cand.cand_name',
                 'cand.arcand_name',
                 'cand.photo_file',
@@ -201,6 +204,9 @@ class PartnerPortalController extends Controller
                 'visa.salary',
                 'visa.mobile_no'
             )
+            // The CRM's Payment Details -> Amount: the booking's payment record (bookingpayments,
+            // the row BookingController::paymentStr() writes / BookingController::view() shows).
+            ->addSelect(['paid_amount' => DB::table('bookingpayments')->select('bookingpayments.amount')->whereColumn('bookingpayments.booking_id', 'booking.id')->orderBy('bookingpayments.id')->limit(1)])
             ->where('booking.partner_id', $partnerId);
 
         // Active / Deployed / Cancelled tabs (default Active) - see
@@ -321,9 +327,60 @@ class PartnerPortalController extends Controller
     public function orderShow($id)
     {
         $partner = Auth::guard('partner')->user();
-        $partnerId = $partner->id;
 
-        $order = DB::table('bookings as booking')
+        $order = $this->partnerOrder((int) $partner->id, $id);
+
+        abort_if(!$order, 404);
+        // A team member opens only orders of a group they may see.
+        \App\Support\PartnerTeam::authorize(in_array((int) $order->booking_status === 2 ? 'cancelled' : 'active', \App\Support\PartnerTeam::orderStates(), true));
+
+        $professionOptions = Profession::orderBy('eng_name')->get();
+        $allWorkCities = Expecworkcity::orderBy('name')->get();
+        // Fingerprint of what the page shows - order-live.js polls orderLive() with it.
+        $liveVersion = \App\Support\OrderPipeline::version($order);
+
+        return view('worker.partner.orders.show', compact('order', 'partner', 'professionOptions', 'allWorkCities', 'liveVersion'));
+    }
+
+    /**
+     * The order detail page kept in step with the CRM (order-live.js, every 30 s
+     * while visible): the same partner-scoped order as orderShow() and the same
+     * team-member rule. ?v= is the fingerprint the page has (OrderPipeline::
+     * version() over the persisted order / visa / workflow / documents); unchanged
+     * = a tiny {"changed": false}, nothing rendered; changed = the re-rendered
+     * live part (orders/show-live) + the new fingerprint. Never cached.
+     */
+    public function orderLive(Request $request, $id)
+    {
+        $partner = Auth::guard('partner')->user();
+
+        $order = $this->partnerOrder((int) $partner->id, $id);
+
+        abort_if(!$order, 404);
+        \App\Support\PartnerTeam::authorize(in_array((int) $order->booking_status === 2 ? 'cancelled' : 'active', \App\Support\PartnerTeam::orderStates(), true));
+
+        $version = \App\Support\OrderPipeline::version($order);
+        $headers = ['Cache-Control' => 'private, no-store'];
+
+        if (hash_equals($version, (string) $request->query('v', ''))) {
+            return response()->json(['changed' => false, 'version' => $version], 200, $headers);
+        }
+
+        return response()->json([
+            'changed' => true,
+            'version' => $version,
+            'html' => view('worker.partner.orders.show-live', compact('order', 'partner'))->render(),
+        ], 200, $headers);
+    }
+
+    /** One order of this partner with everything its detail page shows (null = not this partner's / unknown). */
+    private function partnerOrder(int $partnerId, $id): ?object
+    {
+        if (!ctype_digit((string) $id)) {
+            return null;
+        }
+
+        return DB::table('bookings as booking')
             ->leftJoin('candidates as cand', 'booking.cand_id', '=', 'cand.id')
             ->leftJoin('professions as proff', 'cand.jobtype_id', '=', 'proff.id')
             ->leftJoin('order_statuses as ordstatus', 'ordstatus.id', '=', 'booking.ord_status_id')
@@ -350,20 +407,54 @@ class PartnerPortalController extends Controller
                 'visa.issuing_authority',
                 'visa.wpcity_id',
                 'visa.salary',
-                'visa.mobile_no'
+                'visa.mobile_no',
+                // when the visa details were first saved / last changed (Visa Authorization time, live fingerprint)
+                'visa.created_at as visa_created_at',
+                'visa.updated_at as visa_updated_at'
             )
+            // The CRM's Payment Details -> Amount: the booking's payment record (bookingpayments,
+            // the row BookingController::paymentStr() writes / BookingController::view() shows).
+            ->addSelect(['paid_amount' => DB::table('bookingpayments')->select('bookingpayments.amount')->whereColumn('bookingpayments.booking_id', 'booking.id')->orderBy('bookingpayments.id')->limit(1)])
             ->where('booking.partner_id', $partnerId)
-            ->where('booking.id', $id)
+            ->where('booking.id', (int) $id)
             ->first();
+    }
 
+    /**
+     * One document of a COMPLETED order stage (App\Support\OrderPipeline::
+     * documents() - the CRM Candidate Status workflow files), streamed
+     * through this route so the page never carries a public file URL. Only
+     * for this partner's own order, only while that order's workflow is this
+     * partner's (not cancelled, Recruitment Partner = this partner), only a
+     * file of that candidate listed for a completed stage - anything else
+     * is a 404. ?download=1 saves it instead of opening it.
+     */
+    public function orderDocument(Request $request, $id, $file)
+    {
+        $partnerId = $this->partnerId();
+        abort_unless(ctype_digit((string) $id) && ctype_digit((string) $file), 404);
+
+        $order = DB::table('bookings')->where('partner_id', $partnerId)->where('id', (int) $id)->first();
         abort_if(!$order, 404);
-        // A team member opens only orders of a group they may see.
+        // A team member opens only orders of a group they may see (as orderShow()).
         \App\Support\PartnerTeam::authorize(in_array((int) $order->booking_status === 2 ? 'cancelled' : 'active', \App\Support\PartnerTeam::orderStates(), true));
 
-        $professionOptions = Profession::orderBy('eng_name')->get();
-        $allWorkCities = Expecworkcity::orderBy('name')->get();
+        $document = collect(\App\Support\OrderPipeline::documents($order))->flatten(1)->firstWhere('id', (int) $file);
+        abort_if(!$document, 404);
+        $path = \App\Support\OrderPipeline::filePath($document['name']);
+        abort_if(!$path, 404);
 
-        return view('worker.partner.orders.show', compact('order', 'partner', 'professionOptions', 'allWorkCities'));
+        $types = ['pdf' => 'application/pdf', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp'];
+        $inline = isset($types[$document['ext']]) && !$request->boolean('download');
+        $headers = [
+            'Content-Type' => $types[$document['ext']] ?? 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, no-store',
+        ];
+
+        return $inline
+            ? response()->file($path, $headers + ['Content-Disposition' => 'inline; filename="' . addcslashes($document['name'], '"\\') . '"'])
+            : response()->download($path, $document['name'], $headers);
     }
 
     /**
@@ -410,39 +501,54 @@ class PartnerPortalController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        // Visadetails declares neither $fillable nor $guarded, so any
-        // array-based mass assignment (firstOrNew() included) would throw
-        // a MassAssignmentException - built up via direct property
-        // assignment instead, which isn't subject to that guard.
-        $visa = Visadetails::where('booking_id', $booking->id)->first();
-        $isNew = !$visa;
-        if ($isNew) {
-            $visa = new Visadetails();
-            $visa->booking_id = $booking->id;
-        }
+        // Visa details + order status + the order's employer in this
+        // partner's Employer module (App\Support\OrderEmployer: one linked
+        // Employer Plus record per order, updated in place) - one transaction,
+        // so a failure never leaves the order and its employer out of step.
+        try {
+        DB::transaction(function () use ($request, $booking, $partnerId) {
+            // Visadetails declares neither $fillable nor $guarded, so any
+            // array-based mass assignment (firstOrNew() included) would throw
+            // a MassAssignmentException - built up via direct property
+            // assignment instead, which isn't subject to that guard.
+            $visa = Visadetails::where('booking_id', $booking->id)->first();
+            $isNew = !$visa;
+            if ($isNew) {
+                $visa = new Visadetails();
+                $visa->booking_id = $booking->id;
+            }
 
-        $visa->user_id = $booking->user_id;
-        $visa->cand_id = $booking->cand_id;
-        $visa->visa_no = $request->visa_no;
-        $visa->id_no = $request->id_no;
-        $visa->proff_id = $request->proff_id;
-        $visa->employer_name = $request->employer_name;
-        $visa->employer_ar_name = $request->employer_ar_name;
-        $visa->issuing_authority = $request->issuing_authority;
-        $visa->wpcity_id = $request->wpcity_id;
-        $visa->salary = $request->salary;
-        $visa->status = true;
-        if ($isNew) {
-            $visa->partner_id = $partnerId;
-        }
-        $visa->save();
+            $visa->user_id = $booking->user_id;
+            $visa->cand_id = $booking->cand_id;
+            $visa->visa_no = $request->visa_no;
+            $visa->id_no = $request->id_no;
+            $visa->proff_id = $request->proff_id;
+            $visa->employer_name = $request->employer_name;
+            $visa->employer_ar_name = $request->employer_ar_name;
+            $visa->issuing_authority = $request->issuing_authority;
+            $visa->wpcity_id = $request->wpcity_id;
+            $visa->salary = $request->salary;
+            $visa->status = true;
+            if ($isNew) {
+                $visa->partner_id = $partnerId;
+            }
+            $visa->save();
 
-        $booking->visa_status = true;
-        if ($booking->payment_status == 1) {
-            $booking->booking_status = 1;
-            $booking->status = true;
+            $booking->visa_status = true;
+            if ($booking->payment_status == 1) {
+                $booking->booking_status = 1;
+                $booking->status = true;
+            }
+            $booking->save();
+
+            \App\Support\OrderEmployer::sync($booking, $visa);
+        });
+        } catch (\Throwable $e) {
+            // Nothing was saved (the transaction rolled back): say so, keep the form input.
+            \Illuminate\Support\Facades\Log::error('Order visa / employer save failed', ['booking_id' => $booking->id, 'exception' => get_class($e)]);
+
+            return redirect()->back()->withErrors(['visa' => __('locale.Something went wrong. Please try again.')])->withInput();
         }
-        $booking->save();
 
         $partner = Auth::guard('partner')->user();
         $timeline = new Activity();
@@ -454,6 +560,90 @@ class PartnerPortalController extends Controller
         $timeline->save();
 
         return redirect()->back()->with('success', __('locale.Visa details saved successfully.'));
+    }
+
+    /**
+     * Update Payment (Partner Orders card / table) - the Partner side of the
+     * CRM's Add Payment (BookingController::paymentStr), same record and same
+     * rules (App\Support\PaymentAmount): "Payment Received" = Yes required,
+     * "Amount (SAR)" optional. The order must be this partner's own and not
+     * cancelled. One transaction: the booking's payment record (the first
+     * bookingpayments row - updated in place, created only when there is none,
+     * never a second one) gets status 1 (Success), confirmed by this partner,
+     * and the amount when one is given (blank = the saved amount stays); the
+     * booking becomes Paid (+ Confirmed / status once the visa is assigned, as
+     * in the CRM); the candidate timeline gets the CRM's "payment updated"
+     * entry. The CRM Booking Detail reads the same rows, so it shows it at once.
+     */
+    public function orderPaymentStore(Request $request, $id)
+    {
+        $partnerId = (int) $this->partnerId();
+
+        $booking = Booking::where('partner_id', $partnerId)->where('id', (int) $id)->first();
+        if (!$booking) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Order not found.')], 404);
+        }
+        if ((int) $booking->booking_status === 2) {
+            return response()->json(['status' => 'error', 'message' => __('locale.This order is cancelled.')], 409);
+        }
+
+        $validator = Validator::make($request->only(['payment_received', 'amount']), \App\Support\PaymentAmount::rules(), [
+            'payment_received.required' => __('locale.Please select Payment Received.'),
+            'payment_received.in' => __('locale.Please select Payment Received.'),
+            'amount.regex' => __('locale.Enter a valid amount: 0 or more, up to 2 decimals.'),
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+        $amount = \App\Support\PaymentAmount::input($request->input('amount'));
+        $holder = \App\Support\PartnerTeam::accountHolder();
+
+        DB::transaction(function () use ($booking, $amount, $partnerId, $holder) {
+            // One at a time per order: a double submit finds the record the first one made.
+            $locked = Booking::whereKey($booking->id)->lockForUpdate()->first();
+
+            $payment = \App\Models\Bookingpayment::where('booking_id', $locked->id)->orderBy('id')->first();
+            if (!$payment) {
+                $payment = new \App\Models\Bookingpayment();
+                $payment->booking_id = $locked->id;
+                $payment->user_id = $locked->user_id;
+                $payment->cand_id = $locked->cand_id;
+                $payment->partner_id = $partnerId;
+                // bookingpayments.admin_id is NOT NULL without a default: 0 = no CRM admin (recorded by the partner).
+                $payment->admin_id = 0;
+            }
+            if ($amount !== null) {
+                $payment->amount = $amount;
+            }
+            $payment->payconfirm_partner_id = $partnerId;
+            $payment->status = 1;
+            $payment->save();
+
+            $locked->payconfirm_partner_id = $partnerId;
+            $locked->payment_status = 1;
+            if ((int) $locked->visa_status === 1) {
+                $locked->booking_status = 1;
+                $locked->status = 1;
+            }
+            $locked->save();
+
+            $timeline = new Activity();
+            $timeline->cand_id = $locked->cand_id;
+            $timeline->headline = 'Candidate booking payment updated!';
+            $timeline->bodyMessage = 'Candidate booking payment updated by ' . ($holder->owner_name ?? $holder->full_name ?? $holder->rec_off_name ?? 'Partner') . ' on ' . date('d-m-Y h:i A');
+            $timeline->icons = 'ti ti-cash';
+            $timeline->partner_id = $partnerId;
+            $timeline->save();
+        });
+
+        $saved = \App\Models\Bookingpayment::where('booking_id', $booking->id)->orderBy('id')->first();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => __('locale.Payment updated.'),
+            'payment_status' => __('locale.Paid'),
+            'amount' => \App\Support\PaymentAmount::format(optional($saved)->amount),
+        ]);
     }
 
     public function candidates(Request $request)
@@ -1379,6 +1569,11 @@ class PartnerPortalController extends Controller
 
         abort_if(!$employer, 404);
 
+        // An order's employer (App\Support\OrderEmployer) follows that order's visa details.
+        if (\App\Support\OrderEmployer::isOrderLinked($employer)) {
+            return redirect()->back()->withErrors(['employer' => __('locale.This employer comes from an order - change it with Assign Employer on that order.')]);
+        }
+
         $validator = Validator::make($request->all(), $this->employerValidationRules());
 
         if ($validator->fails()) {
@@ -1417,6 +1612,11 @@ class PartnerPortalController extends Controller
 
         if (!$employer) {
             return response()->json(['status' => 'error', 'message' => __('locale.Employer not found.')], 404);
+        }
+
+        // An order's employer (App\Support\OrderEmployer) follows that order's visa details.
+        if (\App\Support\OrderEmployer::isOrderLinked($employer)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.This employer comes from an order - change it with Assign Employer on that order.')], 409);
         }
 
         DB::transaction(function () use ($employer) {
@@ -1459,6 +1659,11 @@ class PartnerPortalController extends Controller
 
         if (!$employer) {
             return response()->json(['status' => 'error', 'message' => __('locale.Employer not found.')], 404);
+        }
+
+        // An order's employer (App\Support\OrderEmployer) follows that order's visa details.
+        if (\App\Support\OrderEmployer::isOrderLinked($employer)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.This employer comes from an order - change it with Assign Employer on that order.')], 409);
         }
 
         $professionIds = array_filter(array_map('trim', explode(',', (string) $employer->proff_id)));
@@ -1510,6 +1715,11 @@ class PartnerPortalController extends Controller
 
         if (!$employer) {
             return response()->json(['status' => 'error', 'message' => __('locale.Employer not found.')], 404);
+        }
+
+        // An order's employer (App\Support\OrderEmployer) follows that order's visa details.
+        if (\App\Support\OrderEmployer::isOrderLinked($employer)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.This employer comes from an order - change it with Assign Employer on that order.')], 409);
         }
 
         $validator = Validator::make($request->all(), [
@@ -1985,10 +2195,24 @@ class PartnerPortalController extends Controller
         // (see PartnerPageContent's own doc comment for why), so it's
         // resolved separately rather than folded into the merge above.
         $pageContents['contact']['branches'] = PartnerPageContent::effectiveBranches($partner->id);
+        // How It Works steps (own -> global -> Home's process steps) and Pricing plans (own only) - App\Support\InfoPages.
+        $pageContents['how_it_works']['steps'] = \App\Support\InfoPages::steps($partner->id);
+        $pageContents['how_it_works']['steps_own'] = \App\Support\InfoPages::saved($partner->id, \App\Support\InfoPages::HOW, 'steps') !== null;
+        $pageContents['pricing']['plans'] = \App\Support\InfoPages::plans($partner->id);
+        $pageContents['pricing']['plans_own'] = \App\Support\InfoPages::saved($partner->id, \App\Support\InfoPages::PRICING, 'plans') !== null;
+        // About Us / How It Works / Pricing lists (own -> Partner Global -> recruitmentcv.com) - App\Support\PageLists.
+        foreach (\App\Support\PageLists::LISTS as $listPage => $lists) {
+            foreach (array_keys($lists) as $listKey) {
+                $pageContents[$listPage]['lists'][$listKey] = [
+                    'items' => \App\Support\PageLists::resolve($partner->id, $listPage, $listKey),
+                    'own' => \App\Support\PageLists::saved($partner->id, $listPage, $listKey) !== null,
+                ];
+            }
+        }
 
         $whatsapp = PartnerPageContent::effectiveWhatsapp($partner->id);
         // What an empty field falls back to: the central (CRM) settings.
-        $whatsappDefaults = PartnerPageContent::centralWhatsapp();
+        $whatsappDefaults = PartnerPageContent::partnerInheritedWhatsapp();
 
         // SMTP tab: this partner's own SMTP list only (passwords never
         // passed to the view).
@@ -2040,7 +2264,8 @@ class PartnerPortalController extends Controller
         // value rendered unescaped on the public site), and never
         // auto-revert it by text-equality (see stripDefaultValues()'s own
         // doc comment for why that check doesn't apply to this field).
-        if (in_array($page, ['privacy', 'terms'], true)) {
+        // Same for every page with a rich-text body (How It Works / Pricing intro too).
+        if (isset(PartnerPageContent::FIELDS[$page]['body'])) {
             if (array_key_exists('body', $contentEn)) {
                 $contentEn['body'] = HtmlSanitizer::clean($contentEn['body']);
             }
@@ -2129,8 +2354,8 @@ class PartnerPortalController extends Controller
             ];
         }
 
-        // Same as what it would inherit (global list, else default) = keep inheriting.
-        if ($branches === PartnerPageContent::effectiveBranches(null)) {
+        // Same as what it would inherit (Partner Global / global list, else default) = keep inheriting.
+        if ($branches === PartnerPageContent::inheritedBranches()) {
             $branches = null;
         }
 
@@ -2140,6 +2365,115 @@ class PartnerPortalController extends Controller
             'status' => 'success',
             'message' => __('locale.Branches updated successfully.'),
             'data' => ['branches' => PartnerPageContent::effectiveBranches($partner->id)],
+        ]);
+    }
+
+    /**
+     * How It Works -> Steps: the whole list in one JSON request (add / edit /
+     * delete / reorder happen on the page), like Branches. image: an
+     * existing URL, a data: URI for a newly chosen file (stored like the
+     * branch images, in admin/assets/images/partner/steps), or empty = none.
+     * The list this partner would show anyway (the global list, else its
+     * Home process steps) is stored as null, so it keeps following that.
+     */
+    public function websiteConfigStepsUpdate(Request $request)
+    {
+        $partner = Auth::guard('partner')->user();
+        $request->merge(['steps' => array_values((array) $request->input('steps', []))]);
+
+        $validator = Validator::make($request->all(), \App\Support\InfoPages::stepRules() + [
+            'steps.*.image' => 'nullable|string|max:5000000',
+        ], [], \App\Support\InfoPages::stepAttributes());
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $basepathstatus = Basepathstatus::first();
+        $uploadPath = ($basepathstatus && $basepathstatus->base_path_status == 1)
+            ? base_path('public/admin/assets/images/partner/steps')
+            : base_path('public_html/admin/assets/images/partner/steps');
+
+        $images = [];
+        foreach ($request->input('steps') as $i => $step) {
+            $image = trim((string) ($step['image'] ?? ''));
+            if (str_starts_with($image, 'data:')) {
+                $upload = \App\Support\ImageUpload::fromDataUri($image);
+                if (!$upload['ok']) {
+                    return response()->json(['status' => 'error', 'message' => __('locale.' . $upload['error'])], 422);
+                }
+                $filename = 'step_' . $partner->id . '_' . time() . '_' . $i . '.' . $upload['extension'];
+                \App\Support\ImageUpload::store($upload, $uploadPath, $filename);
+                $image = asset('admin/assets/images/partner/steps/' . $filename);
+            }
+            $images[$i] = $image;
+        }
+        $steps = \App\Support\InfoPages::cleanSteps($request->input('steps'), $images);
+
+        $inherited = \App\Support\InfoPages::inheritedSteps($partner->id);
+        // Compared as stored (older inherited records may lack newer fields, e.g. tag / icon).
+        $this->saveWebsiteConfigContent($partner->id, \App\Support\InfoPages::HOW, ['steps' => $steps === \App\Support\InfoPages::cleanSteps($inherited) ? null : $steps]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => __('locale.Steps updated successfully.'),
+            'data' => ['steps' => \App\Support\InfoPages::steps($partner->id)],
+        ]);
+    }
+
+    /**
+     * Pricing -> Plans: the whole list in one JSON request. A partner shows
+     * the global plans until it saves a different list (an unchanged one
+     * keeps following them, stored as null). Display content only - no
+     * checkout, payment or subscription; test plans are always labelled.
+     */
+    public function websiteConfigPlansUpdate(Request $request)
+    {
+        $partner = Auth::guard('partner')->user();
+        $request->merge(['plans' => array_values((array) $request->input('plans', []))]);
+
+        $validator = Validator::make($request->all(), \App\Support\InfoPages::planRules(), [
+            'plans.*.button_url.regex' => __('locale.The button link must start with http://, https:// or / (a page on this website).'),
+        ], \App\Support\InfoPages::planAttributes());
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $plans = \App\Support\InfoPages::cleanPlans($request->input('plans'));
+        $inherited = \App\Support\InfoPages::inheritedPlans($partner->id);
+        $this->saveWebsiteConfigContent($partner->id, \App\Support\InfoPages::PRICING, ['plans' => $inherited !== [] && $plans === \App\Support\InfoPages::cleanPlans($inherited) ? null : $plans]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => __('locale.Plans updated successfully.'),
+            'data' => ['plans' => \App\Support\InfoPages::plans($partner->id)],
+        ]);
+    }
+
+    /**
+     * About Us / How It Works / Pricing lists (App\Support\PageLists) - the whole
+     * list in one JSON request, like the steps / plans. A list identical to
+     * what this partner inherits (Partner Global -> recruitmentcv.com) is
+     * stored as null, so it keeps following that; a saved empty list = none.
+     */
+    public function websiteConfigPageListUpdate(Request $request, string $page, string $list)
+    {
+        abort_unless(\App\Support\PageLists::definition($page, $list) !== null, 404);
+        $partner = Auth::guard('partner')->user();
+        $request->merge(['items' => array_values((array) $request->input('items', []))]);
+
+        $validator = Validator::make($request->all(), \App\Support\PageLists::rules($page, $list));
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $items = \App\Support\PageLists::clean($page, $list, $request->input('items'));
+        $inherited = \App\Support\PageLists::inherited($partner->id, $page, $list);
+        $this->saveWebsiteConfigContent($partner->id, $page, [$list => $inherited !== [] && $items === \App\Support\PageLists::clean($page, $list, $inherited) ? null : $items]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => __('locale.Website Config updated successfully.'),
+            'data' => ['items' => \App\Support\PageLists::resolve($partner->id, $page, $list)],
         ]);
     }
 
@@ -2491,16 +2825,27 @@ class PartnerPortalController extends Controller
             file_put_contents($uploadPath . '/' . $icon, $binary);
         }
 
+        $values = [
+            'number' => $number !== '' ? $number : null,
+            'icon' => $icon,
+            'bg_color' => $request->filled('bg_color') ? strtolower($request->input('bg_color')) : ($row->content['bg_color'] ?? null),
+            'icon_color' => $request->filled('icon_color') ? strtolower($request->input('icon_color')) : ($row->content['icon_color'] ?? null),
+            // Blank = the default "Customer Support" label.
+            'label' => trim((string) $request->input('label')) !== '' ? trim(strip_tags((string) $request->input('label'))) : null,
+        ];
+        // A value equal to what this partner inherits (Recruitmentcv Partner
+        // (Global) / central settings) is not an override - kept as null so
+        // the partner keeps following it (same rule as the CRM's partner save).
+        $inheritedWa = PartnerPageContent::partnerInheritedWhatsapp();
+        foreach (['number', 'bg_color', 'icon_color', 'label'] as $key) {
+            if ($values[$key] !== null && (string) $values[$key] === (string) ($inheritedWa[$key] ?? '')) {
+                $values[$key] = null;
+            }
+        }
+
         PartnerPageContent::updateOrCreate(
             ['partner_id' => $partner->id, 'page' => PartnerPageContent::WHATSAPP],
-            ['content' => [
-                'number' => $number !== '' ? $number : null,
-                'icon' => $icon,
-                'bg_color' => $request->filled('bg_color') ? strtolower($request->input('bg_color')) : ($row->content['bg_color'] ?? null),
-                'icon_color' => $request->filled('icon_color') ? strtolower($request->input('icon_color')) : ($row->content['icon_color'] ?? null),
-                // Blank = the default "Customer Support" label.
-                'label' => trim((string) $request->input('label')) !== '' ? trim(strip_tags((string) $request->input('label'))) : null,
-            ]]
+            ['content' => $values]
         );
 
         // Old icon removed only once the row points at its replacement.
@@ -2599,16 +2944,8 @@ class PartnerPortalController extends Controller
         try {
             SmtpSettings::save($partner->id, $smtp, $request->only(['name', 'host', 'port', 'encryption', 'username', 'password', 'from_address', 'from_name', 'status']), $partner->id, [
                 'verify' => true,
-                'messages' => [
-                    'host.regex' => __('locale.Enter a valid SMTP host, e.g. smtp.example.com.'),
-                    'port.in' => __('locale.Use one of the standard SMTP ports: :ports.'),
-                    'host_not_found' => __('locale.This SMTP host could not be found.'),
-                    'host_not_allowed' => __('locale.This SMTP host is not allowed.'),
-                    'duplicate' => __('locale.This SMTP (same host, port and username) is already in your list.'),
-                    'limit' => __('locale.You can add at most :max SMTPs.'),
-                    'auth_failed' => __('locale.The SMTP server rejected the username or password.'),
-                    'connect_failed' => __('locale.Could not connect to the SMTP server. Please check the host, port and encryption.'),
-                ],
+                // Manual + Google SMTP messages (an edited Google SMTP keeps its OAuth login - SmtpSettings::saveGoogle()).
+                'messages' => PartnerSmtpGoogleController::messages(),
                 'attributes' => [
                     'name' => __('locale.Name'),
                     'host' => __('locale.Host'),

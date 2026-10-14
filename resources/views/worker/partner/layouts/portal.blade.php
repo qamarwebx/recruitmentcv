@@ -11,15 +11,18 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Plus+Jakarta+Sans:wght@600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="{{ asset('worker/css/style.css') }}?v={{ @filemtime(public_path('worker/css/style.css')) ?: time() }}">
     <link rel="stylesheet" href="{{ asset('worker/css/portal.css') }}?v={{ @filemtime(public_path('worker/css/portal.css')) ?: time() }}">
+    {{-- Admin design system v1 (tokens + shared components) - scoped to .wp-theme below. --}}
+    <link rel="stylesheet" href="{{ asset('worker/css/tokens.css') }}?v={{ @filemtime(public_path('worker/css/tokens.css')) ?: time() }}">
+    <link rel="stylesheet" href="{{ asset('worker/css/components.css') }}?v={{ @filemtime(public_path('worker/css/components.css')) ?: time() }}">
     {{-- The signed-in partner's own logo sizes (its sidebar shows its own logo on any host). --}}
     @include('worker.partials.logo-dimensions', ['logoPartnerId' => Auth::guard('partner')->id()])
     @yield('page-style')
 </head>
-<body class="worker-scope wp-body">
+<body class="worker-scope wp-body wp-theme">
     @php
         $__partner = Auth::guard('partner')->user();
         $__partnerLabel = $__partner->rec_off_name ?: $__partner->owner_name ?: 'Partner';
@@ -82,7 +85,7 @@
                     <span class="wp-sidebar-brand-name" title="{{ $__brandName }}">{{ $__brandName }}</span>
                     </div>
                 @endif
-                <button type="button" class="wp-collapse-toggle" data-wp-collapse-toggle aria-label="Collapse sidebar">
+                <button type="button" class="wp-collapse-toggle" data-wp-collapse-toggle aria-expanded="true" aria-label="{{ __('locale.Collapse sidebar') }}" title="{{ __('locale.Collapse sidebar') }}" data-label-collapse="{{ __('locale.Collapse sidebar') }}" data-label-expand="{{ __('locale.Expand sidebar') }}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 18l-6-6 6-6"/></svg>
                 </button>
                 <button type="button" class="w-nav-toggle wp-sidebar-close" data-wp-sidebar-close aria-label="Close menu">
@@ -93,7 +96,7 @@
 
             <nav class="wp-nav">
                 @if (\App\Support\PartnerTeam::canOpen('candidates'))
-                <a href="{{ route('worker.partner.candidates') }}" class="wp-partner-card {{ request()->routeIs('worker.partner.candidates', 'worker.partner.candidates.*') ? 'is-active' : '' }}">
+                <a href="{{ route('worker.partner.candidates') }}" class="wp-partner-card {{ request()->routeIs('worker.partner.candidates', 'worker.partner.candidates.*') ? 'is-active' : '' }}" @if (request()->routeIs('worker.partner.candidates', 'worker.partner.candidates.*')) aria-current="page" @endif>
                     <span class="wp-partner-avatar">
                         {{-- CV / resume document, same inline stroke icon style as the menu. --}}
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>
@@ -102,10 +105,12 @@
                         <span class="wp-partner-name">{{ __('locale.Worker CV') }}</span>
                         <span class="wp-partner-role">{{ __('locale.All Candidate CV') }}</span>
                     </div>
+                    <svg class="wp-partner-card-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                 </a>
                 @endif
 
               
+                <div class="wp-nav-label">{{ __('locale.Workspace') }}</div>
                 @if (\App\Support\PartnerTeam::canOpen('dashboard'))
                 <a href="{{ route('worker.partner.dashboard') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.dashboard') ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12 12 3l9 9"/><path d="M5 10v10h14V10"/></svg>
@@ -145,7 +150,7 @@
                 </a>
                 @endif
 
-                <div class="wp-nav-label">{{ __('locale.Account') }}</div>
+                <div class="wp-nav-label">{{ __('locale.Settings') }}</div>
                 @if (\App\Support\PartnerTeam::canOpen('prices'))
                 <a href="{{ route('worker.partner.prices') }}" class="wp-nav-link {{ request()->routeIs('worker.partner.prices', 'worker.partner.prices.*') ? 'is-active' : '' }}">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
@@ -184,6 +189,21 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
                     <span>{{ __('locale.Terms of Service') }}</span>
                 </a>
+
+                {{-- Signed-in user: name (My Account), owner / team member, Logout. --}}
+                <div class="wp-sidebar-user">
+                    <span class="wp-partner-avatar" aria-hidden="true">{{ $__partnerInitials ?: 'P' }}</span>
+                    <div class="wp-sidebar-user-text">
+                        <a href="{{ route('worker.partner.account') }}" title="{{ __('locale.My Account') }}">{{ $__partnerHeaderName }}</a>
+                        <span>{{ $__teamMember ? __('locale.Team member') : __('locale.Owner') }}</span>
+                    </div>
+                    <form action="{{ route('worker.partner.logout') }}" method="POST">
+                        @csrf
+                        <button type="submit" class="wp-sidebar-logout" aria-label="{{ __('locale.Logout') }}" title="{{ __('locale.Logout') }}">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>
+                        </button>
+                    </form>
+                </div>
             </div>
 
         </aside>
@@ -196,7 +216,19 @@
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
                 </button>
 
-                <div class="wp-page-title">@yield('page-title')</div>
+                {{-- Breadcrumbs ("Workspace > Page", or the page's own trail) + the page heading. --}}
+                <div class="wp-page-heading">
+                    <nav class="wp-breadcrumbs" aria-label="{{ __('locale.Breadcrumb') }}">
+                        @hasSection('breadcrumb')
+                            @yield('breadcrumb')
+                        @else
+                            <span>{{ __('locale.Workspace') }}</span>
+                            <svg class="wp-breadcrumbs-sep" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                            <span aria-current="page">@yield('page-title')</span>
+                        @endif
+                    </nav>
+                    <h1 class="wp-page-title">@yield('page-title')</h1>
+                </div>
 
                 @if ($__partnerLiveUrl)
                     <div class="wp-live-url-group">
@@ -230,7 +262,7 @@
                         <button type="button" class="wp-icon-btn" data-wp-dropdown-trigger="notifications" aria-label="{{ __('locale.Notifications') }}">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                             @if ($__notifications->count() > 0)
-                                <span class="wp-icon-dot"></span>
+                                <span class="wp-icon-count">{{ $__notifications->count() }}</span>
                             @endif
                         </button>
                         <div class="wp-dropdown" data-wp-dropdown="notifications">
@@ -251,25 +283,13 @@
                         </div>
                     </div>
 
-                    <div class="wp-dropdown-wrap">
-                        <button type="button" class="wp-profile-trigger" data-wp-dropdown-trigger="profile">
-                            <span class="wp-partner-avatar" style="padding-top: 6px;color: white;">{{ $__partnerInitials ?: 'P' }}</span>
-                            <span>{{ $__partnerHeaderName }}</span>
-                        </button>
-                        <div class="wp-dropdown" data-wp-dropdown="profile">
-                            <a href="{{ route('worker.partner.account') }}" class="wp-menu-item">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
-                                {{ __('locale.My Account') }}
-                            </a>
-                            <form action="{{ route('worker.partner.logout') }}" method="POST">
-                                @csrf
-                                <button type="submit" class="wp-menu-item is-danger">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>
-                                    {{ __('locale.Logout') }}
-                                </button>
-                            </form>
-                        </div>
-                    </div>
+                    @if (\App\Support\PartnerTeam::canOpen('candidates'))
+                        {{-- New Booking = pick a candidate in Worker CV (where Hire Now creates the booking). --}}
+                        <a href="{{ route('worker.partner.candidates') }}" class="w-btn w-btn-primary wp-topbar-cta" title="{{ __('locale.New Booking') }}">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                            <span class="wp-topbar-cta-label">{{ __('locale.New Booking') }}</span>
+                        </a>
+                    @endif
                 </div>
             </header>
 

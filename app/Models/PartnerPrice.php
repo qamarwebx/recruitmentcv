@@ -74,6 +74,10 @@ class PartnerPrice extends Model
             ->where('partner_id', $partnerId)
             ->get()
             ->keyBy(fn ($price) => $price->exp_type . '-' . $price->proff_id);
+        // "Recruitmentcv Partner (Global)" prices (App\Support\PartnerGlobal, partner_id 0):
+        // what an unsaved combination shows before the configured default.
+        $partnerGlobal = static::where('partner_id', \App\Support\PartnerGlobal::PRICE_PARTNER_ID)->get()
+            ->keyBy(fn ($price) => $price->exp_type . '-' . $price->proff_id);
 
         $rows = collect();
         foreach (Profession::orderBy('eng_name')->get(['id', 'eng_name', 'ar_name']) as $profession) {
@@ -83,8 +87,8 @@ class PartnerPrice extends Model
                     'partner_id' => $partnerId,
                     'exp_type' => $expType,
                     'proff_id' => $profession->id,
-                    'cost' => static::defaultCost(),
-                    'days' => static::defaultDays(),
+                    'cost' => isset($partnerGlobal[$key]) ? $partnerGlobal[$key]->cost : static::defaultCost(),
+                    'days' => isset($partnerGlobal[$key]) ? $partnerGlobal[$key]->days : static::defaultDays(),
                 ]);
                 $price->setRelation('profession', $profession);
                 $rows->push($price);
@@ -98,7 +102,8 @@ class PartnerPrice extends Model
      * Service Price / Departure labels for a candidate detail page, for the
      * candidate's experience type + profession.
      *   - Partner site / Partner Portal ($partnerId set): the partner's own
-     *     price, otherwise defaultCost() / defaultDays().
+     *     price, otherwise the "Recruitmentcv Partner (Global)" price
+     *     (partner_id 0), otherwise defaultCost() / defaultDays().
      *   - Apex site ($partnerId null): the global recruitmentcv.com price,
      *     otherwise the existing customercosts default ("On Request" / "---"
      *     when none exists) - unchanged.
@@ -115,7 +120,11 @@ class PartnerPrice extends Model
                 ->first();
 
             if (!$rule && $partnerId) {
-                $rule = new static(['cost' => static::defaultCost(), 'days' => static::defaultDays()]);
+                $rule = static::where('exp_type', (int) $candidate->gulfexperience)
+                    ->where('proff_id', $candidate->jobtype_id)
+                    ->where('partner_id', \App\Support\PartnerGlobal::PRICE_PARTNER_ID)
+                    ->first()
+                    ?: new static(['cost' => static::defaultCost(), 'days' => static::defaultDays()]);
             }
         }
 

@@ -6,15 +6,27 @@
     hire-now.js / the Download CV buttons point here (data-partner-verify-notice).
     The rule itself is enforced server-side (PartnerHireController::store(),
     PartnerPortalController::candidateCv()).
+    Lists only what is still unverified (a verified mobile / email is not
+    shown); with both verified the whole notice is gone.
 --}}
-@php $noticePartner = \Illuminate\Support\Facades\Auth::guard('partner')->user(); @endphp
+@php
+    $noticePartner = \Illuminate\Support\Facades\Auth::guard('partner')->user();
+    $noticeUnverified = [];
+    if ($noticePartner && !$noticePartner->hasVerifiedMobile()) {
+        $noticeUnverified[] = __('locale.Primary Mobile');
+    }
+    if ($noticePartner && !$noticePartner->hasVerifiedEmail()) {
+        $noticeUnverified[] = __('locale.Primary Email');
+    }
+@endphp
 @if ($noticePartner && !$noticePartner->isFullyVerified())
     <div class="w-form-alert is-error w-verify-notice" role="alert" data-partner-verify-notice tabindex="-1">
         <strong>{{ __('locale.Verification required') }}</strong>
         <span>{{ __('locale.Verify your mobile number and email address to hire candidates, download CVs and view passport images.') }}</span>
         <ul class="w-verify-notice-list">
-            <li>{{ $noticePartner->hasVerifiedMobile() ? '✓' : '✕' }} {{ __('locale.Primary Mobile') }}: {{ $noticePartner->hasVerifiedMobile() ? __('locale.Verified') : __('locale.Not Verified') }}</li>
-            <li>{{ $noticePartner->hasVerifiedEmail() ? '✓' : '✕' }} {{ __('locale.Primary Email') }}: {{ $noticePartner->hasVerifiedEmail() ? __('locale.Verified') : __('locale.Not Verified') }}</li>
+            @foreach ($noticeUnverified as $noticeItem)
+                <li>✕ {{ $noticeItem }}: {{ __('locale.Not Verified') }}</li>
+            @endforeach
         </ul>
         <a href="{{ route('worker.partner.account') }}" class="w-verify-notice-link">{{ __('locale.Go to My Account') }}</a>
     </div>

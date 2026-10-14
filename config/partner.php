@@ -24,6 +24,10 @@ return [
         'per_mobile_minutes' => env('PARTNER_OTP_MOBILE_WINDOW_MINUTES', 15),
         'per_ip' => env('PARTNER_OTP_MAX_PER_IP', 20),
         'per_ip_minutes' => env('PARTNER_OTP_IP_WINDOW_MINUTES', 60),
+        // Minimum gap between two accepted sends for the same number / account
+        // (Resend OTP). The OTP screens count down 60s before offering Resend,
+        // so this only stops sends that skip that countdown.
+        'resend_seconds' => env('PARTNER_OTP_RESEND_SECONDS', 45),
     ],
 
     /*

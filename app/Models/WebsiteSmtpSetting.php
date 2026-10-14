@@ -3,11 +3,14 @@
 namespace App\Models;
 
 use App\Mail\Transport\SmtpAttemptTransport;
+use App\Support\GoogleSmtpOAuth;
 use App\Support\SmtpMailer;
 use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Mail\Mailer as LaravelMailer;
+use Symfony\Component\Mailer\Transport\Smtp\Auth\XOAuth2Authenticator;
+use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
 use Symfony\Component\Mailer\Transport\TransportInterface;
 
 /**
@@ -21,10 +24,20 @@ use Symfony\Component\Mailer\Transport\TransportInterface;
  *
  * `password` is encrypted at rest with the shared APP_KEY and hidden from
  * every array/JSON serialization; it is only ever read to build a transport.
+ *
+ * mailer = MAILER_GOOGLE ("Add SMTP With Google"): Gmail with OAuth 2.0 -
+ * `password` then holds the Google refresh token (same encryption, same
+ * write-only handling), `username` / `from_address` the authorized Gmail
+ * address, and the SMTP login is XOAUTH2 with a short-lived access token
+ * (App\Support\GoogleSmtpOAuth). Without a configured OAuth client such a
+ * row is incomplete, so it is skipped when sending.
  */
 class WebsiteSmtpSetting extends Model
 {
-    public const MAILERS = ['smtp' => 'SMTP'];
+    public const MAILERS = ['smtp' => 'SMTP', self::MAILER_GOOGLE => 'Google (OAuth 2.0)'];
+
+    /** Gmail SMTP authenticated with Google OAuth 2.0 (XOAUTH2). */
+    public const MAILER_GOOGLE = 'google_oauth';
 
     public const ENCRYPTIONS = ['ssl' => 'SSL', 'tls' => 'TLS', '' => 'None'];
 
@@ -92,15 +105,27 @@ class WebsiteSmtpSetting extends Model
         return SmtpMailer::global();
     }
 
+    /** Access token used by this instance's transport (scrubbed from errors; never stored). */
+    private ?string $oauthAccessToken = null;
+
     public function isUsable(): bool
     {
         return $this->status && $this->isComplete();
     }
 
-    /** Every value a working SMTP sender needs is set. */
+    /** Gmail with Google OAuth 2.0 ("Add SMTP With Google"). */
+    public function isGoogle(): bool
+    {
+        return $this->mailer === self::MAILER_GOOGLE;
+    }
+
+    /** Every value a working SMTP sender needs is set (a Google SMTP: and the OAuth client to refresh with). */
     public function isComplete(): bool
     {
-        return ($this->mailer ?: 'smtp') === 'smtp'
+        $mailer = $this->mailer ?: 'smtp';
+
+        return in_array($mailer, ['smtp', self::MAILER_GOOGLE], true)
+            && ($mailer === 'smtp' || GoogleSmtpOAuth::canRefresh())
             && filled($this->host)
             && $this->port > 0
             && filled($this->username)
@@ -134,10 +159,41 @@ class WebsiteSmtpSetting extends Model
         ];
     }
 
-    /** The bare Symfony SMTP transport (connection checks). */
+    /**
+     * The bare Symfony SMTP transport (connection checks). A Google SMTP logs
+     * in with XOAUTH2 only - username = the Gmail address, password = a
+     * current access token (GoogleSmtpOAuth::accessToken(), which throws
+     * GoogleSmtpException when the authorization no longer works).
+     */
     public function symfonyTransport(): TransportInterface
     {
-        return app('mail.manager')->createSymfonyTransport($this->transportConfig());
+        if (!$this->isGoogle()) {
+            return app('mail.manager')->createSymfonyTransport($this->transportConfig());
+        }
+
+        $this->oauthAccessToken = GoogleSmtpOAuth::accessToken((string) $this->password);
+        $transport = app('mail.manager')->createSymfonyTransport(['password' => $this->oauthAccessToken] + $this->transportConfig());
+        if ($transport instanceof EsmtpTransport) {
+            $transport->setAuthenticators([new XOAuth2Authenticator()]);
+        }
+
+        return $transport;
+    }
+
+    /** $text with this SMTP's secrets (password / refresh token, access token, their base64) masked. */
+    public function scrub(string $text): string
+    {
+        $secrets = [$this->oauthAccessToken];
+        try {
+            $secrets[] = (string) $this->password;
+        } catch (\Throwable $e) {
+            // Unreadable password: nothing to mask from it.
+        }
+        foreach (array_filter($secrets, fn ($secret) => is_string($secret) && $secret !== '') as $secret) {
+            $text = str_replace([$secret, base64_encode($secret)], '********', $text);
+        }
+
+        return $text;
     }
 
     /** This SMTP as one step of a failover chain, sending as its own From. */

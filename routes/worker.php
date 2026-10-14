@@ -37,6 +37,8 @@ Route::get('/privacy-policy', [WorkerPageController::class, 'privacyPolicy'])->n
 Route::get('/terms-of-service', [WorkerPageController::class, 'termsOfService'])->name('worker.terms');
 Route::get('/about-us', [WorkerPageController::class, 'aboutUs'])->name('worker.about');
 Route::get('/contact-us', [WorkerPageController::class, 'contactUs'])->name('worker.contact');
+Route::get('/how-it-works', [WorkerPageController::class, 'howItWorks'])->name('worker.how-it-works');
+Route::get('/pricing', [WorkerPageController::class, 'pricing'])->name('worker.pricing');
 Route::post('/contact-us', [WorkerPageController::class, 'contactUsStore'])->name('worker.contact.store');
 
 // Public language switch (no auth required - anyone browsing the site can
@@ -56,7 +58,9 @@ Route::get('/lang/{locale}', [PartnerLanguageController::class, 'SwitchLang'])->
 Route::post('/partner/otp/send', [\App\Http\Controllers\Auth\WhatsappOtpController::class, 'generateOtp2'])
     ->middleware(\App\Http\Middleware\ThrottlePartnerOtpSend::class) // per mobile + per IP, config/partner.php
     ->name('worker.partner.otp.send');
-Route::post('/partner/otp/verify', [\App\Http\Controllers\Auth\WhatsappOtpController::class, 'validateOtp2'])->name('worker.partner.otp.verify');
+Route::post('/partner/otp/verify', [\App\Http\Controllers\Auth\WhatsappOtpController::class, 'validateOtp2'])
+    ->middleware('throttle:30,1') // on top of OtpVerification's 5 tries per code
+    ->name('worker.partner.otp.verify');
 
 // Dedicated Partner login/register page (the legacy email/password
 // `partner.login` route is GET /partner, so this URL was free).
@@ -99,6 +103,12 @@ Route::get('/partner/google/complete', [PartnerAuthController::class, 'completeG
 Route::get('/partner/crm-login', [PartnerAuthController::class, 'completeCrmLogin'])->name('worker.partner.crm-login');
 // Customer "Continue with Google" started on a partner's Own Domain: the sign-in handed back there.
 Route::get('/auth/google/complete', [\App\Http\Controllers\SocialLoginController::class, 'completeCustomerGoogleLogin'])->name('customer.google.complete');
+// Partner Website -> SMTP -> "Add SMTP With Google": Google's OAuth redirect
+// (GOOGLE_SMTP_REDIRECT_URI). No session needed - the single-use state is
+// checked server-side, then the result is handed back to the partner's own
+// host (PartnerSmtpGoogleController::callback()).
+Route::get('/google/smtp/callback', [\App\Http\Controllers\Worker\PartnerSmtpGoogleController::class, 'callback'])
+    ->middleware('throttle:30,1')->name('worker.smtp.google.callback');
 
 // Partner Portal - only reachable once logged in via the OTP flow above,
 // which already refuses to establish a session unless registration_status
@@ -163,8 +173,15 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
     Route::get('/portal', [PartnerPortalController::class, 'dashboard'])->name('dashboard');
     Route::get('/orders', [PartnerPortalController::class, 'orders'])->name('orders');
     Route::get('/orders/{id}', [PartnerPortalController::class, 'orderShow'])->name('orders.show');
+    // A completed stage's document (CRM Candidate Status workflow file) of this partner's order - App\Support\OrderPipeline.
+    // Named under orders.show so team members need the same "View Order" permission.
+    Route::get('/orders/{id}/documents/{file}', [PartnerPortalController::class, 'orderDocument'])->whereNumber(['id', 'file'])->name('orders.show.document');
+    // The detail page's live part (order-live.js polls it) - also under orders.show ("View Order" permission).
+    Route::get('/orders/{id}/live', [PartnerPortalController::class, 'orderLive'])->whereNumber('id')->name('orders.show.live');
     Route::post('/orders/{id}/cancel', [PartnerHireController::class, 'cancel'])->name('orders.cancel');
     Route::post('/orders/{id}/visa', [PartnerPortalController::class, 'orderVisaStore'])->name('orders.visa.store');
+    // Update Payment (Orders card / table): this partner's order only - PartnerPortalController::orderPaymentStore().
+    Route::post('/orders/{id}/payment', [PartnerPortalController::class, 'orderPaymentStore'])->whereNumber('id')->name('orders.payment.store');
     Route::get('/candidates', [PartnerPortalController::class, 'candidates'])->name('candidates');
     Route::get('/candidates/{id}', [PartnerPortalController::class, 'candidateShow'])->name('candidates.show');
     // Download CV = this partner's own B2B CV (executed on demand) - see PartnerPortalController::candidateCv.
@@ -234,6 +251,15 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
     // its literal /contact/branches segment is never shadowed by {page}.
     Route::post('/website-config/contact/branches', [PartnerPortalController::class, 'websiteConfigBranchesUpdate'])
         ->name('website-config.branches.update');
+    // How It Works steps / Pricing plans - lists (App\Support\InfoPages), like Branches above.
+    Route::post('/website-config/how_it_works/steps', [PartnerPortalController::class, 'websiteConfigStepsUpdate'])
+        ->name('website-config.steps.update');
+    Route::post('/website-config/pricing/plans', [PartnerPortalController::class, 'websiteConfigPlansUpdate'])
+        ->name('website-config.plans.update');
+    // About Us / How It Works / Pricing lists (App\Support\PageLists: trust items, cards, offices, FAQs...).
+    Route::post('/website-config/{page}/list/{list}', [PartnerPortalController::class, 'websiteConfigPageListUpdate'])
+        ->where(['page' => implode('|', array_keys(\App\Support\PageLists::LISTS)), 'list' => '[a-z_]+'])
+        ->name('website-config.page-list.update');
 
     Route::post('/website-config/{page}', [PartnerPortalController::class, 'websiteConfigUpdate'])
         ->where('page', implode('|', \App\Models\PartnerPageContent::PAGES))
@@ -255,12 +281,21 @@ Route::middleware('worker.partner.auth')->prefix('partner')->name('worker.partne
     Route::post('/settings/smtp/{smtp}/remove', [PartnerPortalController::class, 'smtpRemove'])->whereNumber('smtp')->name('settings.smtp.remove');
     Route::post('/settings/smtp/{smtp}/move', [PartnerPortalController::class, 'smtpMove'])->whereNumber('smtp')->name('settings.smtp.move');
     Route::post('/settings/smtp/{smtp}/test', [PartnerPortalController::class, 'smtpTest'])->whereNumber('smtp')->name('settings.smtp.test');
+    // "Add SMTP With Google" (Gmail with OAuth 2.0 / XOAUTH2): connect a Google
+    // account, test the login, add it - PartnerSmtpGoogleController. Same SMTP
+    // section permission (settings.smtp.*). Google's redirect itself is
+    // worker.smtp.google.callback below (outside the portal group).
+    Route::post('/settings/smtp/google', [\App\Http\Controllers\Worker\PartnerSmtpGoogleController::class, 'start'])->name('settings.smtp.google');
+    Route::get('/settings/smtp/google/complete', [\App\Http\Controllers\Worker\PartnerSmtpGoogleController::class, 'complete'])->name('settings.smtp.google.complete');
+    Route::post('/settings/smtp/google/test', [\App\Http\Controllers\Worker\PartnerSmtpGoogleController::class, 'test'])->name('settings.smtp.google.test');
+    Route::post('/settings/smtp/google/save', [\App\Http\Controllers\Worker\PartnerSmtpGoogleController::class, 'save'])->name('settings.smtp.google.save');
+    Route::post('/settings/smtp/google/discard', [\App\Http\Controllers\Worker\PartnerSmtpGoogleController::class, 'discard'])->name('settings.smtp.google.discard');
 
     // Attaches+verifies a mobile number for the already-logged-in partner
     // (Hire Now gate, Profile page "Add/Change Number") - reuses the same
     // generate-otp2/validate-otp2 endpoints as login/register, just with a
     // different completion step (PartnerAuthController::verifyMobile).
-    Route::post('/mobile/verify', [PartnerAuthController::class, 'verifyMobile'])->name('mobile.verify');
+    Route::post('/mobile/verify', [PartnerAuthController::class, 'verifyMobile'])->middleware('throttle:10,1')->name('mobile.verify');
 
     // Team Members (owner only - App\Support\PartnerTeam::OWNER_ONLY). Every
     // query is scoped to the logged-in partner, never a request partner_id.

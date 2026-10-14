@@ -39,6 +39,13 @@ final class SmtpAttemptTransport implements TransportInterface
             $sent = $this->transport->send($message, $envelope);
         } catch (TransportExceptionInterface $e) {
             Log::warning('SMTP send failed', $this->logContext() + ['error' => $this->safeError($e)]);
+            if ($this->smtp->isGoogle()) {
+                // Google SMTP: a refused access token is not reused for the next email.
+                try {
+                    \App\Support\GoogleSmtpOAuth::forgetAccessToken((string) $this->smtp->password);
+                } catch (\Throwable $ignored) {
+                }
+            }
 
             throw $e;
         }
@@ -86,19 +93,9 @@ final class SmtpAttemptTransport implements TransportInterface
         ];
     }
 
-    /** One line, password scrubbed (server replies can echo what they were sent). */
+    /** One line, secrets scrubbed - password / Google tokens (server replies can echo what they were sent). */
     private function safeError(\Throwable $e): string
     {
-        $message = $e->getMessage();
-        try {
-            $password = (string) $this->smtp->password;
-            if ($password !== '') {
-                $message = str_replace([$password, base64_encode($password)], '********', $message);
-            }
-        } catch (\Throwable $ignored) {
-            // Unreadable password: nothing to scrub.
-        }
-
-        return Str::limit(preg_replace('/\s+/', ' ', $message), 300);
+        return Str::limit(preg_replace('/\s+/', ' ', $this->smtp->scrub($e->getMessage())), 300);
     }
 }

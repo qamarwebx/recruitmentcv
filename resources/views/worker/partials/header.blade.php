@@ -17,7 +17,8 @@
         <nav class="w-nav" data-nav>
             <a href="{{ route('worker.home') }}" class="{{ request()->routeIs('worker.home') ? 'is-active' : '' }}">{{ __('locale.Home') }}</a>
             <a href="{{ route('worker.resumes') }}" class="{{ request()->routeIs('worker.resumes*') ? 'is-active' : '' }}">{{ __('locale.Browse Resumes') }}</a>
-            <a href="{{ route('worker.about') }}" class="{{ request()->routeIs('worker.about') ? 'is-active' : '' }}">{{ __('locale.About Us') }}</a>
+            <a href="{{ route('worker.how-it-works') }}" class="{{ request()->routeIs('worker.how-it-works') ? 'is-active' : '' }}">{{ __('locale.How It Works') }}</a>
+            <a href="{{ route('worker.pricing') }}" class="{{ request()->routeIs('worker.pricing') ? 'is-active' : '' }}">{{ __('locale.Pricing') }}</a>
             <a href="{{ route('worker.contact') }}" class="{{ request()->routeIs('worker.contact') ? 'is-active' : '' }}">{{ __('locale.Contact Us') }}</a>
             @if ($waNumber)
                 <a href="https://wa.me/{{ $waNumber }}" target="_blank" rel="noopener">{{ __('locale.WhatsApp Us') }}</a>
@@ -85,3 +86,34 @@
         </div>
     </div>
 </header>
+<script>
+    // Desktop header on one line when everything fits; otherwise the existing
+    // mobile menu (.is-compact). Measured here - right after the header, before
+    // the first paint - and again once the web fonts / logo have loaded and on
+    // resize, because the logo width and button labels differ per website and
+    // per login (style.css: "Header bar"). Phones/tablets use the CSS only.
+    (function () {
+        var header = document.querySelector('.w-header');
+        var nav = header && header.querySelector('[data-nav]');
+        if (!nav || !window.matchMedia) return;
+        var desktop = window.matchMedia('(min-width: 861px)');
+        var queued = false;
+        function fit() {
+            queued = false;
+            if (!desktop.matches) { header.classList.remove('is-compact'); return; }
+            if (nav.classList.contains('is-open')) return;   // never switch while the menu is open
+            header.classList.remove('is-compact');           // measure the full bar...
+            header.classList.toggle('is-compact', nav.scrollWidth > nav.clientWidth + 1);   // ...links wider than their space
+        }
+        function queue() {
+            if (queued) return;
+            queued = true;
+            (window.requestAnimationFrame || window.setTimeout)(fit);
+        }
+        fit();
+        window.addEventListener('resize', queue);
+        window.addEventListener('load', fit);
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+        header.querySelectorAll('img').forEach(function (img) { if (!img.complete) img.addEventListener('load', fit); });
+    })();
+</script>

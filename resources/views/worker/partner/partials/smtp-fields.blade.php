@@ -1,10 +1,46 @@
 {{-- One SMTP's fields (Partner Website -> SMTP): add ($smtp null) or edit.
      $key: 'new' or the SMTP id (unique element ids). The password is never
-     rendered - blank keeps the saved one. --}}
+     rendered - blank keeps the saved one. A Google SMTP (Add SMTP With
+     Google): only its name, From name and status can change - server, login
+     and From address belong to the authorized Gmail account
+     (SmtpSettings::saveGoogle() ignores anything else). --}}
 @php
     $hasPassword = $smtp && $smtp->hasPassword();
     $value = fn ($field, $default = '') => $smtp ? ($smtp->{$field} ?? $default) : $default;
 @endphp
+@if ($smtp && $smtp->isGoogle())
+<div class="wp-info-grid">
+    <div class="w-form-row">
+        <label class="w-form-label" for="smtp-name-{{ $key }}">{{ __('locale.Name') }} <span class="wp-field-hint">({{ __('locale.optional') }})</span></label>
+        <input type="text" id="smtp-name-{{ $key }}" name="name" class="w-input" maxlength="100" value="{{ $value('name') }}">
+    </div>
+    <div class="w-form-row">
+        <label class="w-form-label" for="smtp-account-{{ $key }}">{{ __('locale.Google account') }}</label>
+        <input type="text" id="smtp-account-{{ $key }}" class="w-input" dir="ltr" value="{{ $smtp->username }}" readonly>
+        <div class="wp-field-hint">{{ __('locale.To use another Google account, add it with "Add SMTP With Google" and delete this one.') }}</div>
+    </div>
+    <div class="w-form-row">
+        <label class="w-form-label" for="smtp-server-{{ $key }}">{{ __('locale.Host') }} / {{ __('locale.Port') }}</label>
+        <input type="text" id="smtp-server-{{ $key }}" class="w-input" dir="ltr" value="{{ $smtp->host }}:{{ $smtp->port }}" readonly>
+    </div>
+    <div class="w-form-row">
+        <label class="w-form-label" for="smtp-auth-{{ $key }}">{{ __('locale.Authentication') }}</label>
+        <input type="text" id="smtp-auth-{{ $key }}" class="w-input" value="{{ __('locale.Google OAuth 2.0 (XOAUTH2)') }}" readonly>
+    </div>
+    <div class="w-form-row">
+        <label class="w-form-label" for="smtp-from-name-{{ $key }}">{{ __('locale.From Name') }}</label>
+        <input type="text" id="smtp-from-name-{{ $key }}" name="from_name" class="w-input" maxlength="255" value="{{ $value('from_name') }}">
+    </div>
+    <div class="w-form-row">
+        <label class="w-form-label" for="smtp-status-{{ $key }}">{{ __('locale.Status') }}</label>
+        <select id="smtp-status-{{ $key }}" name="status" class="w-select">
+            <option value="1" @selected($smtp->status)>{{ __('locale.Enabled') }}</option>
+            <option value="0" @selected(!$smtp->status)>{{ __('locale.Disabled') }}</option>
+        </select>
+        <div class="wp-field-hint">{{ __('locale.Enabled checks the connection and login before saving.') }}</div>
+    </div>
+</div>
+@else
 <div class="wp-info-grid">
     <div class="w-form-row">
         <label class="w-form-label" for="smtp-name-{{ $key }}">{{ __('locale.Name') }} <span class="wp-field-hint">({{ __('locale.optional') }})</span></label>
@@ -57,3 +93,4 @@
         <div class="wp-field-hint">{{ __('locale.Enabled checks the connection and login before saving.') }}</div>
     </div>
 </div>
+@endif

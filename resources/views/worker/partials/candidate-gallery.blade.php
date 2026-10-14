@@ -19,11 +19,28 @@
     $slides[] = ['thumb' => $imagePath, 'html' => '<img src="' . $imagePath . '" alt="' . e($post->display_name) . '" ' . $imgFallback . '>'];
 
     // Passport + driving licence (App\Support\PassportAccess - the one rule,
-    // the same for both): a signed-in partner whose Registration Status is
-    // Approved gets the originals; everyone else - guests and customers
-    // included - gets server-blurred copies (main image and thumbnail) with
-    // the red note for that document, and never the original file's URL.
+    // the same for both): a signed-in customer or partner with an
+    // OTP-verified mobile gets the originals (no partner approval required);
+    // everyone else - guests included - gets server-blurred copies (main
+    // image and thumbnail) with the red note for that document, and never
+    // the original file's URL.
     $documentProtection = \App\Support\PassportAccess::protection($post);
+    // No verified mobile: the note gets "Update Now" (the signed-in
+    // partner's own number, masked, in the shared add-mobile OTP modal -
+    // worker/js/document-mobile-gate.js). Team members act as the partner but
+    // only the owner may change its mobile (PartnerTeam::OWNER_ONLY).
+    $mobileGate = $documentProtection === \App\Support\PassportAccess::MOBILE;
+    $mobileGateOwner = $mobileGate && \App\Support\PartnerTeam::isOwner();
+    $mobileGateAction = '';
+    $mobileGateCode = '';
+    if ($mobileGateOwner) {
+        $gatePartner = \Illuminate\Support\Facades\Auth::guard('partner')->user();
+        [$mobileGateCode, $gateLocal] = \App\Support\PhoneNumber::split($gatePartner->owner_mobile_country_code, $gatePartner->owner_mobile_no);
+        $gateMasked = $gateLocal === '' ? '' : ($mobileGateCode ? '+' . $mobileGateCode . ' ' : '') . str_repeat('•', max(0, strlen($gateLocal) - 4)) . substr($gateLocal, -4);
+        $mobileGateAction = '<button type="button" class="w-gallery-note-action" data-mobile-verify-trigger data-current-mobile="' . e($gateMasked) . '" data-country-code="' . e((string) $mobileGateCode) . '">' . e(__('locale.Update Now')) . '</button>';
+    } elseif ($mobileGate) {
+        $mobileGateAction = '<span class="w-gallery-note-sub">' . e(__('locale.Only the account owner can update the mobile number.')) . '</span>';
+    }
     $lockIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
     $documents = [
         \App\Support\PassportAccess::PASSPORT => [$post->pass_file, 'Passport photo'],
@@ -36,8 +53,10 @@
         if ($documentProtection) {
             $preview = \App\Support\PassportAccess::previewUrl($post->slug_text, $document);
             $note = \App\Support\PassportAccess::message($documentProtection, $document);
+            // Mobile verification: stacked - lock icon, the Passport message, Update Now.
             $slides[] = ['thumb' => $preview, 'restricted' => $note, 'html' => '<div class="w-gallery-blurred" data-document="' . $document . '"><img src="' . $preview . '" alt="' . $documentAlt . ' (blurred)" ' . $imgFallback . '>'
-                . '<span class="w-gallery-blurred-note" role="note">' . $lockIcon . '<span>' . e($note) . '</span></span></div>'];
+                . '<span class="w-gallery-blurred-note' . ($mobileGateAction ? ' has-action' : '') . ($mobileGate ? ' is-stacked' : '') . '" role="note">' . $lockIcon
+                . '<span' . ($mobileGate ? ' class="w-gallery-note-message"' : '') . '>' . e($note) . '</span>' . $mobileGateAction . '</span></div>'];
         } else {
             $documentUrl = \App\Support\CandidatePhoto::url($documentFile);
             $slides[] = ['thumb' => $documentUrl, 'html' => '<img src="' . $documentUrl . '" alt="' . $documentAlt . '" ' . $imgFallback . '>'];
@@ -106,3 +125,9 @@
         </div>
     @endif
 </div>
+@if ($mobileGateOwner)
+    {{-- "Update Now" -> the shared add-mobile OTP modal (partner-auth.js), then the page reloads with the new access. --}}
+    <script src="{{ asset('worker/js/document-mobile-gate.js') }}?v={{ @filemtime(public_path('worker/js/document-mobile-gate.js')) ?: time() }}"
+        data-current-text="{{ __('locale.Your current number :number is not verified. Enter it, or a new number, to receive a verification code.') }}"
+        data-add-text="{{ __('locale.Add and verify a mobile number to view the Passport and Driving License.') }}"></script>
+@endif

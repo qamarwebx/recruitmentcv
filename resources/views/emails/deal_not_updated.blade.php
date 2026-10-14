@@ -1,44 +1,24 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Deal Not Updated</title>
-</head>
-<body>
+{{-- Deal not updated for 6 days (App\Mail\DealNotUpdatedMail). Shared QAMAR HIRE layout.
+Variables: $deal. Twin file in both apps. --}}
+@extends('emails.layouts.brand')
+@php($T = \App\Support\EmailTheme::class)
 
-    <h2>⚠️ Deal Not Updated</h2>
+@section('title', 'Deal Not Updated')
+@section('preheader', 'A deal has not been updated for the last 6 days.')
 
-    <p>Hello,</p>
+@section('content')
+    <h1 style="{{ $T::H1 }}">Deal Not Updated</h1>
+    <p style="{{ $T::P }}">Hello,</p>
+    <p style="{{ $T::P }}">The following deal has not been updated for the last 6 days:</p>
+    @include('emails.partials.details', ['rows' => [
+        ['Deal ID', $deal->id],
+        ['Title', $deal->job_title ?: $deal->job_title_other ?: $deal->deal_name ?: $deal->company ?: 'N/A'],
+        ['Last Updated', $deal->updated_at],
+    ]])
+    <p style="{{ $T::P }}">Please take necessary action.</p>
+    @include('emails.partials.button', ['url' => url('/admin/dealPipeline/list'), 'label' => 'Click Here to View Deals'])
+@endsection
 
-    <p>
-        The following deal has not been updated for the last 6 days:
-    </p>
-
-    <p>
-        <strong>Deal ID:</strong> {{ $deal->id }} <br>
-        <strong>Title:</strong> 
-        {{ $deal->job_title ?: $deal->job_title_other ?: $deal->deal_name ?: $deal->company ?: 'N/A' }} <br>
-        <strong>Last Updated:</strong> {{ $deal->updated_at }}
-    </p>
-
-    <p>
-        Please take necessary action.
-    </p>
-
-    <!-- ✅ CLICK HERE BUTTON -->
-    <p style="margin-top:20px;">
-        <a href="{{ url('/admin/dealPipeline/list') }}" 
-           style="background:#7367f0; color:#fff; padding:10px 18px; text-decoration:none; border-radius:5px;">
-           👉 Click Here to View Deals
-        </a>
-    </p>
-
-    <br>
-
-    <p>
-        Regards,<br>
-        <strong>System Automation</strong>
-    </p>
-
-</body>
-</html>
+@section('signoff')
+    Regards,<br><span style="{{ $T::STRONG }}">System Automation</span>
+@endsection

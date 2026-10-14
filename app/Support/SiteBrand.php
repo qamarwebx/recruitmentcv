@@ -85,13 +85,19 @@ class SiteBrand
             return null;
         }
 
+        // Field by field: the partner's own Company Profile, else the
+        // "Recruitmentcv Partner (Global)" one (App\Support\PartnerGlobal);
+        // still empty = the existing global / default behaviour downstream.
+        $partnerGlobal = CompanyProfile::partnerGlobal();
+        $field = fn (string $key, ?string $own) => PartnerGlobal::blank($own) ? $partnerGlobal[$key] : $own;
+
         return [
-            'name' => $domain->company_name,
-            'name_ar' => $domain->company_name_ar,
-            'address' => $domain->company_address,
-            'address_ar' => $domain->company_address_ar,
-            'mobile' => $domain->company_mobile,
-            'email' => $domain->company_email,
+            'name' => $field('name', $domain->company_name),
+            'name_ar' => $field('name_ar', $domain->company_name_ar),
+            'address' => $field('address', $domain->company_address),
+            'address_ar' => $field('address_ar', $domain->company_address_ar),
+            'mobile' => $field('mobile', $domain->company_mobile),
+            'email' => $field('email', $domain->company_email),
             // The address this website is shown on: the current host when it
             // is one of this partner's live addresses, else its primary one.
             'host' => in_array(strtolower((string) optional(request())->getHost()), \App\Support\PartnerDomains::hosts($domain), true)

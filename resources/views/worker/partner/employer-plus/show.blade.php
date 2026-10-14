@@ -10,7 +10,7 @@
     </a>
 
     <div class="wp-profile-header wp-fade-in">
-        <span class="wp-partner-avatar" style="background:linear-gradient(135deg, var(--w-primary-600), #7c3aed);">
+        <span class="wp-partner-avatar">
             {{ mb_substr($employer->employer_name, 0, 2) }}
         </span>
         <div>
@@ -21,9 +21,20 @@
                 @else
                     <span class="wp-badge is-neutral">{{ __('locale.Inactive') }}</span>
                 @endif
+                @if (\App\Support\OrderEmployer::isOrderLinked($employer))
+                    <span class="wp-badge is-info">{{ __('locale.From order #:id', ['id' => $employer->booking_id]) }}</span>
+                @endif
             </p>
         </div>
     </div>
+
+    @if (\App\Support\OrderEmployer::isOrderLinked($employer))
+        {{-- Assigned on an order (App\Support\OrderEmployer): its details follow that order's visa details. --}}
+        <div class="w-form-alert is-info wp-fade-in" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:16px;">
+            <span>{{ __('locale.This employer comes from an order - change it with Assign Employer on that order.') }}</span>
+            <a href="{{ route('worker.partner.orders.show', $employer->booking_id) }}" class="w-btn w-btn-outline w-btn-sm">{{ __('locale.View Order') }}</a>
+        </div>
+    @endif
 
     <div class="w-info-card wp-fade-in">
         <h2>

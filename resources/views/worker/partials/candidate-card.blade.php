@@ -1,8 +1,9 @@
 {{-- The one candidate card, used everywhere cards are shown (home, /resumes,
 related candidates on the detail page, Partner Portal candidates). Order:
 photo (hiring-status pill), name + blue verified mark, then Experience Type,
-Profession, Employment Experience (Candidate::employment_periods - the
-detail page's Period values), Age, Religion, View Profile / Hire Now.
+Profession, Employment Experience (the rows added up: Candidate::
+total_experience_label, e.g. "9 Years Experience"), Age, Religion, View
+Profile / Hire Now.
 
 Optional, for the Partner Portal: $cardUrl (profile link, default the public
 resume page), $cardHireUrl/$cardHireLabel (second button, default Hire Now to
@@ -53,7 +54,7 @@ Continue opens the profile's Hire Now). --}}
             </div>
             <div>
                 {!! $periodIcon !!}
-                {{ $post->employment_periods ? implode(app()->getLocale() === 'ar' ? '، ' : ', ', $post->employment_periods) : __('locale.Fresher') }}
+                {{ $post->total_experience_label ?? __('locale.Fresher') }}
             </div>
             <div>
                 {!! $ageIcon !!}

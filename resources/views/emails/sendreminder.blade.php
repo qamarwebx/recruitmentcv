@@ -1,12 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Todo Reminder</title>
-</head>
-<body>
-    <p>{{ $data['body_msg'] }}</p>
-</body>
-</html>
+{{-- Todo reminder (App\Mail\TodoReminderMail - the todo reminder commands). Shared QAMAR HIRE layout.
+Variables: $data['body_msg'] (the reminder text, escaped; line breaks kept). Twin file in both apps. --}}
+@extends('emails.layouts.brand')
+@php($T = \App\Support\EmailTheme::class)
+
+@section('title', 'Todo Reminder')
+@section('preheader', 'You have a todo reminder.')
+
+@section('content')
+    <h1 style="{{ $T::H1 }}">Todo Reminder</h1>
+    <p style="{{ $T::P }}">{!! nl2br(e($data['body_msg'] ?? '')) !!}</p>
+@endsection

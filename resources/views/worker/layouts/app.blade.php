@@ -2,7 +2,9 @@
 <html lang="{{ app()->getLocale() }}" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {{-- viewport-fit=cover: the phone safe areas (env(safe-area-inset-*)) are
+    reported, so the mobile bottom navigation clears the home indicator. --}}
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {{-- Every page's own title/meta, with the global Qamr brand swapped for
     the partner's Company Profile name on a partner subdomain (SiteBrand;
     main site unchanged). yieldContent() returns escaped text, and SiteBrand
@@ -16,14 +18,18 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="{{ asset('worker/css/style.css') }}?v={{ @filemtime(public_path('worker/css/style.css')) ?: time() }}">
     {{-- This website's partner (host-resolved; none on recruitmentcv.com = global). --}}
     @include('worker.partials.logo-dimensions', ['logoPartnerId' => app()->bound('currentPartner') ? optional(app('currentPartner'))->id : null])
     @yield('page-style')
 </head>
-<body class="worker-scope">
+{{-- Mobile bottom navigation on every page with the site chrome (not /partner/login). --}}
+@php
+    $showBottomNav = !$__env->hasSection('hide-site-chrome');
+@endphp
+<body class="worker-scope{{ $showBottomNav ? ' w-has-bottom-nav' : '' }}">
 
     {{-- Pages that set @section('hide-site-chrome') (the standalone
     /partner/login page) render without the public header/footer. --}}
@@ -37,6 +43,10 @@
 
     @sectionMissing('hide-site-chrome')
         @include('worker.partials.footer')
+    @endif
+
+    @if ($showBottomNav)
+        @include('worker.partials.mobile-bottom-nav')
     @endif
 
     {{-- The /partner/login page renders this same form inline in its own

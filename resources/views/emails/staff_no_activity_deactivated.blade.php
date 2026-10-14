@@ -1,58 +1,37 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Account Deactivated</title>
-</head>
+{{-- Staff account deactivated - no activity today (App\Mail\StaffNoActivityDeactivatedMail).
+Shared QAMAR HIRE layout. Variables: $user, $todayDate, $todoIds. Task links unchanged. Twin file in both apps. --}}
+@extends('emails.layouts.brand')
+@php
+    $T = \App\Support\EmailTheme::class;
+    // Same links as before (by APP_ENV).
+    $baseUrl = env('APP_ENV') === 'production' ? 'https://qamarhire.test' : 'https://crm.qamarhire.com';
+@endphp
 
-<body style="font-family: Arial, sans-serif; background:#f5f5f5; padding:20px;">
+@section('title', 'Account Deactivated')
+@section('preheader', 'Your account has been temporarily deactivated due to inactivity.')
 
-<div style="max-width:600px; margin:0 auto; background:white; padding:25px; border-radius:8px;">
-
-    <h2 style="color:#d9534f;">Account Deactivated</h2>
-
-    <p>Dear {{ $user->name }},</p>
-
-    <p>
-        We noticed that there was <strong>no activity recorded today ({{ $todayDate }})</strong> 
-        in your assigned tasks.
-    </p>
-
-    <p>
-        As per company policy, due to inactivity your account has been temporarily 
-        <strong style="color:#d9534f;">deactivated</strong>.
-    </p>
-
-    <h3 style="margin-top:20px; color:#333;">Your Assigned Tasks for Today</h3>
-
-    @if(!empty($todoIds))
-        <ul>
+@section('content')
+    <h1 style="{{ $T::H1 }} color:{{ $T::RED }};">Account Deactivated</h1>
+    <p style="{{ $T::P }}">Dear <span dir="auto" style="{{ $T::STRONG }}">{{ $user->name }}</span>,</p>
+    <p style="{{ $T::P }}">We noticed that there was <strong>no activity recorded today ({{ $todayDate }})</strong> in your assigned tasks.</p>
+    @include('emails.partials.note', ['tone' => 'red', 'text' => 'As per company policy, due to inactivity your account has been temporarily deactivated.'])
+    <h2 style="{{ $T::H2 }}">Your Assigned Tasks for Today</h2>
+    @if (!empty($todoIds))
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;">
             @foreach ($todoIds as $taskId)
-                <li style="margin-bottom:6px;">
-                    @php
-                        $baseUrl = env('APP_ENV') === 'production'
-                            ? 'https://qamarhire.test'
-                            : 'https://crm.qamarhire.com';
-                    @endphp
-
-                    <a href="{{ $baseUrl }}/admin/todo?open_todo_model=true&todo_model_task_id={{ $taskId }}"
-                       style="color:#0275d8; text-decoration:none; font-weight:600;">
-                        View Task #{{ $taskId }}
-                    </a>
-                </li>
+                <tr>
+                    <td style="padding:4px 0; font-family:{{ $T::FONT }}; font-size:14px; line-height:20px;">
+                        &bull;&nbsp;<a href="{{ $baseUrl }}/admin/todo?open_todo_model=true&todo_model_task_id={{ $taskId }}" style="{{ $T::LINK }}">View Task #{{ $taskId }}</a>
+                    </td>
+                </tr>
             @endforeach
-        </ul>
+        </table>
     @else
-        <p>No tasks assigned for today.</p>
+        <p style="{{ $T::P }}">No tasks assigned for today.</p>
     @endif
+    <p style="{{ $T::P }}">If you believe this action is incorrect, kindly reach out to the system admin to reactivate your account.</p>
+@endsection
 
-    <p style="margin-top:25px;">
-        If you believe this action is incorrect, kindly reach out to the system admin 
-        to reactivate your account.
-    </p>
-
-    <p>Thank you,<br>System Automation</p>
-</div>
-
-</body>
-</html>
+@section('signoff')
+    Thank you,<br><span style="{{ $T::STRONG }}">System Automation</span>
+@endsection

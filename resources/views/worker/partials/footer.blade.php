@@ -34,9 +34,9 @@
                     <li><a href="{{ route('worker.home') }}">{{ __('locale.Home') }}</a></li>
                     <li><a href="{{ route('worker.resumes') }}">{{ __('locale.Browse Resumes') }}</a></li>
                     <li><a href="{{ route('worker.about') }}">{{ __('locale.About Us') }}</a></li>
+                    <li><a href="{{ route('worker.how-it-works') }}">{{ __('locale.How It Works') }}</a></li>
+                    <li><a href="{{ route('worker.pricing') }}">{{ __('locale.Pricing') }}</a></li>
                     <li><a href="{{ route('worker.contact') }}">{{ __('locale.Contact Us') }}</a></li>
-                    <li><a href="{{ route('worker.privacy') }}">{{ __('locale.Privacy Policy') }}</a></li>
-                    <li><a href="{{ route('worker.terms') }}">{{ __('locale.Terms of Service') }}</a></li>
                 </ul>
             </div>
 
@@ -76,7 +76,10 @@
 
         <div class="w-footer-bottom">
             <span>&copy; {{ date('Y') }} {{ $footer['copyright'] }}. {{ __('locale.All rights reserved.') }}</span>
-            <span>{{ __('locale.Worker Portal') }} &middot; {{ $footer['tagline_host'] }}</span>
+            <span>{{ __('locale.Worker Portal') }} &middot; {{ $footer['tagline_host'] }}
+                <a href="{{ route('worker.privacy') }}" class="w-footer-legal">{{ __('locale.Privacy Policy') }}</a>
+                <a href="{{ route('worker.terms') }}" class="w-footer-legal">{{ __('locale.Terms of Service') }}</a>
+            </span>
         </div>
     </div>
 </footer>

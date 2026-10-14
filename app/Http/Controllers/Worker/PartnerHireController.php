@@ -154,6 +154,10 @@ class PartnerHireController extends Controller
         // (App\Support\BookingReference), held until the order is committed.
         $response = \App\Support\BookingReference::withLock(function () use ($request, $post, $partner, &$booking) {
             return DB::transaction(function () use ($request, $post, $partner, &$booking) {
+            // Partner Hiring Limit: this partner's orders are counted one at a
+            // time (partner row locked first, before any booking rows).
+            \App\Support\PartnerHiringLimit::lock((int) $partner->id);
+
             // Duplicate guard: a partner should never end up with two live
             // orders for the same candidate, whether from a genuine
             // double-click or a repeated request. Locks the matching rows
@@ -172,6 +176,22 @@ class PartnerHireController extends Controller
                     'message' => __('locale.You already have an order for this candidate.'),
                     'booking_id' => $existing->id,
                 ], 409);
+            }
+
+            // Partner Hiring Limit (CRM -> Website -> Settings): no new order once
+            // any of the partner's daily / weekly / monthly limits is used up.
+            // Counted here, inside the locks, from the committed orders - the
+            // same count the pages show (App\Support\PartnerHiringLimit).
+            if ($limit = \App\Support\PartnerHiringLimit::blocked((int) $partner->id)) {
+                return response()->json([
+                    'status' => 'limit_reached',
+                    'message' => $limit['message'] . ' ' . __('locale.Limit') . ': ' . $limit['limit'] . ' · ' . __('locale.Used') . ': ' . $limit['used']
+                        . ' · ' . __('locale.Resets on') . ' ' . $limit['resets_at']->format('d M Y') . '.',
+                    'period' => $limit['period'],
+                    'limit' => $limit['limit'],
+                    'used' => $limit['used'],
+                    'resets_at' => $limit['resets_at']->toIso8601String(),
+                ], 422);
             }
 
             // Next free order number (highest + 1), allocated under the shared lock.

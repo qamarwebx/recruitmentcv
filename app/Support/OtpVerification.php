@@ -14,17 +14,47 @@ class OtpVerification
 {
     private const VERIFIED_KEY = 'otp_verified_mobile';
     private const ATTEMPTS_KEY = 'otp_attempts';
+    private const ISSUED_KEY = 'otp_issued';
     private const MAX_ATTEMPTS = 5;
+
+    /** How long a code from issued() stays valid. */
+    public const TTL_SECONDS = 600;
 
     /** Called whenever a new code is generated. */
     public static function reset(Request $request): void
     {
-        $request->session()->forget([self::VERIFIED_KEY, self::ATTEMPTS_KEY]);
+        $request->session()->forget([self::VERIFIED_KEY, self::ATTEMPTS_KEY, self::ISSUED_KEY]);
     }
 
     /**
-     * Strict, single-use, attempt-limited comparison. After MAX_ATTEMPTS
-     * wrong codes the code is discarded and a new one must be requested.
+     * Called right after a code has been put in the session (generate-otp2):
+     * starts that code's expiry clock. Tied to the code itself, so a code
+     * stored by a generator that never calls this keeps its old behaviour
+     * instead of inheriting another code's clock.
+     */
+    public static function issued(Request $request): void
+    {
+        $otp = (string) $request->session()->get('OTP');
+        if ($otp !== '') {
+            $request->session()->put(self::ISSUED_KEY, ['code' => hash('sha256', $otp), 'at' => time()]);
+        }
+    }
+
+    /** True when the session's current code came from issued() more than TTL_SECONDS ago. */
+    public static function isExpired(Request $request): bool
+    {
+        $issued = $request->session()->get(self::ISSUED_KEY);
+        $otp = (string) $request->session()->get('OTP');
+
+        return is_array($issued) && $otp !== ''
+            && hash_equals((string) ($issued['code'] ?? ''), hash('sha256', $otp))
+            && time() - (int) ($issued['at'] ?? 0) > self::TTL_SECONDS;
+    }
+
+    /**
+     * Strict, single-use, attempt-limited, expiring comparison. After
+     * MAX_ATTEMPTS wrong codes - or once the code has expired - it is
+     * discarded and a new one must be requested.
      */
     public static function check(Request $request, $submitted): bool
     {
@@ -33,6 +63,12 @@ class OtpVerification
         $submitted = trim((string) $submitted);
 
         if ($expected === null || (string) $expected === '' || $submitted === '') {
+            return false;
+        }
+
+        if (self::isExpired($request)) {
+            $session->forget(['OTP', self::ATTEMPTS_KEY, self::ISSUED_KEY]);
+
             return false;
         }
 
@@ -47,7 +83,7 @@ class OtpVerification
             return false;
         }
 
-        $session->forget(['OTP', self::ATTEMPTS_KEY]);
+        $session->forget(['OTP', self::ATTEMPTS_KEY, self::ISSUED_KEY]);
         $session->put(self::VERIFIED_KEY, (string) $session->get('Mobile'));
 
         return true;

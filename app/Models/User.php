@@ -75,4 +75,15 @@ class User extends Authenticatable
             || !empty($this->google_id)
             || !empty($this->last_login_from);
     }
+
+    /**
+     * A verified mobile: a number on file AND mobile_verified_at (set only by
+     * the customer mobile OTP flows; cleared when a partner changes the
+     * number). Both are checked together - the same rule as
+     * Partner::hasVerifiedMobile().
+     */
+    public function hasVerifiedMobile(): bool
+    {
+        return filled($this->mobile_no) && filled($this->mobile_verified_at);
+    }
 }

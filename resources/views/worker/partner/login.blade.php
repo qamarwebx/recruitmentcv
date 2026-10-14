@@ -5,6 +5,13 @@
 {{-- Standalone page: no public website header/footer. --}}
 @section('hide-site-chrome', '1')
 
+@section('page-style')
+    {{-- Admin design system v1 (same tokens + components as the portal), scoped to .w-partner-auth-page. --}}
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ asset('worker/css/tokens.css') }}?v={{ @filemtime(public_path('worker/css/tokens.css')) ?: time() }}">
+    <link rel="stylesheet" href="{{ asset('worker/css/components.css') }}?v={{ @filemtime(public_path('worker/css/components.css')) ?: time() }}">
+@endsection
+
 @section('content')
     <section class="w-partner-auth-page">
         <div class="w-partner-auth-page-inner">

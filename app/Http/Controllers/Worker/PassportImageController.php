@@ -13,8 +13,8 @@ use App\Support\PassportImage;
  * - file(): /admin/assets/images/candidate/<...PPFRONT/PPBACK... | ...-DL-...>
  *   - the document files themselves (public/.htaccess sends these requests
  *   here instead of letting the web server hand out the file). The original
- *   only for a signed-in partner whose Registration Status is Approved
- *   (PassportAccess); everyone else - and a document-named file no candidate
+ *   only for a signed-in customer or partner with an OTP-verified mobile
+ *   (PassportAccess; no partner approval required); everyone else - and a document-named file no candidate
  *   owns (an orphaned old upload) - gets the blurred copy. So typing /
  *   guessing / opening the file URL never bypasses the blur.
  * - preview() / licencePreview(): the blurred copy for the public resume

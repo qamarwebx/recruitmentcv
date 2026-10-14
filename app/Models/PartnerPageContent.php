@@ -25,7 +25,7 @@ class PartnerPageContent extends Model
         'content' => 'array',
     ];
 
-    public const PAGES = ['home', 'resumes', 'about', 'contact', 'privacy', 'terms', 'footer'];
+    public const PAGES = ['home', 'resumes', 'about', 'contact', 'privacy', 'terms', 'footer', 'how_it_works', 'pricing'];
 
     /**
      * Every overridable Website Config field per page (dot keys inside
@@ -76,24 +76,34 @@ class PartnerPageContent extends Model
         ],
         'about' => [
             'header_title' => 'text',
+            'header_title_highlight' => 'text',
             'header_subtitle' => 'long',
-            'intro_text' => 'long',
+            'hero_primary_text' => 'text',
+            'hero_secondary_text' => 'text',
+            'search_eyebrow' => 'text',
+            'search_heading' => 'text',
+            'search_subheading' => 'long',
+            'who_eyebrow' => 'text',
+            'who_heading' => 'text',
+            'body' => 'body',
+            'who_cta_text' => 'text',
+            'who_photo_tag' => 'text',
             'why_choose_eyebrow' => 'text',
             'why_choose_heading' => 'text',
+            'mvv_eyebrow' => 'text',
+            'mvv_heading' => 'text',
             'mission_heading' => 'text',
             'mission_text' => 'long',
             'vision_heading' => 'text',
             'vision_text' => 'long',
             'values_heading' => 'text',
             'values_text' => 'long',
-            'value_added_eyebrow' => 'text',
-            'value_added_heading' => 'text',
-            'value_added_1_heading' => 'text',
-            'value_added_1_text' => 'long',
-            'value_added_2_heading' => 'text',
-            'value_added_2_text' => 'long',
-            'value_added_3_heading' => 'text',
-            'value_added_3_text' => 'long',
+            'offices_eyebrow' => 'text',
+            'offices_heading' => 'text',
+            'offices_subheading' => 'long',
+            'offices_photo_tag' => 'text',
+            'gallery_eyebrow' => 'text',
+            'gallery_heading' => 'text',
             'cta_heading' => 'text',
             'cta_text' => 'long',
             'cta_button_text' => 'text',
@@ -124,6 +134,57 @@ class PartnerPageContent extends Model
             'description' => 'long',
             'address' => 'long',
         ],
+        // How It Works (/how-it-works) - steps are a list beside content.en/ar (App\Support\InfoPages).
+        'how_it_works' => [
+            'header_title' => 'text',
+            'header_title_highlight' => 'text',
+            'header_subtitle' => 'long',
+            'hero_primary_text' => 'text',
+            'hero_secondary_text' => 'text',
+            'setup_title' => 'text',
+            'setup_subtitle' => 'text',
+            'setup_badge' => 'text',
+            'body' => 'body',
+            'steps_eyebrow' => 'text',
+            'steps_heading' => 'text',
+            'steps_subheading' => 'long',
+            'compare_eyebrow' => 'text',
+            'compare_heading' => 'text',
+            'compare_col_with' => 'text',
+            'compare_col_without' => 'text',
+            'faq_eyebrow' => 'text',
+            'faq_heading' => 'text',
+            'cta_heading' => 'text',
+            'cta_text' => 'long',
+            'cta_button_text' => 'text',
+            'cta_url' => 'url',
+        ],
+        // Pricing (/pricing) - plans are a list beside content.en/ar, never inherited (App\Support\InfoPages).
+        'pricing' => [
+            'header_title' => 'text',
+            'header_title_highlight' => 'text',
+            'header_subtitle' => 'long',
+            'hero_primary_text' => 'text',
+            'hero_secondary_text' => 'text',
+            'body' => 'body',
+            'plans_heading' => 'text',
+            'plans_subheading' => 'long',
+            'empty_text' => 'long',
+            'categories_eyebrow' => 'text',
+            'categories_heading' => 'text',
+            'categories_col_name' => 'text',
+            'categories_col_meaning' => 'text',
+            'categories_col_charge' => 'text',
+            'billing_eyebrow' => 'text',
+            'billing_heading' => 'text',
+            'billing_text' => 'long',
+            'faq_eyebrow' => 'text',
+            'faq_heading' => 'text',
+            'cta_heading' => 'text',
+            'cta_text' => 'long',
+            'cta_button_text' => 'text',
+            'cta_url' => 'url',
+        ],
     ];
 
     private const FIELD_RULES = [
@@ -131,6 +192,8 @@ class PartnerPageContent extends Model
         'long' => 'nullable|string|max:2000',
         'email' => 'nullable|email|max:255',
         'body' => 'nullable|string|max:50000',
+        // A link: http(s)://... or a /path on the same website.
+        'url' => ['nullable', 'string', 'max:500', 'regex:#^(https?://[^\s]+|/[^\s]*)$#i'],
     ];
 
     /**
@@ -298,6 +361,10 @@ class PartnerPageContent extends Model
                         : __('locale.The terms that govern access to and use of the Qamr International Worker Portal.', [], $locale),
                     'body' => static::renderDefaultLegalBody('worker.partials.terms-of-service-legal-content', $frontwebsite, $locale, $legal),
                 ];
+
+            case 'how_it_works':
+            case 'pricing':
+                return \App\Support\InfoPages::defaults($page, $locale);
         }
 
         return [];
@@ -460,9 +527,10 @@ class PartnerPageContent extends Model
             return static::rowFor(null, $page)->content[$locale] ?? [];
         }
 
+        // Empty / whitespace-only partner values never hide what it inherits.
         return array_replace_recursive(
             static::inheritedGlobal($partnerId, $page, $locale),
-            static::rowFor($partnerId, $page)->content[$locale] ?? []
+            \App\Support\PartnerGlobal::filled(static::rowFor($partnerId, $page)->content[$locale] ?? [])
         );
     }
 
@@ -483,16 +551,20 @@ class PartnerPageContent extends Model
             }
         }
 
+        // "Recruitmentcv Partner (Global)" (App\Support\PartnerGlobal): its
+        // values come before the recruitmentcv.com ones, field by field.
+        $partnerGlobal = \App\Support\PartnerGlobal::localeContent($page, $locale);
+
         // Footer address: a partner with its own Company Profile address keeps
-        // it (its default) rather than inheriting the global footer address.
-        if ($page === 'footer' && isset($global['address'])) {
+        // it (its default) rather than inheriting a global footer address.
+        if ($page === 'footer' && (isset($global['address']) || isset($partnerGlobal['address']))) {
             $company = \App\Support\SiteBrand::companyFromDomain(Domain::where('partner_id', $partnerId)->first());
             if (\App\Support\SiteBrand::companyField($company, 'address', $locale) !== null) {
-                unset($global['address']);
+                unset($global['address'], $partnerGlobal['address']);
             }
         }
 
-        return $global;
+        return array_replace_recursive($global, $partnerGlobal);
     }
 
     /**
@@ -548,15 +620,27 @@ class PartnerPageContent extends Model
      */
     public static function effectiveBranches(?int $partnerId): array
     {
-        foreach (array_unique([$partnerId, null]) as $context) {
-            $branches = static::rowFor($context, 'contact')->content['branches'] ?? null;
-
-            if (is_array($branches)) {
-                return $branches;
-            }
+        if ($partnerId && is_array($own = static::rowFor($partnerId, 'contact')->content['branches'] ?? null)) {
+            return $own;
         }
 
-        return static::defaultBranches();
+        if ($partnerId) {
+            return static::inheritedBranches();
+        }
+
+        return is_array($global = static::rowFor(null, 'contact')->content['branches'] ?? null) ? $global : static::defaultBranches();
+    }
+
+    /**
+     * What a partner shows without its own list: the "Recruitmentcv Partner
+     * (Global)" list, else the recruitmentcv.com list, else the default.
+     */
+    public static function inheritedBranches(): array
+    {
+        $list = \App\Support\PartnerGlobal::list('contact', 'branches')
+            ?? (is_array($global = static::rowFor(null, 'contact')->content['branches'] ?? null) ? $global : null);
+
+        return $list ?? static::defaultBranches();
     }
 
     /**
@@ -594,6 +678,12 @@ class PartnerPageContent extends Model
         return array_merge(static::defaultWhatsapp(), static::savedWhatsapp(null));
     }
 
+    /** What a partner inherits: "Recruitmentcv Partner (Global)" values over the central ones, field by field. */
+    public static function partnerInheritedWhatsapp(): array
+    {
+        return array_merge(static::centralWhatsapp(), \App\Support\PartnerGlobal::filled(\App\Support\PartnerGlobal::content(static::WHATSAPP)));
+    }
+
     /**
      * This context's saved WhatsApp settings (a partner's, or the central
      * apex website's - see rowFor()) merged key-by-key over the defaults, plus the
@@ -610,10 +700,11 @@ class PartnerPageContent extends Model
 
         $saved = static::savedWhatsapp($partnerId);
 
-        // Field by field: a partner's own values, else the central (CRM)
-        // settings, else the code fallback; the central context itself
-        // (main site, Partner Portal support) = central over code fallback.
-        $settings = array_merge($partnerId ? static::centralWhatsapp() : static::defaultWhatsapp(), $saved);
+        // Field by field: a partner's own values, else "Recruitmentcv Partner
+        // (Global)", else the central (CRM) settings, else the code fallback;
+        // the central context itself (main site, Partner Portal support) =
+        // central over code fallback.
+        $settings = array_merge($partnerId ? static::partnerInheritedWhatsapp() : static::centralWhatsapp(), $saved);
 
         $iconUrl = null;
         if ($settings['icon']) {

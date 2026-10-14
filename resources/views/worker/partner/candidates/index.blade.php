@@ -12,6 +12,7 @@
 @endsection
 
 @section('content')
+    @include('worker.partials.hiring-limit-notice', ['hlClass' => 'wp-hiring-limit-page'])
     <form method="GET" class="wp-filter-bar wp-fade-in">
         <select name="search" class="w-select select2" data-placeholder="{{ __('locale.Search by name, reference or passport no.') }}" data-allow-clear="true" onchange="this.form.submit()">
             <option value=""></option>

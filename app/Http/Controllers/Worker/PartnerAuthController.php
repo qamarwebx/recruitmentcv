@@ -15,6 +15,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use App\Support\OtpVerification;
 use App\Support\PartnerMobile;
+use App\Support\PhoneNumber;
 
 /**
  * Completes partner login/registration after the shared OTP endpoints
@@ -1007,6 +1008,10 @@ class PartnerAuthController extends Controller
 
         if (!$mobile || !OtpVerification::isVerified($request)) {
             return response()->json(['status' => 'error', 'message' => __('locale.Please verify your mobile number first.')], 422);
+        }
+
+        if (!PhoneNumber::isValid($request->session()->get('CountryCode'), $mobile)) {
+            return response()->json(['status' => 'error', 'message' => __('locale.Please enter a valid mobile number.')], 422);
         }
 
         $existing = PartnerMobile::query($request->session()->get('CountryCode'), $mobile)->where('id', '!=', $partner->id)->first();

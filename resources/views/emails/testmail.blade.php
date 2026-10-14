@@ -1,13 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Booking Notifcation</title>
-</head>
-<body>
-    <h5>{{ 'Dear '.$data['email'] }}</h5>
-    <p>{{ $data['msgBody'] }}</p>
-</body>
-</html>
+{{-- Test email (App\Mail\SendTestMail). Shared QAMAR HIRE layout.
+Variables: $data['email'], $data['msgBody']. Twin file in both apps. --}}
+@extends('emails.layouts.brand')
+@php($T = \App\Support\EmailTheme::class)
+
+@section('title', 'Test Email')
+@section('preheader', 'Test email from QAMAR HIRE.')
+
+@section('content')
+    <h1 style="{{ $T::H1 }}">Test Email</h1>
+    <p style="{{ $T::P }}">Dear <span dir="auto" style="{{ $T::STRONG }}">{{ $data['email'] ?? '' }}</span>,</p>
+    <p style="{{ $T::P }}">{!! nl2br(e($data['msgBody'] ?? '')) !!}</p>
+@endsection

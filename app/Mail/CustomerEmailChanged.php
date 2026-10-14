@@ -30,7 +30,7 @@ class CustomerEmailChanged extends Mailable
     public function envelope()
     {
         return new Envelope(
-            subject: __('locale.Your email address has been changed') . ' | ' . $this->data['brand']['name'],
+            subject: __('locale.Your Email Address Has Been Changed'),
         );
     }
 

@@ -51,6 +51,12 @@ final class LogoDimensions
             ->value('content');
         $saved = is_string($content) ? (json_decode($content, true) ?: []) : [];
 
+        return self::valid($saved);
+    }
+
+    /** Saved sizes -> field => int|null (only whole numbers within the field's range). */
+    private static function valid(array $saved): array
+    {
         $values = [];
         foreach (self::FIELDS as $field => [, $min, $max]) {
             $value = $saved[$field] ?? null;
@@ -61,7 +67,27 @@ final class LogoDimensions
     }
 
     /** What a partner without its own value gets: the global value, else the default. */
+    /** "Recruitmentcv Partner (Global)" sizes ('pg:branding' row; null = not set there). */
+    public static function partnerGlobal(): array
+    {
+        return self::valid(PartnerGlobal::content(self::PAGE));
+    }
+
+    /** What a partner falls back to: Partner Global -> global -> system default. */
     public static function inherited(): array
+    {
+        $global = self::own(null);
+        $partnerGlobal = self::partnerGlobal();
+        $values = [];
+        foreach (self::FIELDS as $field => [, , , $default]) {
+            $values[$field] = $partnerGlobal[$field] ?? $global[$field] ?? $default;
+        }
+
+        return $values;
+    }
+
+    /** What the Partner Global scope falls back to: global -> system default. */
+    public static function globalInherited(): array
     {
         $global = self::own(null);
         $values = [];
@@ -76,14 +102,19 @@ final class LogoDimensions
      * Effective values for a context: ['values' => field => px, 'sources' => field => partner|global|default].
      * $partnerId null = the main site (global -> default).
      */
-    public static function effective(?int $partnerId): array
+    public static function effective(?int $partnerId, bool $partnerGlobalScope = false): array
     {
         $global = self::own(null);
-        $own = $partnerId ? self::own($partnerId) : array_fill_keys(array_keys(self::FIELDS), null);
+        $none = array_fill_keys(array_keys(self::FIELDS), null);
+        $own = $partnerId ? self::own($partnerId) : $none;
+        // Partners (and the Partner Global editor itself): Partner Global before global.
+        $partnerGlobal = ($partnerId || $partnerGlobalScope) ? self::partnerGlobal() : $none;
         $values = $sources = [];
         foreach (self::FIELDS as $field => [, , , $default]) {
             if ($own[$field] !== null) {
                 [$values[$field], $sources[$field]] = [$own[$field], 'partner'];
+            } elseif ($partnerGlobal[$field] !== null) {
+                [$values[$field], $sources[$field]] = [$partnerGlobal[$field], 'partner_global'];
             } elseif ($global[$field] !== null) {
                 [$values[$field], $sources[$field]] = [$global[$field], 'global'];
             } else {
@@ -119,17 +150,19 @@ final class LogoDimensions
      * Only fields whose stored value actually changes are returned, so an
      * empty result = nothing to save.
      */
-    public static function changes(?int $partnerId, array $input): array
+    public static function changes(?int $partnerId, array $input, bool $partnerGlobalScope = false): array
     {
-        $inherited = $partnerId ? self::inherited() : null;
-        $own = self::own($partnerId);
+        // Partner: values equal to what it inherits are not overrides; the
+        // Partner Global scope likewise against global -> default.
+        $inherited = $partnerGlobalScope ? self::globalInherited() : ($partnerId ? self::inherited() : null);
+        $own = $partnerGlobalScope ? self::partnerGlobal() : self::own($partnerId);
         $changes = [];
         foreach (array_keys(self::FIELDS) as $field) {
             if (!array_key_exists($field, $input)) {
                 continue;
             }
             $value = $input[$field] === null || $input[$field] === '' ? null : (int) $input[$field];
-            if ($partnerId && $value !== null && $value === $inherited[$field]) {
+            if ($inherited !== null && $value !== null && $value === $inherited[$field]) {
                 $value = null;
             }
             if ($value !== $own[$field]) {
@@ -141,9 +174,13 @@ final class LogoDimensions
     }
 
     /** For a settings form: effective values + sources, this context's own values, and what an empty field falls back to. */
-    public static function formData(?int $partnerId): array
+    public static function formData(?int $partnerId, bool $partnerGlobalScope = false): array
     {
         $defaults = array_map(fn ($f) => $f[3], self::FIELDS);
+
+        if ($partnerGlobalScope) {
+            return self::effective(null, true) + ['own' => self::partnerGlobal(), 'fallback' => self::globalInherited()];
+        }
 
         return self::effective($partnerId) + [
             'own' => self::own($partnerId),

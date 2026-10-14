@@ -1,168 +1,276 @@
 @extends('worker.layouts.app')
 
+{{-- About Us, laid out like the design reference ("RecruitmentCV Pages"). Every
+     text and list comes from Website Config -> About Us ($page / $lists: partner
+     -> Recruitmentcv Partner (Global) -> recruitmentcv.com; an Arabic field left
+     empty shows the English one). A part with nothing saved is not shown.
+     Candidates: the latest available public candidates with the same fields and
+     photo as the listing cards (WorkerPageController::aboutUs). --}}
+@php
+    $locale = app()->getLocale();
+    $txt = fn ($key) => trim((string) ($page[$key] ?? ''));
+    $item = fn ($row, $field) => \App\Support\PageLists::text($row, $field, $locale);
+    $body = \App\Support\HtmlSanitizer::clean((string) ($page['body'] ?? ''));
+    $hasBody = trim(strip_tags($body)) !== '';
+    $trust = array_values(array_filter($lists['trust'] ?? [], fn ($r) => $item($r, 'text') !== ''));
+    $features = array_values(array_filter($lists['features'] ?? [], fn ($r) => $item($r, 'title') !== ''));
+    $offices = array_values(array_filter($lists['offices'] ?? [], fn ($r) => $item($r, 'city') !== ''));
+    $mvv = array_values(array_filter([
+        ['heading' => $txt('mission_heading'), 'text' => $txt('mission_text'), 'icon' => 'target'],
+        ['heading' => $txt('vision_heading'), 'text' => $txt('vision_text'), 'icon' => 'eye'],
+        ['heading' => $txt('values_heading'), 'text' => $txt('values_text'), 'icon' => 'heart'],
+    ], fn ($card) => $card['heading'] !== '' || $card['text'] !== ''));
+    // Photos already on the site (public/user/img/gallery, as qamarhire.com's About page).
+    $whoPhoto = asset('user/img/gallery/team.jpg');
+    $officePhoto = asset('user/img/gallery/Recp.jpg');
+    $galleryImages = ['team.jpg', 'team3.JPG', 'team4.JPG', 'team5.JPG', 'team8.JPG', 'team6.JPG', 'team7.JPG'];
+    $title = $txt('header_title') ?: __('locale.About Us');
+@endphp
+
 @section('title', __('locale.About Us') . ' — Qamr Worker Portal')
-@section('meta_description', 'Learn about Qamr International\'s mission, vision and values behind the Worker Portal at recruitmentcv.com.')
+@section('meta_description', \Illuminate\Support\Str::limit($txt('header_subtitle') ?: $title, 160, '…'))
 
 @section('content')
-
-    @php
-        // Partner Website Config override, then the SAME site-wide
-        // frontendwebsiteconfigs field the CRM's own About Us config
-        // already drives, then the hardcoded default - never a second
-        // content system, just one more (optional) layer on top.
-        $aboutText = $aboutContent['intro_text'] ?? ((app()->getLocale() === 'ar' && !empty($frontwebsite->about_us_ar ?? null))
-            ? $frontwebsite->about_us_ar
-            : ($frontwebsite->about_us_eng ?? __('locale.Connecting verified, work-ready candidates with employers who need reliable talent, fast.')));
-
-        // Same photos as qamarhire.com's own About Us gallery
-        // (resources/views/about.blade.php's #gallery section) - both sites
-        // share the same public/ asset tree, so these are referenced
-        // directly rather than duplicated into a Worker-specific folder.
-        $galleryImages = [
-            'user/img/gallery/team.jpg',
-            'user/img/gallery/Recp.jpg',
-            'user/img/gallery/team3.JPG',
-            'user/img/gallery/team4.JPG',
-            'user/img/gallery/team5.JPG',
-            'user/img/gallery/team8.JPG',
-            'user/img/gallery/team6.JPG',
-            'user/img/gallery/team7.JPG',
-        ];
-        $gallerySlides = collect($galleryImages)->map(function ($path, $i) {
-            $url = asset($path);
-            $html = '<img src="' . $url . '" alt="' . __('locale.Gallery') . ' ' . ($i + 1) . '">';
-            return ['thumb' => $url, 'html' => $html];
-        })->values();
-    @endphp
-
-    <section class="w-page-header">
-        <div class="w-container">
-            <div class="w-breadcrumb">
-                <a href="{{ route('worker.home') }}">{{ __('locale.Home') }}</a>
-                <span>/</span>
-                <span>{{ __('locale.About Us') }}</span>
-            </div>
-            <h1>{{ $aboutContent['header_title'] ?? __('locale.About Us') }}</h1>
-            <p>{{ $aboutContent['header_subtitle'] ?? __('locale.Learn about our mission, vision and the team behind Qamr International.') }}</p>
-        </div>
-    </section>
-
-    <section class="w-section">
-        <div class="w-container">
-            <div class="w-info-card w-fade" style="max-width:820px;margin-inline:auto;text-align:center;">
-                <p style="font-size:1.02rem;color:var(--w-ink-700);">{{ $aboutText }}</p>
-                <a href="{{ route('worker.contact') }}" class="w-btn w-btn-primary" style="margin-top:8px;">{{ __('locale.Contact Us') }}</a>
-            </div>
-        </div>
-    </section>
-
-    <section class="w-section" style="padding-top:0;">
-        <div class="w-container">
-            <div class="w-section-head w-center w-fade">
-                <span class="w-eyebrow" style="margin-inline:auto;">{{ $aboutContent['why_choose_eyebrow'] ?? __('locale.About Us') }}</span>
-                <h2>{{ $aboutContent['why_choose_heading'] ?? __('locale.Why Choose Us') }}</h2>
-            </div>
-
-            <div class="w-steps w-fade">
-                <div class="w-step-card">
-                    <span class="w-step-num">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
-                    </span>
-                    <h3>{{ $aboutContent['mission_heading'] ?? __('locale.Mission') }}</h3>
-                    <p>{{ $aboutContent['mission_text'] ?? __('locale.To provide unmatched recruitment solutions that help our clients become more productive and profitable.') }}</p>
-                </div>
-                <div class="w-step-card">
-                    <span class="w-step-num">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                    </span>
-                    <h3>{{ $aboutContent['vision_heading'] ?? __('locale.Vision') }}</h3>
-                    <p>{{ $aboutContent['vision_text'] ?? __('locale.To be globally known for an impactful, efficient and innovative Human Resources Consulting Partner.') }}</p>
-                </div>
-                <div class="w-step-card">
-                    <span class="w-step-num">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg>
-                    </span>
-                    <h3>{{ $aboutContent['values_heading'] ?? __('locale.Values') }}</h3>
-                    <p>{{ $aboutContent['values_text'] ?? __('locale.Creating a self-sustaining, productive environment that gives the best experiences and opportunities of growth to our customers and employees alike.') }}</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="w-section" style="padding-top:0;">
-        <div class="w-container">
-            <div class="w-section-head w-center w-fade">
-                <span class="w-eyebrow" style="margin-inline:auto;">{{ $aboutContent['value_added_eyebrow'] ?? __('locale.Why Choose Us') }}</span>
-                <h2>{{ $aboutContent['value_added_heading'] ?? __('locale.Value Added Services for World-Class Customer Experience') }}</h2>
-            </div>
-
-            <div class="w-steps w-fade">
-                <div class="w-step-card">
-                    <span class="w-step-num">1</span>
-                    <h3>{{ $aboutContent['value_added_1_heading'] ?? __('locale.Providing Service Before Self-Interest') }}</h3>
-                    <p>{{ $aboutContent['value_added_1_text'] ?? __('locale.We take care of everything before your visit so that you can focus on your business and growth by saving your valuable time.') }}</p>
-                </div>
-                <div class="w-step-card">
-                    <span class="w-step-num">2</span>
-                    <h3>{{ $aboutContent['value_added_2_heading'] ?? __('locale.We have always been at the forefront of providing value-added services') }}</h3>
-                    <p>{{ $aboutContent['value_added_2_text'] ?? __('locale.Catering our clients with all the benefits and convenience.') }}</p>
-                </div>
-                <div class="w-step-card">
-                    <span class="w-step-num">3</span>
-                    <h3>{{ $aboutContent['value_added_3_heading'] ?? __('locale.Delightful Experience') }}</h3>
-                    <p>{{ $aboutContent['value_added_3_text'] ?? __('locale.Taking into account the overall journey by building long term relationship with our clients.') }}</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="w-section" style="padding-top:0;">
-        <div class="w-container">
-            <div class="w-section-head w-center w-fade">
-                <span class="w-eyebrow" style="margin-inline:auto;">{{ __('locale.About Us') }}</span>
-                <h2>{{ __('locale.Gallery') }}</h2>
-            </div>
-
-            {{-- Same reusable slider already used on /resumes/details/{id}
-            (initGallery() in main.js runs on every page, no extra JS/CSS
-            needed here) - prev/next arrows + thumbnail indicators, not a
-            static image grid. position:static overrides that component's
-            own position:sticky (meant for its 2-column candidate-details
-            layout; this page has nothing beside it to stick against). --}}
-            <div class="w-gallery w-fade" style="position:static;max-width:640px;margin-inline:auto;">
-                <div data-gallery>
-                    <div class="w-gallery-main-wrap">
-                        <button type="button" class="w-gallery-nav w-gallery-nav-prev" data-gallery-prev aria-label="{{ __('locale.Previous') }}">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 18l-6-6 6-6"/></svg>
-                        </button>
-                        <div class="w-gallery-main" data-gallery-main>
-                            {!! $gallerySlides[0]['html'] !!}
-                        </div>
-                        <button type="button" class="w-gallery-nav w-gallery-nav-next" data-gallery-next aria-label="{{ __('locale.Next') }}">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
-                        </button>
+    <section class="w-ihero" data-info-hero>
+        <div class="w-container w-ihero-grid{{ count($candidates) ? '' : ' is-single' }}">
+            <div>
+                <nav class="w-crumbs" aria-label="{{ __('locale.Home') }}">
+                    <a href="{{ route('worker.home') }}">{{ __('locale.Home') }}</a><span aria-hidden="true">/</span><span>{{ __('locale.About Us') }}</span>
+                </nav>
+                <h1>{{ $title }}@if ($txt('header_title_highlight') !== '') <em>{{ $txt('header_title_highlight') }}</em>@endif</h1>
+                @if ($txt('header_subtitle') !== '')
+                    <p class="w-ihero-lead">{{ $txt('header_subtitle') }}</p>
+                @endif
+                @if ($txt('hero_primary_text') !== '' || $txt('hero_secondary_text') !== '')
+                    <div class="w-actions">
+                        @if ($txt('hero_primary_text') !== '')
+                            <a class="w-btn w-btn-primary" href="{{ route('worker.resumes') }}">@include('worker.partials.ref-icon', ['name' => 'search']){{ $txt('hero_primary_text') }}</a>
+                        @endif
+                        @if ($txt('hero_secondary_text') !== '')
+                            <a class="w-btn w-btn-line" href="{{ route('worker.contact') }}">{{ $txt('hero_secondary_text') }}</a>
+                        @endif
                     </div>
-
-                    <div class="w-gallery-thumbs">
-                        @foreach ($gallerySlides as $i => $slide)
-                            <button type="button" data-gallery-thumb data-slide-html="{{ $slide['html'] }}" class="{{ $i === 0 ? 'is-active' : '' }}">
-                                <img src="{{ $slide['thumb'] }}" alt="{{ __('locale.Gallery') }} {{ $i + 1 }}">
-                            </button>
+                @endif
+                @if (count($trust))
+                    <div class="w-trust">
+                        @foreach ($trust as $row)
+                            <span>@include('worker.partials.ref-icon', ['name' => $row['icon'] ?? '']){{ $item($row, 'text') }}</span>
                         @endforeach
                     </div>
+                @endif
+            </div>
+
+            @if (count($candidates))
+                <div class="w-cands" data-about-candidates>
+                    @foreach ($candidates as $post)
+                        @php
+                            $detailsUrl = route('worker.resume.details', $post->slug_text);
+                            $experience = $post->display_experience_label;
+                        @endphp
+                        <article class="w-cand" data-about-candidate>
+                            <a href="{{ $detailsUrl }}" class="w-cand-ph">
+                                <img src="{{ \App\Support\CandidatePhoto::url($post->photo_file) }}" alt="{{ $post->display_name }}" loading="lazy" onerror="this.onerror=null;this.src='{{ \App\Support\CandidatePhoto::defaultUrl() }}';">
+                                <i aria-hidden="true"></i>
+                            </a>
+                            <div>
+                                <div class="w-cand-st">{{ __('locale.Candidate Available') }}</div>
+                                <div class="w-cand-nm"><span>{{ $post->display_name }}@include('worker.partials.candidate-verified-icon')</span>@if ($experience !== '---')<span class="w-badge w-badge-gold">{{ $experience }}</span>@endif</div>
+                                <div class="w-cand-meta">
+                                    @if (optional($post->profession)->display_name)<span>{{ $post->profession->display_name }}</span>@endif
+                                    <span>{{ $post->total_experience_label ?? __('locale.Fresher') }}</span>
+                                    @if ($post->age)<span>{{ $post->age }} {{ __('locale.years old') }}</span>@endif
+                                </div>
+                            </div>
+                            <div class="w-cand-act">
+                                <a class="w-btn w-btn-line w-btn-sm" href="{{ $detailsUrl }}">{{ __('locale.View Profile') }}</a>
+                                <a class="w-btn w-btn-gold w-btn-sm" href="{{ $detailsUrl }}">{{ __('locale.Hire Now') }}</a>
+                            </div>
+                        </article>
+                    @endforeach
+                    <p class="w-cands-note">{{ __('locale.Latest available profiles.') }} <a href="{{ route('worker.resumes') }}">{{ __('locale.Browse Resumes') }}</a></p>
+                </div>
+            @endif
+        </div>
+    </section>
+
+    {{-- Find a driver: the Browse Resumes filters (same field names as /resumes). --}}
+    <section class="w-section" data-about-search>
+        <div class="w-container">
+            @if ($txt('search_eyebrow') !== '' || $txt('search_heading') !== '' || $txt('search_subheading') !== '')
+                <div class="w-section-head w-center">
+                    @if ($txt('search_eyebrow') !== '')<span class="w-eyebrow">{{ $txt('search_eyebrow') }}</span>@endif
+                    @if ($txt('search_heading') !== '')<h2>{{ $txt('search_heading') }}</h2>@endif
+                    @if ($txt('search_subheading') !== '')<p>{{ $txt('search_subheading') }}</p>@endif
+                </div>
+            @endif
+            <form class="w-search-panel" action="{{ route('worker.resumes') }}" method="get">
+                <div class="w-search-row">
+                    <label>{{ __('locale.Profession') }}
+                        <select name="proff_id">
+                            <option value="">{{ __('locale.All professions') }}</option>
+                            @foreach ($professions as $profession)
+                                <option value="{{ $profession->id }}">{{ $profession->display_name }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    <label>{{ __('locale.Experience Type') }}
+                        <select name="expcity_id">
+                            <option value="">{{ __('locale.Any experience') }}</option>
+                            <option value="1">{{ __('locale.Indian Experience') }}</option>
+                            <option value="2">{{ __('locale.Gulf / Abroad Experience') }}</option>
+                        </select>
+                    </label>
+                    <label>{{ __('locale.Work Location') }}
+                        <select name="location_id">
+                            <option value="">{{ __('locale.Any location') }}</option>
+                            @foreach ($cities as $city)
+                                <option value="{{ $city->id }}">{{ $city->display_name }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    <label>{{ __('locale.Age Range') }}
+                        <select name="age">
+                            <option value="">{{ __('locale.Any age') }}</option>
+                            @foreach (['22-25', '26-30', '31-35', '36-40', '41-45', '46-50'] as $range)
+                                <option value="{{ $range }}">{{ str_replace('-', ' – ', $range) }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    <button class="w-btn w-btn-primary" type="submit">@include('worker.partials.ref-icon', ['name' => 'search']){{ __('locale.Search') }}</button>
+                </div>
+                @if (count($chipProfessions) || count($chipCities))
+                    <div class="w-chips">
+                        <small>{{ __('locale.Browse:') }}</small>
+                        @foreach ($chipProfessions as $profession)
+                            <a href="{{ route('worker.resumes', ['proff_id' => $profession->id]) }}">{{ $profession->display_name }}</a>
+                        @endforeach
+                        <a href="{{ route('worker.resumes', ['expcity_id' => 2]) }}">{{ __('locale.Gulf / Abroad Experience') }}</a>
+                        @foreach ($chipCities as $city)
+                            <a href="{{ route('worker.resumes', ['location_id' => $city->id]) }}">{{ $city->display_name }}</a>
+                        @endforeach
+                    </div>
+                @endif
+            </form>
+        </div>
+    </section>
+
+    @if ($txt('who_heading') !== '' || $hasBody)
+        <section class="w-section w-band" data-about-who>
+            <div class="w-container w-split">
+                <div>
+                    @if ($txt('who_eyebrow') !== '')<span class="w-eyebrow">{{ $txt('who_eyebrow') }}</span>@endif
+                    @if ($txt('who_heading') !== '')
+                        <div class="w-section-head w-section-head-tight"><h2>{{ $txt('who_heading') }}</h2></div>
+                    @endif
+                    @if ($hasBody)
+                        <div class="w-prose">{!! $body !!}</div>
+                    @endif
+                    @if ($txt('who_cta_text') !== '')
+                        <p class="w-split-cta"><a class="w-btn w-btn-line" href="{{ route('worker.how-it-works') }}">{{ $txt('who_cta_text') }}</a></p>
+                    @endif
+                </div>
+                <div class="w-media">
+                    <div class="w-photo"><img src="{{ $whoPhoto }}" alt="{{ $txt('who_eyebrow') ?: __('locale.About Us') }}" loading="lazy"></div>
+                    @if ($txt('who_photo_tag') !== '')
+                        <div class="w-media-tag">@include('worker.partials.ref-icon', ['name' => 'pin']){{ $txt('who_photo_tag') }}</div>
+                    @endif
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
+    @endif
 
-    <section class="w-container" style="padding-bottom:80px;">
-        <div class="w-cta-banner w-fade">
-            <div>
-                <h2>{{ $aboutContent['cta_heading'] ?? __('locale.Have a question for our team?') }}</h2>
-                <p>{{ $aboutContent['cta_text'] ?? __("locale.We'd love to hear from you - get in touch and we'll respond as soon as we can.") }}</p>
+    @if (count($features))
+        <section class="w-section" data-about-features>
+            <div class="w-container">
+                @if ($txt('why_choose_eyebrow') !== '' || $txt('why_choose_heading') !== '')
+                    <div class="w-section-head w-center">
+                        @if ($txt('why_choose_eyebrow') !== '')<span class="w-eyebrow">{{ $txt('why_choose_eyebrow') }}</span>@endif
+                        @if ($txt('why_choose_heading') !== '')<h2>{{ $txt('why_choose_heading') }}</h2>@endif
+                    </div>
+                @endif
+                <div class="w-feat-grid">
+                    @foreach ($features as $row)
+                        <div class="w-feat">
+                            @if (!empty($row['icon']))<div class="w-ico">@include('worker.partials.ref-icon', ['name' => $row['icon']])</div>@endif
+                            <h3>{{ $item($row, 'title') }}</h3>
+                            @if ($item($row, 'text') !== '')<p>{{ $item($row, 'text') }}</p>@endif
+                        </div>
+                    @endforeach
+                </div>
             </div>
-            <a href="{{ route('worker.contact') }}" class="w-btn w-btn-accent">{{ $aboutContent['cta_button_text'] ?? __('locale.Contact Us') }}</a>
+        </section>
+    @endif
+
+    @if (count($mvv))
+        <section class="w-section w-band" data-about-mvv>
+            <div class="w-container">
+                @if ($txt('mvv_eyebrow') !== '' || $txt('mvv_heading') !== '')
+                    <div class="w-section-head w-center">
+                        @if ($txt('mvv_eyebrow') !== '')<span class="w-eyebrow">{{ $txt('mvv_eyebrow') }}</span>@endif
+                        @if ($txt('mvv_heading') !== '')<h2>{{ $txt('mvv_heading') }}</h2>@endif
+                    </div>
+                @endif
+                <div class="w-mvv">
+                    @foreach ($mvv as $card)
+                        <div class="w-mv">
+                            <div class="w-ico">@include('worker.partials.ref-icon', ['name' => $card['icon']])</div>
+                            @if ($card['heading'] !== '')<h3>{{ $card['heading'] }}</h3>@endif
+                            @if ($card['text'] !== '')<p>{{ $card['text'] }}</p>@endif
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </section>
+    @endif
+
+    @if (count($offices) || $txt('offices_heading') !== '')
+        <section class="w-section" data-about-offices>
+            <div class="w-container w-split is-rev">
+                <div>
+                    @if ($txt('offices_eyebrow') !== '')<span class="w-eyebrow">{{ $txt('offices_eyebrow') }}</span>@endif
+                    @if ($txt('offices_heading') !== '' || $txt('offices_subheading') !== '')
+                        <div class="w-section-head w-section-head-tight">
+                            @if ($txt('offices_heading') !== '')<h2>{{ $txt('offices_heading') }}</h2>@endif
+                            @if ($txt('offices_subheading') !== '')<p>{{ $txt('offices_subheading') }}</p>@endif
+                        </div>
+                    @endif
+                    @if (count($offices))
+                        <div class="w-offices">
+                            @foreach ($offices as $row)
+                                <div class="w-office{{ !empty($row['highlight']) ? ' is-hq' : '' }}">
+                                    @if ($item($row, 'tag') !== '')<span class="w-office-tag">{{ $item($row, 'tag') }}</span>@endif
+                                    <h3>@include('worker.partials.ref-icon', ['name' => 'pin']){{ $item($row, 'city') }}</h3>
+                                    @if ($item($row, 'text') !== '')<p>{{ $item($row, 'text') }}</p>@endif
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+                <div class="w-media">
+                    <div class="w-photo"><img src="{{ $officePhoto }}" alt="{{ $txt('offices_photo_tag') ?: $txt('offices_eyebrow') }}" loading="lazy"></div>
+                    @if ($txt('offices_photo_tag') !== '')
+                        <div class="w-media-tag">@include('worker.partials.ref-icon', ['name' => 'pin']){{ $txt('offices_photo_tag') }}</div>
+                    @endif
+                </div>
+            </div>
+        </section>
+    @endif
+
+    <section class="w-section w-band" data-about-gallery>
+        <div class="w-container">
+            @if ($txt('gallery_eyebrow') !== '' || $txt('gallery_heading') !== '')
+                <div class="w-section-head w-center">
+                    @if ($txt('gallery_eyebrow') !== '')<span class="w-eyebrow">{{ $txt('gallery_eyebrow') }}</span>@endif
+                    @if ($txt('gallery_heading') !== '')<h2>{{ $txt('gallery_heading') }}</h2>@endif
+                </div>
+            @endif
+            <div class="w-photo-grid">
+                @foreach ($galleryImages as $i => $file)
+                    <figure><img src="{{ asset('user/img/gallery/' . $file) }}" alt="{{ __('locale.Gallery') }} {{ $i + 1 }}" loading="lazy"></figure>
+                @endforeach
+            </div>
         </div>
     </section>
 
+    @include('worker.partials.info-cta', ['ctaFallback' => route('worker.contact')])
 @endsection

@@ -134,17 +134,7 @@ class WorkerPageController extends Controller
 
         $posts = $cand->orderBy('id', 'DESC')->paginate(9)->withQueryString();
 
-        $cities = Expecworkcity::whereExists(function ($query) {
-                $query->select(DB::raw(1))
-                    ->from('candidates')
-                    ->whereRaw('FIND_IN_SET(expecworkcities.id, candidates.expwp_id)')
-                    ->where('status', 1)
-                    ->where('publish', 1)
-                    ->where('isdelete', 0)
-                    ->where('cv_execute', 1);
-            })
-            ->orderBy('name')
-            ->get();
+        $cities = $this->workCities();
 
         $jobTypes = Profession::orderBy('eng_name')->get();
         $religions = Religion::orderBy('name')->get();
@@ -190,19 +180,139 @@ class WorkerPageController extends Controller
     }
 
     /**
-     * Content/structure mirrors qamarhire.com's own About Us page
-     * (FrontEndController::about() / resources/views/about.blade.php) -
-     * same frontendwebsiteconfigs-driven about_us_eng/about_us_ar copy, so
-     * editing it in the CRM's front-end website config updates both sites
-     * at once - rendered through the Worker Portal's own design system
-     * instead of that page's Bootstrap/Vuexy markup.
+     * About Us / How It Works / Pricing texts for this website: this
+     * language's values over the English ones over the standard texts
+     * (InfoPages::defaults) - a field saved only in English shows in English
+     * on the Arabic page rather than disappearing. Each value follows the
+     * usual chain: partner -> "Recruitmentcv Partner (Global)" ->
+     * recruitmentcv.com (PartnerPageContent::contentFor).
+     */
+    private function infoPageContent(string $page): array
+    {
+        $locale = app()->getLocale();
+        $content = \App\Support\PartnerGlobal::filled($this->pageContent($page));
+
+        if ($locale !== 'en') {
+            $english = \App\Support\PartnerGlobal::filled(PartnerPageContent::contentFor($this->currentPartnerId(), $page, 'en'));
+            $content = array_replace($english, $content);
+        }
+
+        return array_replace(\App\Support\InfoPages::defaults($page, $locale), $content);
+    }
+
+    /** What every redesigned info page shares: site config, this page's lists, the CTA contact list. */
+    private function infoPageData(string $page): array
+    {
+        $frontwebsite = DB::table('frontendwebsiteconfigs')->first();
+        $footer = \App\Support\SiteBrand::footer($frontwebsite);
+
+        return [
+            'frontwebsite' => $frontwebsite,
+            'webconfig' => Websiteconfig::first(),
+            'page' => $this->infoPageContent($page),
+            'lists' => \App\Support\PageLists::all($this->currentPartnerId(), $page),
+            // This website's own phone / e-mail (Company Profile, else the global footer ones) + its host.
+            'contact' => array_filter([
+                'phone' => trim((string) ($footer['phone'] ?? '')),
+                'email' => trim((string) ($footer['email'] ?? '')),
+                'web' => request()->getHost(),
+            ]),
+        ];
+    }
+
+    /** Work locations that have at least one public candidate (the /resumes filter list). */
+    private function workCities()
+    {
+        return Expecworkcity::whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('candidates')
+                    ->whereRaw('FIND_IN_SET(expecworkcities.id, candidates.expwp_id)')
+                    ->where('status', 1)
+                    ->where('publish', 1)
+                    ->where('isdelete', 0)
+                    ->where('cv_execute', 1);
+            })
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * The most common values among public candidates of a comma-list column
+     * (proff_id / expwp_id): [id => count], most first - the About page's
+     * "Browse" shortcuts, so they only ever point at filters with results.
+     */
+    private function topCandidateValues(string $table, string $column, int $limit): array
+    {
+        return DB::table($table)
+            ->join('candidates', fn ($join) => $join->on(DB::raw("FIND_IN_SET({$table}.id, candidates.{$column})"), '>', DB::raw('0')))
+            ->where('candidates.status', 1)
+            ->where('candidates.publish', 1)
+            ->where('candidates.isdelete', 0)
+            ->where('candidates.cv_execute', 1)
+            ->groupBy("{$table}.id")
+            ->orderByRaw('COUNT(*) DESC')
+            ->limit($limit)
+            ->selectRaw("{$table}.id, COUNT(*) AS total")
+            ->pluck('total', 'id')
+            ->all();
+    }
+
+    /**
+     * About Us (/about-us), laid out like the design reference: hero with
+     * the latest available candidates (the same public candidates, fields and
+     * photos as the listing cards - never passport or contact details), the
+     * Browse Resumes filters, who we are, why choose us, mission / vision /
+     * values, offices, gallery, CTA. Texts + lists from Website Config ->
+     * About Us (partner -> Partner Global -> recruitmentcv.com).
      */
     public function aboutUs()
     {
-        return view('worker.about', [
-            'frontwebsite' => DB::table('frontendwebsiteconfigs')->first(),
-            'webconfig' => Websiteconfig::first(),
-            'aboutContent' => $this->pageContent('about'),
+        [$viewerPartnerId, $viewerUserId] = \App\Support\PartnerCandidateAccess::viewer();
+        $candidates = \App\Support\PartnerCandidateAccess::whereAlreadyHired(
+                $this->availableCandidates()->with('profession:id,eng_name,ar_name'),
+                $viewerPartnerId,
+                $viewerUserId,
+                false
+            )
+            ->orderByDesc('id')
+            ->limit(3)
+            ->get();
+
+        $professions = Profession::orderBy('eng_name')->get();
+        $cities = $this->workCities();
+        $topProfessions = $this->topCandidateValues('professions', 'proff_id', 4);
+        $topCities = $this->topCandidateValues('expecworkcities', 'expwp_id', 3);
+
+        return view('worker.about', $this->infoPageData('about') + [
+            'candidates' => $candidates,
+            'professions' => $professions,
+            'cities' => $cities,
+            'chipProfessions' => $professions->whereIn('id', array_keys($topProfessions))->sortByDesc(fn ($p) => $topProfessions[$p->id])->values(),
+            'chipCities' => $cities->whereIn('id', array_keys($topCities))->sortByDesc(fn ($c) => $topCities[$c->id])->values(),
+        ]);
+    }
+
+    /**
+     * How It Works (/how-it-works): Website Config texts + lists (setup card,
+     * compare table, FAQs) and the steps (App\Support\InfoPages: own ->
+     * Partner Global -> recruitmentcv.com -> the Home process steps).
+     */
+    public function howItWorks()
+    {
+        return view('worker.how-it-works', $this->infoPageData(\App\Support\InfoPages::HOW) + [
+            'steps' => \App\Support\InfoPages::steps($this->currentPartnerId()),
+        ]);
+    }
+
+    /**
+     * Pricing (/pricing): Website Config texts + lists and this website's
+     * plans (own -> Partner Global -> recruitmentcv.com; never invented).
+     * Display only - no checkout or payment behind any plan.
+     */
+    public function pricing()
+    {
+        return view('worker.pricing', $this->infoPageData(\App\Support\InfoPages::PRICING) + [
+            'plans' => \App\Support\InfoPages::plans($this->currentPartnerId()),
         ]);
     }
 

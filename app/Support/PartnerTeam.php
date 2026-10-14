@@ -70,6 +70,7 @@ class PartnerTeam
             'view_candidate' => [],
             'download_cv' => [],
             'cancel_booking' => ['orders.cancel'],
+            'update_payment' => ['orders.payment'],
             'view_active' => [],
             'view_cancelled' => [],
             'card_view' => [],
@@ -468,7 +469,7 @@ class PartnerTeam
             'orders' => [
                 'view' => 'View Orders', 'search_filter' => 'Search/Filter Orders', 'view_order' => 'View Order',
                 'assign_visa' => 'Assign Visa', 'view_candidate' => 'View Candidate', 'download_cv' => 'Download CV',
-                'cancel_booking' => 'Cancel Booking', 'view_active' => 'View Active Orders', 'view_cancelled' => 'View Cancelled Orders',
+                'cancel_booking' => 'Cancel Booking', 'update_payment' => 'Update Payment', 'view_active' => 'View Active Orders', 'view_cancelled' => 'View Cancelled Orders',
                 'card_view' => 'Card View', 'table_view' => 'Table View',
             ],
         ];

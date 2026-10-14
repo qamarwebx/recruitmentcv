@@ -82,7 +82,8 @@ class WhatsappOtpController extends Controller
             curl_close($ch);
         }
 
-        return response()->json(['otp' => $otp], 200);
+        // Never the code itself: whoever holds it could verify any number.
+        return response()->json(['message' => 'otpsend'], 200);
     }
 
     public function generateOtp2(Request $request){
@@ -418,6 +419,8 @@ class WhatsappOtpController extends Controller
         }
 
 
+
+        OtpVerification::issued($request);
 
         $responseData['mobile'] = $mobile;
         $responseData['iso_code'] = $getCountry->iso_code;
@@ -1371,11 +1374,13 @@ class WhatsappOtpController extends Controller
 
     public function validateOtp2(Request $request){
         $responsedata = [];
+        // An expired code is rejected (and discarded) by check() too; told apart for the message.
+        $expired = OtpVerification::isExpired($request);
 
         if (OtpVerification::check($request, $request->otp)) {
             $responsedata['message'] = "success";
         }else{
-            $responsedata['message'] = "error";
+            $responsedata['message'] = $expired ? "expired" : "error";
         }
 
         return response()->json($responsedata);

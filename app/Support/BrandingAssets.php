@@ -9,7 +9,7 @@ use App\Models\PartnerPageContent;
  * The website branding images - header logo EN/AR, footer logo EN/AR,
  * favicon - and the one place their effective file is resolved:
  *
- *   partner's own -> global (recruitmentcv.com) -> built-in file
+ *   partner's own -> Recruitmentcv Partner (Global) -> global (recruitmentcv.com) -> built-in file
  *
  * (a partner's footer logo falls back to that partner's header logo first,
  * as partner sites always showed). Storage reuses what exists:
@@ -101,6 +101,10 @@ class BrandingAssets
             }
         }
 
+        if ($partnerId) {
+            // "Recruitmentcv Partner (Global)" (App\Support\PartnerGlobal) before the global image.
+            $candidates[] = [static::partnerGlobal()[$slot], 'partner_global'];
+        }
         $candidates[] = [static::own(null)[$slot], 'global'];
 
         foreach ($candidates as [$file, $source]) {
@@ -110,6 +114,18 @@ class BrandingAssets
         }
 
         return [static::DEFAULT_FILES[$slot], 'default'];
+    }
+
+    /** "Recruitmentcv Partner (Global)" uploaded files per slot ('pg:branding' row; null = not set). */
+    public static function partnerGlobal(): array
+    {
+        $content = \App\Support\PartnerGlobal::content(static::PAGE);
+        $files = [];
+        foreach (array_keys(static::SLOTS) as $slot) {
+            $files[$slot] = static::clean($content[$slot] ?? null);
+        }
+
+        return $files;
     }
 
     /** Public URL of a slot's effective file, versioned by its mtime. */

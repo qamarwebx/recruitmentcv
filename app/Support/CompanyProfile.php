@@ -19,12 +19,16 @@ use Illuminate\Support\Facades\DB;
  *   partner_id NULL; built-in default DEFAULT_NAME), address / mobile /
  *   email in the shared frontendwebsiteconfigs footer row (GLOBAL_COLUMNS,
  *   also qamarhire.com's footer);
- * - effective = partner value -> global value, field by field.
+ * - "Recruitmentcv Partner (Global)" value (App\Support\PartnerGlobal):
+ *   its 'pg:company' row, all six fields - used by partner websites only;
+ * - effective (partner) = partner value -> Partner Global value -> global
+ *   value, field by field; recruitmentcv.com itself = the global value.
  *
  * Append Company Name (show the Company Name under the logo):
- * the partner's explicit ON/OFF -> the global value -> OFF, both on the
- * 'branding' settings rows. An absent key = not configured; an explicit
- * OFF is a real value and never falls back.
+ * the partner's explicit ON/OFF -> the Partner Global value -> the global
+ * value -> OFF, on the 'branding' settings rows ('pg:branding' for Partner
+ * Global). An absent key = not configured; an explicit OFF is a real value
+ * and never falls back.
  */
 final class CompanyProfile
 {
@@ -102,6 +106,30 @@ final class CompanyProfile
         return $values;
     }
 
+    /** "Recruitmentcv Partner (Global)" values (field => ?string; null = not set there). */
+    public static function partnerGlobal(): array
+    {
+        $saved = PartnerGlobal::content(self::PAGE);
+        $values = [];
+        foreach (array_keys(self::FIELDS) as $field) {
+            $values[$field] = self::text($saved[$field] ?? null);
+        }
+
+        return $values;
+    }
+
+    /** What a partner falls back to for each field: Partner Global, else global (field => ?string). */
+    public static function partnerInherited($frontwebsite = false): array
+    {
+        $global = self::global($frontwebsite);
+        $values = [];
+        foreach (self::partnerGlobal() as $field => $value) {
+            $values[$field] = $value ?? $global[$field];
+        }
+
+        return $values;
+    }
+
     /** A partner's own values from its domains row (null = not set / no row). */
     public static function own($domain): array
     {
@@ -115,16 +143,22 @@ final class CompanyProfile
 
     /**
      * Effective Company Profile of a partner (null domain = the global one):
-     * ['values' => field => ?string, 'sources' => field => partner|global].
+     * ['values' => field => ?string, 'sources' => field => partner|partner_global|global].
      */
     public static function effective($domain, $frontwebsite = false): array
     {
         $global = self::global($frontwebsite);
         $own = $domain ? self::own($domain) : array_fill_keys(array_keys(self::FIELDS), null);
+        $partnerGlobal = $domain ? self::partnerGlobal() : array_fill_keys(array_keys(self::FIELDS), null);
         $values = $sources = [];
         foreach (array_keys(self::FIELDS) as $field) {
-            $values[$field] = $own[$field] ?? $global[$field];
-            $sources[$field] = $own[$field] !== null ? 'partner' : 'global';
+            if ($own[$field] !== null) {
+                [$values[$field], $sources[$field]] = [$own[$field], 'partner'];
+            } elseif ($partnerGlobal[$field] !== null) {
+                [$values[$field], $sources[$field]] = [$partnerGlobal[$field], 'partner_global'];
+            } else {
+                [$values[$field], $sources[$field]] = [$global[$field], 'global'];
+            }
         }
 
         return ['values' => $values, 'sources' => $sources];
@@ -139,8 +173,10 @@ final class CompanyProfile
     public static function nameIn(?array $own, string $locale): string
     {
         $field = $locale === 'ar' ? 'name_ar' : 'name';
+        // A partner ($own given): its name -> the Partner Global name -> the global name.
+        $partnerGlobal = $own !== null ? self::partnerGlobal()[$field] : null;
 
-        return self::text($own[$field] ?? null) ?? (self::global()[$field] ?? '');
+        return self::text($own[$field] ?? null) ?? $partnerGlobal ?? (self::global()[$field] ?? '');
     }
 
     /** The global Company Name for a language: the Arabic one for 'ar' when set, else the English one. */
@@ -171,14 +207,22 @@ final class CompanyProfile
         $content = fn (?object $row) => $row ? (json_decode((string) $row->content, true) ?: []) : [];
         $global = self::flag($content($rows->first(fn ($row) => $row->partner_id === null)));
         $own = $partnerId ? self::flag($content($rows->first(fn ($row) => (int) $row->partner_id === $partnerId))) : $global;
-        $default = $partnerId ? ($global ?? false) : false;
+        // Partners: the Partner Global ON/OFF comes before the global one.
+        $partnerGlobal = $partnerId ? self::partnerGlobalAppend() : null;
+        $default = $partnerId ? ($partnerGlobal ?? $global ?? false) : false;
 
         return [
             self::APPEND => $own ?? $default,
             self::APPEND . '_configured' => $own !== null,
             self::APPEND . '_default' => $default,
-            self::APPEND . '_source' => $own !== null ? ($partnerId ? 'partner' : 'global') : ($global !== null ? 'global' : 'default'),
+            self::APPEND . '_source' => $own !== null ? ($partnerId ? 'partner' : 'global') : ($partnerGlobal !== null ? 'partner_global' : ($global !== null ? 'global' : 'default')),
         ];
+    }
+
+    /** "Recruitmentcv Partner (Global)" Append Company Name (null = not configured there - the global value applies). */
+    public static function partnerGlobalAppend(): ?bool
+    {
+        return self::flag(PartnerGlobal::content(self::BRANDING_PAGE));
     }
 
     /**
@@ -195,6 +239,7 @@ final class CompanyProfile
     public static function forget(): void
     {
         self::$memo = [];
+        PartnerGlobal::forget();
     }
 
     // ---- internals -----------------------------------------------------------

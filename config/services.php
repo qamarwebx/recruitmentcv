@@ -41,6 +41,21 @@ return [
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect' => env('GOOGLE_CALLBACK_URL'),
     ],
+    // Partner Website -> SMTP -> "Add SMTP With Google" (App\Support\GoogleSmtpOAuth):
+    // Gmail SMTP with OAuth 2.0 / XOAUTH2. Its own OAuth client (Google Cloud:
+    // Gmail scope https://mail.google.com/ on the consent screen, the redirect
+    // URI below registered). Both apps need the same client id/secret - a saved
+    // Google SMTP is refreshed with it whichever app sends. Unset = the button
+    // explains that Google sign-in for SMTP is not set up, and saved Google
+    // SMTPs are skipped (the next SMTP / default settings send instead).
+    'google_smtp' => [
+        'client_id' => env('GOOGLE_SMTP_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_SMTP_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_SMTP_REDIRECT_URI', 'https://recruitmentcv.com/google/smtp/callback'),
+        'host' => env('GOOGLE_SMTP_HOST', 'smtp.gmail.com'),
+        'port' => (int) env('GOOGLE_SMTP_PORT', 587),
+        'encryption' => env('GOOGLE_SMTP_ENCRYPTION', 'tls'),
+    ],
     'google_contact' => [
         'client_id' => env('GOOGLE_CONTACT_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CONTACT_CLIENT_SECRET'),

@@ -10,6 +10,21 @@ class Candidate extends Model
     use HasFactory;
 
     /**
+     * A NEW candidate saved without an Expected Salary currency gets the default
+     * (App\Support\SalaryCurrency::DEFAULT, SAR) - every creation path uses this
+     * model (CRM Add Candidate, mobile API). Never touches an existing record or a
+     * currency that was given.
+     */
+    protected static function booted()
+    {
+        static::creating(function (self $candidate) {
+            if (trim((string) $candidate->exp_sal_currency) === '') {
+                $candidate->exp_sal_currency = \App\Support\SalaryCurrency::DEFAULT;
+            }
+        });
+    }
+
+    /**
      * candidates.gulfexperience codes => translation key (same codes as the
      * CRM's customercosts.exp_type). Used by display_experience_type and the
      * Partner Price Update page.
@@ -106,6 +121,17 @@ class Candidate extends Model
      * [] for a fresher. The candidate detail page's Employment Experience
      * card and every candidate card read it from here.
      */
+    /**
+     * All employment rows added up for one line on the candidate cards:
+     * "9 Years Experience" for "4,4,1" (App\Support\CandidateExperience), or
+     * null when there is no experience (the card keeps showing Fresher).
+     * employment_periods below stays the per-row list of the detail page.
+     */
+    public function getTotalExperienceLabelAttribute(): ?string
+    {
+        return \App\Support\CandidateExperience::totalLabel($this->experience);
+    }
+
     public function getEmploymentPeriodsAttribute(): array
     {
         if (!$this->experience || $this->experience == '0') {

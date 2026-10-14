@@ -40,6 +40,24 @@ class PhoneNumber
     }
 
     /**
+     * A typed mobile number in a valid shape: local part (local() - code and
+     * leading zeros dropped) of exactly the country's local length for the
+     * site's 5 countries, otherwise 6 to 15 digits (E.164 limit). The typed
+     * value may only contain digits, spaces, dashes, dots, brackets and +.
+     */
+    public static function isValid(?string $countryCode, ?string $mobile): bool
+    {
+        $mobile = trim((string) $mobile);
+        if ($mobile === '' || preg_match('/^[\d\s\-().+]+$/', $mobile) !== 1) {
+            return false;
+        }
+        $local = self::local($countryCode, $mobile);
+        $expected = self::LOCAL_LENGTH[preg_replace('/\D+/', '', (string) $countryCode)] ?? null;
+
+        return $expected !== null ? strlen($local) === $expected : strlen($local) >= 6 && strlen($local) <= 15;
+    }
+
+    /**
      * Display form "+<code> <local>" of a stored number (display only -
      * nothing is re-stored). Numbers stored CRM-style already carry their
      * code: the given (partner's) code is recognized first, then any known

@@ -24,8 +24,15 @@ final class SalaryCurrency
         'OMR' => 'Oman',
     ];
 
-    /** Expected Salary choices (the CRM Edit Personal dropdown). */
+    /** Currency of a new candidate saved without one (Candidate model creating hook). */
+    public const DEFAULT = 'SAR';
+
+    /** Former Expected Salary choices (the CRM Edit Personal dropdown, now a numeric box - amountError()). */
     public const AMOUNTS = ['500', '1000', '1500', '2000', '2500', '3000', '3500'];
+
+    /** Expected Salary typed in the CRM Edit Personal form: a whole number in this range. */
+    public const MIN_AMOUNT = 0;
+    public const MAX_AMOUNT = 5000;
 
     /** A currency word / code already typed into an old amount ("1800 RIYAL", "1800/- riyal"). */
     private const TRAILING_CURRENCY = '#[\s/\-]*(?:riyals?|rials?|dirhams?|dinars?|rupees?|rs\.?|sar|inr|qar|aed|kwd|bhd|omr|ريال|درهم|دينار)\s*$#iu';
@@ -66,6 +73,54 @@ final class SalaryCurrency
         $amount = (string) $amount;
 
         return $amount === '' || in_array($amount, self::AMOUNTS, true) || $amount === (string) $current;
+    }
+
+    /**
+     * Why an Expected Salary from the CRM Edit Personal form cannot be saved
+     * (null = it can): a whole number MIN_AMOUNT..MAX_AMOUNT, digits only (no
+     * sign, decimals, letters or spaces); empty (no salary, as before); or the
+     * record's own stored value unchanged - older free text such as "1800
+     * RIYAL" stays exactly as it is until a new amount is entered.
+     */
+    public static function amountError($amount, ?string $current): ?string
+    {
+        if ($amount === null || $amount === '') {
+            return null;
+        }
+        if (!is_string($amount) && !is_int($amount)) {
+            return 'Expected Salary must be a whole number (digits only).';
+        }
+        $amount = (string) $amount;
+        if ($current !== null && $current !== '' && $amount === $current) {
+            return null;
+        }
+        if (!preg_match('/^[0-9]+$/', $amount)) {
+            return 'Expected Salary must be a whole number (digits only - no letters, decimals or minus sign).';
+        }
+        $number = ltrim($amount, '0');
+        if (strlen($number) > strlen((string) self::MAX_AMOUNT) || (int) $number > self::MAX_AMOUNT) {
+            return 'Expected Salary cannot be more than ' . self::MAX_AMOUNT . '.';
+        }
+
+        return (int) $number < self::MIN_AMOUNT ? 'Expected Salary cannot be less than ' . self::MIN_AMOUNT . '.' : null;
+    }
+
+    /**
+     * The value to store for an amount that passed amountError(): the stored
+     * value itself when unchanged, a number without leading zeros ("0500" ->
+     * "500"), or null / '' as given (no salary).
+     */
+    public static function normalizeAmount($amount, ?string $current)
+    {
+        if ($amount === null || $amount === '') {
+            return $amount;
+        }
+        $amount = (string) $amount;
+        if ($current !== null && $current !== '' && $amount === $current) {
+            return $current;
+        }
+
+        return (string) (int) $amount;
     }
 
     /** "Saudi Arabia (SAR)" - the selector's option text. */
