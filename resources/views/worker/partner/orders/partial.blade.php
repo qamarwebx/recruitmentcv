@@ -104,6 +104,7 @@
                     </div>
                     <div class="wp-ocard-ref">
                         <span class="wp-ref-pill">{{ __('locale.Order') }} #{{ $order->reference_no }}</span>
+                        @include('worker.partner.orders.source-badge', ['order' => $order])
                     </div>
                 </header>
 
@@ -221,6 +222,7 @@
                         <tr>
                             <td>
                                 <span class="wp-cell-title">#{{ $order->reference_no }}</span>
+                                @include('worker.partner.orders.source-badge', ['order' => $order])
                             </td>
                             <td>
                                 <div class="wp-cell-person">

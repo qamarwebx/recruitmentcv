@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('title', 'Partner Portal') — Qamr Worker Portal</title>
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    {{-- The signed-in partner's Branding favicon (Partner Website → Branding),
-    otherwise the default icon. Shared by every /partner/* page. --}}
-    <link rel="icon" href="{{ Auth::guard('partner')->user()?->domain?->faviconUrl() ?: \App\Models\Domain::defaultFaviconUrl() }}">
+    {{-- The signed-in partner's favicon (App\Support\BrandingAssets: its own -> Partner Global ->
+    global -> built-in) with its configured size hint (App\Support\LogoDimensions). Every /partner/* page. --}}
+    @php
+        $__favPartnerId = Auth::guard('partner')->id();
+        $__favUrl = \App\Support\BrandingAssets::url('favicon', $__favPartnerId);
+    @endphp
+    <link rel="icon" href="{{ $__favUrl }}" sizes="{{ str_contains((string) parse_url($__favUrl, PHP_URL_PATH), '.svg') ? 'any' : \App\Support\LogoDimensions::faviconSizes($__favPartnerId) }}">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -49,9 +53,11 @@
         // authenticated request) rather than on a separately-queried
         // Domain row avoids a "call to a member function on null" fatal
         // for every partner who simply has no Domain row at all.
+        // Portal Logo (English / Arabic by page language) - App\Support\BrandingAssets: this partner's
+        // portal logo -> its header logo (what the sidebar showed before) -> Partner Global -> global
+        // portal logo -> its website footer logo -> built-in. Sized by --w-portal-logo-w/-h.
         $__isArabic = app()->getLocale() === 'ar';
-        $__partnerLogoFile = $__partner->portalLogoFile($__isArabic);
-        $__partnerLogoUrl = $__partnerLogoFile ? asset('admin/assets/images/partner/' . $__partnerLogoFile) : null;
+        $__partnerLogoUrl = \App\Support\BrandingAssets::url($__isArabic ? 'portal_logo_ar' : 'portal_logo_en', $__partner->id);
         $__defaultPartnerLogo = asset('user/img/logo/' . ($__isArabic ? 'new_logo_Arabic_white.webp' : 'Logo_eng_white.webp'));
 
         // Same $__partner->domain relation as above (already loaded, no extra
@@ -76,11 +82,7 @@
             <div class="wp-sidebar-brand">
                 {{-- "Append Company Name": logo + name side by side. --}}
                 @if ($__brandName !== '')<div class="wp-sidebar-brand-row">@endif
-                @if ($__partnerLogoUrl)
-                    <img src="{{ $__partnerLogoUrl }}" class="w-brand-logo" alt="{{ $__partnerLabel }}" onerror="this.onerror=null;this.src='{{ $__defaultPartnerLogo }}';this.alt='Qamr International';">
-                @else
-                    <x-brand-logo mode="dark" alt="Qamr International" />
-                @endif
+                <img src="{{ $__partnerLogoUrl }}" class="w-brand-logo" alt="{{ $__partnerLabel }}" onerror="this.onerror=null;this.src='{{ $__defaultPartnerLogo }}';this.alt='Qamr International';">
                 @if ($__brandName !== '')
                     <span class="wp-sidebar-brand-name" title="{{ $__brandName }}">{{ $__brandName }}</span>
                     </div>

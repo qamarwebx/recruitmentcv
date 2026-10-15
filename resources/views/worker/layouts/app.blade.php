@@ -12,9 +12,13 @@
     <title>{!! \App\Support\SiteBrand::brandEscapedText($__env->yieldContent('title', 'Qamr Worker Portal — Hire Verified, Work-Ready Candidates')) !!}</title>
     <meta name="description" content="{!! \App\Support\SiteBrand::brandEscapedText($__env->yieldContent('meta_description', 'Browse verified, work-ready candidate resumes and hire dependable talent through Qamr International\'s Worker Portal.')) !!}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    {{-- Partner favicon on a partner subdomain (ResolvePartnerWebsiteDomain),
-    otherwise the site default favicon. --}}
-    <link rel="icon" href="{{ !empty($partnerBrand['favicon']) ? $partnerBrand['favicon'] : \App\Models\Domain::defaultFaviconUrl() }}">
+    {{-- This website's favicon (partner from the host - subdomain or own domain; none = recruitmentcv.com):
+    App\Support\BrandingAssets partner -> Partner Global -> global -> built-in, with its size hint. --}}
+    @php
+        $__favPartnerId = app()->bound('currentPartner') ? optional(app('currentPartner'))->id : null;
+        $__favUrl = \App\Support\BrandingAssets::url('favicon', $__favPartnerId);
+    @endphp
+    <link rel="icon" href="{{ $__favUrl }}" sizes="{{ str_contains((string) parse_url($__favUrl, PHP_URL_PATH), '.svg') ? 'any' : \App\Support\LogoDimensions::faviconSizes($__favPartnerId) }}">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

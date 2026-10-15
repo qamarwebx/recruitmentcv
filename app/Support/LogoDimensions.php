@@ -5,39 +5,72 @@ namespace App\Support;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Header / Footer Logo Width & Height - ONE definition and effective-value
+ * Logo Width & Height per logo - ONE definition and effective-value
  * resolver for both apps (twin file, identical in the CRM and RecruitmentCV).
  *
- * Stored on the existing 'branding' settings rows (partner_page_contents,
- * the same rows BrandingAssets keeps the footer logos in): the central row
- * (partner_id NULL, CRM -> Website -> Global) holds the global values, a
- * partner's row only its own overrides (Partner Website -> Branding, or
- * CRM -> Website with that partner selected). Plain numbers (px).
+ * Seven logos, each with its own width + height (px), independent of the
+ * others: Website Header (English / Arabic), Website Footer (English /
+ * Arabic), Portal (English / Arabic) and the Favicon (square). Field keys:
+ * header_logo_* / footer_logo_* / portal_logo_* = English (the header and
+ * footer keys are the ones used before the Arabic logos had their own),
+ * *_ar_* = Arabic, favicon_*.
  *
- * Effective value per field: partner override -> global -> system default
- * (the sizes the site used before this setting existed). The values are
- * the MAXIMUM display area of the logo: the shared .w-brand-logo rule
- * (style.css) fits the logo inside it with object-fit: contain - never
- * stretched, cropped or resized on disk - and still scales it down on
- * tablet / phone so the header never breaks. Header height is capped at
- * 70px because the website header itself is a fixed 76px.
+ * Stored on the existing 'branding' settings rows (partner_page_contents,
+ * the same rows BrandingAssets keeps logos in - no schema change): the
+ * central row (partner_id NULL) = global (recruitmentcv.com), 'pg:branding'
+ * = Recruitmentcv Partner (Global), a partner's row only its own overrides.
+ * Plain numbers (px).
+ *
+ * Effective value per field: partner -> Partner Global -> global -> system
+ * default. The values are the MAXIMUM display area: the shared .w-brand-logo
+ * rule (style.css) fits the logo inside with object-fit: contain - never
+ * stretched, cropped or resized on disk - and still scales it down on tablet
+ * / phone. The page publishes the sizes of ITS language as CSS variables
+ * (cssVariables()). The favicon's size is its <link rel="icon" sizes> hint
+ * (browsers draw tab icons at their own size).
  */
 final class LogoDimensions
 {
     /** field => [label, min px, max px, default px]. */
     public const FIELDS = [
-        'header_logo_width' => ['Header Logo Width', 40, 400, 300],
-        'header_logo_height' => ['Header Logo Height', 20, 70, 52],
-        'footer_logo_width' => ['Footer Logo Width', 40, 400, 220],
-        'footer_logo_height' => ['Footer Logo Height', 20, 150, 34],
+        'header_logo_width' => ['Header Logo Width (English)', 40, 400, 300],
+        'header_logo_height' => ['Header Logo Height (English)', 20, 70, 52],
+        'header_logo_ar_width' => ['Header Logo Width (Arabic)', 40, 400, 300],
+        'header_logo_ar_height' => ['Header Logo Height (Arabic)', 20, 70, 52],
+        'footer_logo_width' => ['Footer Logo Width (English)', 40, 400, 220],
+        'footer_logo_height' => ['Footer Logo Height (English)', 20, 150, 34],
+        'footer_logo_ar_width' => ['Footer Logo Width (Arabic)', 40, 400, 220],
+        'footer_logo_ar_height' => ['Footer Logo Height (Arabic)', 20, 150, 34],
+        'portal_logo_width' => ['Portal Logo Width (English)', 40, 240, 170],
+        'portal_logo_height' => ['Portal Logo Height (English)', 16, 60, 30],
+        'portal_logo_ar_width' => ['Portal Logo Width (Arabic)', 40, 240, 170],
+        'portal_logo_ar_height' => ['Portal Logo Height (Arabic)', 16, 60, 30],
+        'favicon_width' => ['Favicon Width', 16, 512, 32],
+        'favicon_height' => ['Favicon Height', 16, 512, 32],
     ];
 
-    /** The CSS custom property each field is published as (read by style.css / portal.css). */
+    /** Branding slot (App\Support\BrandingAssets::SLOTS) => [width field, height field]. */
+    public const SLOT_FIELDS = [
+        'header_logo_en' => ['header_logo_width', 'header_logo_height'],
+        'header_logo_ar' => ['header_logo_ar_width', 'header_logo_ar_height'],
+        'footer_logo_en' => ['footer_logo_width', 'footer_logo_height'],
+        'footer_logo_ar' => ['footer_logo_ar_width', 'footer_logo_ar_height'],
+        'portal_logo_en' => ['portal_logo_width', 'portal_logo_height'],
+        'portal_logo_ar' => ['portal_logo_ar_width', 'portal_logo_ar_height'],
+        'favicon' => ['favicon_width', 'favicon_height'],
+    ];
+
+    /**
+     * The CSS custom properties a page reads (style.css / portal.css), per page language:
+     * var => [English field, Arabic field].
+     */
     public const CSS_VARS = [
-        'header_logo_width' => '--w-header-logo-w',
-        'header_logo_height' => '--w-header-logo-h',
-        'footer_logo_width' => '--w-footer-logo-w',
-        'footer_logo_height' => '--w-footer-logo-h',
+        '--w-header-logo-w' => ['header_logo_width', 'header_logo_ar_width'],
+        '--w-header-logo-h' => ['header_logo_height', 'header_logo_ar_height'],
+        '--w-footer-logo-w' => ['footer_logo_width', 'footer_logo_ar_width'],
+        '--w-footer-logo-h' => ['footer_logo_height', 'footer_logo_ar_height'],
+        '--w-portal-logo-w' => ['portal_logo_width', 'portal_logo_ar_width'],
+        '--w-portal-logo-h' => ['portal_logo_height', 'portal_logo_ar_height'],
     ];
 
     private const PAGE = 'branding';
@@ -66,7 +99,6 @@ final class LogoDimensions
         return $values;
     }
 
-    /** What a partner without its own value gets: the global value, else the default. */
     /** "Recruitmentcv Partner (Global)" sizes ('pg:branding' row; null = not set there). */
     public static function partnerGlobal(): array
     {
@@ -98,8 +130,14 @@ final class LogoDimensions
         return $values;
     }
 
+    /** The system defaults (field => px). */
+    public static function defaults(): array
+    {
+        return array_map(fn ($f) => $f[3], self::FIELDS);
+    }
+
     /**
-     * Effective values for a context: ['values' => field => px, 'sources' => field => partner|global|default].
+     * Effective values for a context: ['values' => field => px, 'sources' => field => partner|partner_global|global|default].
      * $partnerId null = the main site (global -> default).
      */
     public static function effective(?int $partnerId, bool $partnerGlobalScope = false): array
@@ -125,13 +163,18 @@ final class LogoDimensions
         return ['values' => $values, 'sources' => $sources];
     }
 
-    /** Validation rules (empty = not set / inherit). */
+    /**
+     * Validation rules (empty = not set / inherit). The favicon is square: its width and
+     * height are set together and must be equal.
+     */
     public static function rules(): array
     {
         $rules = [];
         foreach (self::FIELDS as $field => [, $min, $max]) {
             $rules[$field] = ['nullable', 'integer', 'min:' . $min, 'max:' . $max];
         }
+        $rules['favicon_width'][] = 'same:favicon_height';
+        $rules['favicon_height'][] = 'same:favicon_width';
 
         return $rules;
     }
@@ -140,6 +183,15 @@ final class LogoDimensions
     public static function labels(): array
     {
         return array_map(fn ($f) => $f[0], self::FIELDS);
+    }
+
+    /** Custom messages (the favicon must stay square). */
+    public static function messages(): array
+    {
+        return [
+            'favicon_width.same' => 'The favicon is square: enter the same Favicon Width and Height (or leave both empty).',
+            'favicon_height.same' => 'The favicon is square: enter the same Favicon Width and Height (or leave both empty).',
+        ];
     }
 
     /**
@@ -176,27 +228,44 @@ final class LogoDimensions
     /** For a settings form: effective values + sources, this context's own values, and what an empty field falls back to. */
     public static function formData(?int $partnerId, bool $partnerGlobalScope = false): array
     {
-        $defaults = array_map(fn ($f) => $f[3], self::FIELDS);
-
         if ($partnerGlobalScope) {
             return self::effective(null, true) + ['own' => self::partnerGlobal(), 'fallback' => self::globalInherited()];
         }
 
         return self::effective($partnerId) + [
             'own' => self::own($partnerId),
-            'fallback' => $partnerId ? self::inherited() : $defaults,
+            'fallback' => $partnerId ? self::inherited() : self::defaults(),
         ];
     }
 
-    /** The effective values as CSS custom properties ("--w-header-logo-w:300px;..."), numbers only. */
-    public static function cssVariables(?int $partnerId): string
+    /** CSS custom property => "123px" for the page language ($locale null = the current one), from effective values. */
+    public static function cssValues(array $values, ?string $locale = null): array
     {
-        $values = self::effective($partnerId)['values'];
-        $out = '';
-        foreach (self::CSS_VARS as $field => $var) {
-            $out .= $var . ':' . (int) $values[$field] . 'px;';
+        $arabic = ($locale ?? app()->getLocale()) === 'ar';
+        $out = [];
+        foreach (self::CSS_VARS as $var => [$english, $arabicField]) {
+            $out[$var] = (int) $values[$arabic ? $arabicField : $english] . 'px';
         }
 
         return $out;
+    }
+
+    /** The effective values for this page's language as CSS custom properties ("--w-header-logo-w:300px;..."), numbers only. */
+    public static function cssVariables(?int $partnerId, ?string $locale = null): string
+    {
+        $out = '';
+        foreach (self::cssValues(self::effective($partnerId)['values'], $locale) as $var => $px) {
+            $out .= $var . ':' . $px . ';';
+        }
+
+        return $out;
+    }
+
+    /** The favicon's "sizes" hint for <link rel="icon"> (e.g. "32x32"). */
+    public static function faviconSizes(?int $partnerId): string
+    {
+        $values = self::effective($partnerId)['values'];
+
+        return (int) $values['favicon_width'] . 'x' . (int) $values['favicon_height'];
     }
 }

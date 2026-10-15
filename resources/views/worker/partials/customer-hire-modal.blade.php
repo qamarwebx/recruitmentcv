@@ -1,15 +1,6 @@
 {{-- Customer Hire Now (web guard) - posts to CustomerHireController, which
-re-checks everything and decides the partner server-side. $hire comes from
-WorkerPageController::resumeDetails(). --}}
-@php
-    $isAr = app()->getLocale() === 'ar';
-    $hirePartnerName = null;
-    if ($hire['partner']) {
-        $hirePartnerName = ($isAr && !empty($hire['partner']->rec_office_arname))
-            ? $hire['partner']->rec_office_arname
-            : ($hire['partner']->portal_rec_off_name ?: $hire['partner']->rec_off_name);
-    }
-@endphp
+re-checks everything and decides the partner (recruitment office) and the
+embassy server-side - neither is asked here. $hire comes from WorkerPageController::resumeDetails(). --}}
 <div class="w-modal-backdrop" data-customer-hire-backdrop></div>
 <div class="w-modal" data-customer-hire-modal role="dialog" aria-modal="true" aria-labelledby="customerHireTitle"
     data-hire-url="{{ route('worker.account.hire', $post->slug_text) }}"
@@ -105,39 +96,6 @@ WorkerPageController::resumeDetails(). --}}
                                 <option value="{{ $city->id }}">{{ $city->display_name }}</option>
                             @endforeach
                         </select>
-                    </div>
-
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="customerHireEmbassy">{{ __('locale.Embassy') }}</label>
-                        <select class="w-select" id="customerHireEmbassy" data-customer-hire-embassy>
-                            @if ($hire['embassies']->count() !== 1)
-                                <option value="">{{ __('locale.Select') }}</option>
-                            @endif
-                            @foreach ($hire['embassies'] as $embassy)
-                                <option value="{{ $embassy->id }}">{{ $embassy->embassy }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="w-form-row">
-                        <label class="w-form-label" for="customerHireOffice">{{ __('locale.Recruitment Office') }}</label>
-                        @if ($hirePartnerName)
-                            {{-- Decided server-side (this website's partner, or the
-                            office the main site assigns) - display only. --}}
-                            <div class="w-hire-office">
-                                <strong>{{ $hirePartnerName }}</strong>
-                                @if (!empty($hire['partner']->portal_add_disp_only))
-                                    <span>{{ $hire['partner']->portal_add_disp_only }}</span>
-                                @endif
-                            </div>
-                        @else
-                            <select class="w-select" id="customerHireOffice" data-customer-hire-office>
-                                <option value="">{{ __('locale.Select') }}</option>
-                                @foreach ($hire['offices'] as $office)
-                                    <option value="{{ $office->id }}">{{ $office->portal_rec_off_name ?: $office->rec_off_name }}{{ $office->portal_add_disp_only ? ' — ' . $office->portal_add_disp_only : '' }}</option>
-                                @endforeach
-                            </select>
-                        @endif
                     </div>
 
                     <button type="button" class="w-btn w-btn-primary w-btn-block" data-customer-hire-submit disabled

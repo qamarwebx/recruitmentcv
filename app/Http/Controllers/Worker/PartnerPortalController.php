@@ -183,6 +183,8 @@ class PartnerPortalController extends Controller
                 // the order stages' CRM workflow link (App\Support\OrderPipeline)
                 'booking.cand_id',
                 'booking.partner_id',
+                // where the order was placed ('qamarhire' = qamarhire.com) - the Orders source badge
+                'booking.order_source',
                 'cand.cand_name',
                 'cand.arcand_name',
                 'cand.photo_file',
@@ -2642,6 +2644,9 @@ class PartnerPortalController extends Controller
             $message = __('locale.:field must be a whole number from :min to :max px.', ['field' => __('locale.' . $label), 'min' => $min, 'max' => $max]);
             $sizeMessages += [$field . '.integer' => $message, $field . '.min' => $message, $field . '.max' => $message];
         }
+        foreach (\App\Support\LogoDimensions::messages() as $key => $message) {
+            $sizeMessages[$key] = __('locale.' . $message);
+        }
         $sizeValidator = Validator::make($request->only($sizeFields), \App\Support\LogoDimensions::rules(), $sizeMessages);
         if ($sizeValidator->fails()) {
             return response()->json(['status' => 'error', 'errors' => $sizeValidator->errors()], 422);
@@ -2649,10 +2654,17 @@ class PartnerPortalController extends Controller
         $sizeChanges = \App\Support\LogoDimensions::changes($partner->id, $request->only($sizeFields));
 
         // JPG / PNG / GIF / WEBP / SVG, recognised by content (App\Support\ImageUpload:
-        // real raster check, SVG sanitized); 2MB each, as before.
+        // real raster check, SVG sanitized); 2MB each, as before. Pixel size checked too
+        // (BrandingAssets::uploadDimensionError(): square favicon, sane logo sides).
+        // Header logos + favicon: this partner's Domain row (as before); footer + portal
+        // logos: its 'branding' row (App\Support\BrandingAssets).
         $decoded = [];
+        $decodedRow = [];
+        $inputs = ['english_logo' => 'website_logo', 'arabic_logo' => 'website_logo_ar', 'favicon' => 'website_favicon',
+            'footer_logo_en' => 'footer_logo_en', 'footer_logo_ar' => 'footer_logo_ar', 'portal_logo_en' => 'portal_logo_en', 'portal_logo_ar' => 'portal_logo_ar'];
+        $inputSlots = ['english_logo' => 'header_logo_en', 'arabic_logo' => 'header_logo_ar', 'favicon' => 'favicon'];
 
-        foreach (['english_logo' => 'website_logo', 'arabic_logo' => 'website_logo_ar', 'favicon' => 'website_favicon'] as $input => $column) {
+        foreach ($inputs as $input => $column) {
             $value = $request->input($input);
 
             if (!$value) {
@@ -2666,12 +2678,20 @@ class PartnerPortalController extends Controller
                     'errors' => [$input => [__('locale.' . $image['error'])]],
                 ], 422);
             }
+            $slot = $inputSlots[$input] ?? $column;
+            if ($dimensionError = \App\Support\BrandingAssets::uploadDimensionError($image, $slot)) {
+                return response()->json(['status' => 'error', 'errors' => [$input => [$dimensionError]]], 422);
+            }
 
-            $decoded[$column] = $image;
+            if (str_starts_with($column, 'website_')) {
+                $decoded[$column] = $image;
+            } else {
+                $decodedRow[$column] = $image;
+            }
         }
 
         $sizeSent = (bool) array_intersect($sizeFields, array_keys($request->all()));
-        if (empty($decoded) && !$hasCompanyNameSwitch && !$sizeSent) {
+        if (empty($decoded) && empty($decodedRow) && !$hasCompanyNameSwitch && !$sizeSent) {
             return response()->json(['status' => 'error', 'message' => __('locale.Choose at least one logo to upload.')], 422);
         }
 
@@ -2680,30 +2700,51 @@ class PartnerPortalController extends Controller
             $appendCompanyName = $request->input('append_company_name');
             $brandingValues[PartnerPageContent::APPEND_COMPANY_NAME] = $appendCompanyName === 'default' ? null : in_array($appendCompanyName, [true, 1, '1'], true);
         }
+        $basepathstatus = Basepathstatus::first();
+        $uploadPath = ($basepathstatus && $basepathstatus->base_path_status == 1)
+            ? base_path('public/admin/assets/images/partner')
+            : base_path('public_html/admin/assets/images/partner');
+        $replaced = [];
+
+        // Footer / portal logos: stored on this partner's 'branding' row with the other values.
+        if ($decodedRow) {
+            if (!is_dir($uploadPath)) {
+                mkdir($uploadPath, 0755, true);
+            }
+            $rowDomain = $partner->domain()->firstOrCreate([]);
+            $ownFiles = \App\Support\BrandingAssets::own($partner->id);
+            foreach ($decodedRow as $slot => $image) {
+                $name = $rowDomain->newBrandingFileName(\App\Support\BrandingAssets::FILE_SUFFIXES[$slot], $image['extension']);
+                \App\Support\ImageUpload::store($image, $uploadPath, $name);
+                $brandingValues[$slot] = $name;
+                if ($ownFiles[$slot]) {
+                    $replaced[] = $ownFiles[$slot];
+                }
+            }
+        }
+
         if ($brandingValues) {
             PartnerPageContent::saveBranding($partner->id, $brandingValues);
         }
+        \App\Support\BrandingAssets::forget();
 
         if (empty($decoded)) {
+            foreach ($replaced as $oldFile) {
+                Domain::deleteBrandingFileIfUnreferenced($uploadPath, $oldFile);
+            }
+
             return response()->json([
                 'status' => 'success',
                 'message' => __('locale.Branding updated successfully.'),
-                'data' => PartnerPageContent::brandingFor($partner->id) + ['logo_size' => $this->logoSizeData($partner->id)],
+                'data' => PartnerPageContent::brandingFor($partner->id) + ['logo_size' => $this->logoSizeData($partner->id), 'slots' => $this->brandingPreviewUrls($partner->id)],
             ]);
         }
 
         $domain = $partner->domain()->firstOrCreate([]);
 
-        $basepathstatus = Basepathstatus::first();
-        $uploadPath = ($basepathstatus && $basepathstatus->base_path_status == 1)
-            ? base_path('public/admin/assets/images/partner')
-            : base_path('public_html/admin/assets/images/partner');
-
         if (!is_dir($uploadPath)) {
             mkdir($uploadPath, 0755, true);
         }
-
-        $replaced = [];
 
         foreach ($decoded as $column => $image) {
             $suffix = ['website_logo' => 'en', 'website_logo_ar' => 'ar', 'website_favicon' => 'fav'][$column];
@@ -2723,6 +2764,7 @@ class PartnerPortalController extends Controller
         }
 
         $domain->save();
+        \App\Support\BrandingAssets::forget();
 
         // Old files only once the new names are saved, and only if no other
         // domain/partner row still points at the same file.
@@ -2737,20 +2779,26 @@ class PartnerPortalController extends Controller
                 'english_logo' => $domain->website_logo ? asset('admin/assets/images/partner/' . $domain->website_logo) : null,
                 'arabic_logo' => $domain->website_logo_ar ? asset('admin/assets/images/partner/' . $domain->website_logo_ar) : null,
                 'favicon' => $domain->website_favicon ? asset('admin/assets/images/partner/' . $domain->website_favicon) : null,
-            ] + PartnerPageContent::brandingFor($partner->id) + ['logo_size' => $this->logoSizeData($partner->id)],
+            ] + PartnerPageContent::brandingFor($partner->id) + ['logo_size' => $this->logoSizeData($partner->id), 'slots' => $this->brandingPreviewUrls($partner->id)],
         ]);
     }
 
-    /** Branding tab -> Logo Size after a save: own values, effective values / sources, and the CSS variables to apply. */
+    /** Branding tab -> Logo Size after a save: own values, effective values / sources, and the CSS variables (page language) to apply. */
     private function logoSizeData(int $partnerId): array
     {
         $data = \App\Support\LogoDimensions::formData($partnerId);
-        $data['css_vars'] = [];
-        foreach (\App\Support\LogoDimensions::CSS_VARS as $field => $var) {
-            $data['css_vars'][$var] = (int) $data['values'][$field] . 'px';
-        }
+        $data['css_vars'] = \App\Support\LogoDimensions::cssValues($data['values']);
 
         return $data;
+    }
+
+    /** Branding tab previews after a save: preview key (data-logo-preview) => the image the site now uses. */
+    private function brandingPreviewUrls(int $partnerId): array
+    {
+        $keys = ['en' => 'header_logo_en', 'ar' => 'header_logo_ar', 'footer_en' => 'footer_logo_en', 'footer_ar' => 'footer_logo_ar',
+            'portal_en' => 'portal_logo_en', 'portal_ar' => 'portal_logo_ar', 'fav' => 'favicon'];
+
+        return array_map(fn ($slot) => \App\Support\BrandingAssets::url($slot, $partnerId), $keys);
     }
 
     /**

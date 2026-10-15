@@ -124,60 +124,68 @@
             </h2>
             <div class="w-form-alert" style="display:none;" data-settings-alert="branding"></div>
             <form data-settings-form="branding" data-msg-no-changes="{{ __('locale.No changes to save.') }}">
-                {{-- English Logo / Arabic Logo / Favicon side by side, wrapping on narrow screens. --}}
-                <div class="wp-branding-grid">
-                    <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.English Logo') }}</label>
-                        <div class="wp-logo-upload">
-                            <img src="{{ $domain->website_logo ? asset('admin/assets/images/partner/'.$domain->website_logo) : asset('user/img/logo/Logo_eng_dark.webp') }}" alt="English logo" data-logo-preview="en">
-                            <input type="file" class="w-input" accept="{{ \App\Support\ImageUpload::ACCEPT }}" data-logo-input="en">
+                {{-- Seven images in four sections, each with its own Width & Height (px): Website
+                Header / Website Footer / Portal Branding (English + Arabic each) and the Favicon.
+                Preview = what is used now (App\Support\BrandingAssets: your image -> your header
+                logo for footer / portal -> Partner Global -> global -> built-in), drawn at its
+                configured size (object-fit: contain). Header logos + favicon: your Domain row;
+                footer + portal logos and every size: your 'branding' row
+                (App\Support\LogoDimensions; empty size = the CRM Global / default one). --}}
+                @php
+                    $logoSize = \App\Support\LogoDimensions::formData($partner->id);
+                    $brandSections = [
+                        'Website Header' => ['hint' => 'Shown at the top of your website, on a light background.', 'cards' => [['en', 'header_logo_en', 'English Logo'], ['ar', 'header_logo_ar', 'Arabic Logo']]],
+                        'Website Footer' => ['hint' => 'Shown in your website footer, on a dark green background. Without one, your header logo is used.', 'cards' => [['footer_en', 'footer_logo_en', 'English Logo'], ['footer_ar', 'footer_logo_ar', 'Arabic Logo']]],
+                        'Portal Branding' => ['hint' => 'Shown in this dashboard sidebar, on a dark green background. Without one, your header logo is used.', 'cards' => [['portal_en', 'portal_logo_en', 'English Logo'], ['portal_ar', 'portal_logo_ar', 'Arabic Logo']]],
+                        'Favicon' => ['hint' => 'The small icon in the browser tab. Square image, e.g. 64 × 64 px.', 'cards' => [['fav', 'favicon', 'Favicon']]],
+                    ];
+                    $brandSourceLabels = ['partner' => 'Your image', 'partner_header' => 'Using your header logo', 'footer' => 'Using your footer logo'];
+                @endphp
+                @foreach ($brandSections as $sectionTitle => $section)
+                    <fieldset class="wp-branding-section" data-branding-section="{{ \Illuminate\Support\Str::slug($sectionTitle) }}">
+                        <legend>{{ __('locale.' . $sectionTitle) }}</legend>
+                        <p class="wp-field-hint" style="margin-top:0;">{{ __('locale.' . $section['hint']) }}</p>
+                        <div class="wp-branding-grid">
+                            @foreach ($section['cards'] as [$logoKey, $logoSlot, $logoLabel])
+                                @php
+                                    [, $logoSource] = \App\Support\BrandingAssets::resolve($logoSlot, $partner->id);
+                                    [$widthField, $heightField] = \App\Support\LogoDimensions::SLOT_FIELDS[$logoSlot];
+                                    $logoW = $logoSize['values'][$widthField];
+                                    $logoH = $logoSize['values'][$heightField];
+                                @endphp
+                                <div class="wp-brand-card" data-brand-card="{{ $logoKey }}">
+                                    <div class="wp-brand-card-head">
+                                        <span class="w-form-label" style="margin:0;">{{ __('locale.' . $logoLabel) }}</span>
+                                        <span class="wp-brand-source{{ $logoSource === 'partner' ? ' is-own' : '' }}">{{ __('locale.' . ($brandSourceLabels[$logoSource] ?? 'Default')) }}</span>
+                                    </div>
+                                    <div class="wp-brand-preview{{ in_array($logoSlot, \App\Support\BrandingAssets::DARK_SLOTS, true) ? ' is-dark' : '' }}">
+                                        <img src="{{ \App\Support\BrandingAssets::url($logoSlot, $partner->id) }}" alt="{{ __('locale.' . $logoLabel) }}" data-logo-preview="{{ $logoKey }}"
+                                            style="height:{{ (int) $logoH }}px;max-width:min({{ (int) $logoW }}px, 100%);">
+                                    </div>
+                                    <input type="file" class="w-input" accept="{{ \App\Support\ImageUpload::ACCEPT }}" data-logo-input="{{ $logoKey }}" aria-label="{{ __('locale.' . $sectionTitle) }} - {{ __('locale.' . $logoLabel) }}">
+                                    <div class="wp-logo-size-grid wp-brand-size-grid">
+                                        @foreach (['w' => [$widthField, 'Width'], 'h' => [$heightField, 'Height']] as $dim => [$field, $dimLabel])
+                                            @php [, $min, $max] = \App\Support\LogoDimensions::FIELDS[$field]; @endphp
+                                            <div>
+                                                <label class="w-form-label" for="logo-size-{{ $field }}">{{ __('locale.' . $dimLabel) }}</label>
+                                                <div class="wp-input-unit" dir="ltr">
+                                                    <input type="number" id="logo-size-{{ $field }}" name="{{ $field }}" class="w-input"
+                                                        min="{{ $min }}" max="{{ $max }}" step="1" inputmode="numeric"
+                                                        value="{{ $logoSize['own'][$field] }}" placeholder="{{ $logoSize['fallback'][$field] }}"
+                                                        data-logo-size data-size-for="{{ $logoKey }}" data-size-dim="{{ $dim }}" data-saved="{{ $logoSize['own'][$field] }}"
+                                                        @if ($logoSlot === 'favicon') data-size-square @endif>
+                                                    <span class="wp-input-unit-suffix" aria-hidden="true">px</span>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    <p class="wp-field-hint" data-size-now="{{ $logoKey }}">{{ __('locale.Now: :w × :h px', ['w' => (int) $logoW, 'h' => (int) $logoH]) }} · {{ __('locale.:min–:max px', ['min' => \App\Support\LogoDimensions::FIELDS[$widthField][1], 'max' => \App\Support\LogoDimensions::FIELDS[$widthField][2]]) }}</p>
+                                </div>
+                            @endforeach
                         </div>
-                    </div>
-                    <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.Arabic Logo') }}</label>
-                        <div class="wp-logo-upload">
-                            <img src="{{ $domain->website_logo_ar ? asset('admin/assets/images/partner/'.$domain->website_logo_ar) : asset('user/img/logo/new_logo_Arabic.png') }}" alt="Arabic logo" data-logo-preview="ar">
-                            <input type="file" class="w-input" accept="{{ \App\Support\ImageUpload::ACCEPT }}" data-logo-input="ar">
-                        </div>
-                    </div>
-                    {{-- Same Domain row / folder as the logos (website_favicon). Preview =
-                    the effective favicon the website itself uses (BrandingAssets: this
-                    partner's file -> the global one -> the built-in default). --}}
-                    <div class="w-form-row">
-                        <label class="w-form-label">{{ __('locale.Favicon') }}</label>
-                        <div class="wp-logo-upload">
-                            <img src="{{ \App\Support\BrandingAssets::url('favicon', $partner->id) }}" alt="Favicon" class="wp-favicon-preview" data-logo-preview="fav">
-                            <input type="file" class="w-input" accept="{{ \App\Support\ImageUpload::ACCEPT }}" data-logo-input="fav">
-                        </div>
-                        <div class="form-text" style="color:var(--w-ink-500);font-size:0.8rem;margin-top:6px;">{{ __('locale.Square image recommended, e.g. 64 × 64 px.') }}</div>
-                    </div>
-                </div>
-                <div class="form-text" style="color:var(--w-ink-500);font-size:0.82rem;margin-bottom:16px;">{{ __('locale.JPG, PNG, GIF, WEBP or SVG, up to 2MB.') }}</div>
-                {{-- Header / Footer Logo Width & Height (App\Support\LogoDimensions,
-                same 'branding' row): the maximum area the logo is fitted into on
-                this partner's website + Partner Portal. A field holds this
-                partner's own value; empty = the CRM Global value (shown as the
-                placeholder). Saved with this form, only fields that changed. --}}
-                @php $logoSize = \App\Support\LogoDimensions::formData($partner->id); @endphp
-                <div class="w-form-row">
-                    <label class="w-form-label">{{ __('locale.Logo Size') }}</label>
-                    <p class="wp-field-hint" style="margin-top:0;">{{ __('locale.The maximum space your logo can use, in pixels. Your logo keeps its proportions: it is fitted inside, never stretched or cropped, and gets smaller on phones and tablets. Leave a field empty to use the default size.') }}</p>
-                    <div class="wp-logo-size-grid">
-                        @foreach (\App\Support\LogoDimensions::FIELDS as $field => [$label, $min, $max])
-                        <div>
-                            <label class="w-form-label" for="logo-size-{{ $field }}">{{ __('locale.' . $label) }}</label>
-                            <div class="wp-input-unit" dir="ltr">
-                                <input type="number" id="logo-size-{{ $field }}" name="{{ $field }}" class="w-input"
-                                    min="{{ $min }}" max="{{ $max }}" step="1" inputmode="numeric"
-                                    value="{{ $logoSize['own'][$field] }}" placeholder="{{ $logoSize['fallback'][$field] }}"
-                                    data-logo-size data-saved="{{ $logoSize['own'][$field] }}">
-                                <span class="wp-input-unit-suffix" aria-hidden="true">px</span>
-                            </div>
-                            <p class="wp-field-hint">{{ __('locale.:min–:max px. Default: :value px.', ['min' => $min, 'max' => $max, 'value' => $logoSize['fallback'][$field]]) }}</p>
-                        </div>
-                        @endforeach
-                    </div>
-                </div>
+                    </fieldset>
+                @endforeach
+                <div class="form-text" style="color:var(--w-ink-500);font-size:0.82rem;margin-bottom:16px;">{{ __('locale.JPG, PNG, GIF, WEBP or SVG, up to 2MB.') }} {{ __('locale.Sizes are the maximum space each logo can use: it keeps its proportions (never stretched or cropped) and gets smaller on phones and tablets. Leave a size empty to use the default.') }}</div>
                 {{-- Company Profile name under the logo in this Partner Portal's
                 sidebar (English / Arabic name per page language). Saved with
                 this form (partner_page_contents 'branding' row) only when

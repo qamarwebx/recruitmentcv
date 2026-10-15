@@ -96,7 +96,7 @@ class CustomerHireController extends Controller
 
         $validator = Validator::make($request->all(), [
             'worklocation' => 'required|integer|exists:expecworkcities,id',
-            'embassy_id' => 'required|integer|exists:embassies,id',
+            'embassy_id' => 'nullable|integer|exists:embassies,id',
             'office_id' => 'nullable|integer',
         ]);
         if ($validator->fails()) {
@@ -108,9 +108,20 @@ class CustomerHireController extends Controller
             return response()->json(['status' => 'error', 'message' => __('locale.This candidate is not eligible for the selected city, please try a different candidate.')], 422);
         }
 
-        // Embassy eligibility (legacy FrontEndController::getvisaembassyfor rule).
-        if (!empty($candidate->embassy_for) && (string) $candidate->embassy_for !== (string) $request->embassy_id) {
+        // Embassy - no longer asked in the Hire Now modal; decided here, never invented:
+        // the candidate's own (fixed) embassy, else the only embassy if just one exists,
+        // else none yet (as on most orders - set later in the CRM / visa workflow).
+        // Legacy eligibility rule (FrontEndController::getvisaembassyfor) kept for any
+        // caller that still sends one: it must be the candidate's own embassy.
+        if (!empty($candidate->embassy_for) && $request->filled('embassy_id') && (string) $candidate->embassy_for !== (string) $request->embassy_id) {
             return response()->json(['status' => 'error', 'message' => __('locale.This candidate is not eligible for the selected embassy.')], 422);
+        }
+        $embassyId = !empty($candidate->embassy_for) ? (int) $candidate->embassy_for : ($request->filled('embassy_id') ? (int) $request->embassy_id : null);
+        if ($embassyId && !DB::table('embassies')->where('id', $embassyId)->exists()) {
+            $embassyId = null;
+        }
+        if (!$embassyId && DB::table('embassies')->count() === 1) {
+            $embassyId = (int) DB::table('embassies')->value('id');
         }
 
         [$partnerId, $mustChoose] = self::resolvePartner($candidate, $request->office_id);
@@ -125,8 +136,8 @@ class CustomerHireController extends Controller
 
         // The order-number lock shared with the CRM (App\Support\BookingReference)
         // is held until this transaction - which inserts the order - has committed.
-        $response = \App\Support\BookingReference::withLock(function () use ($request, $customer, $candidate, $partnerId, $settings, &$booking) {
-            return DB::transaction(function () use ($request, $customer, $candidate, $partnerId, $settings, &$booking) {
+        $response = \App\Support\BookingReference::withLock(function () use ($request, $customer, $candidate, $partnerId, $embassyId, $settings, &$booking) {
+            return DB::transaction(function () use ($request, $customer, $candidate, $partnerId, $embassyId, $settings, &$booking) {
             // Lock this customer's live orders while checking the limits, so a
             // double click can't create two.
             $liveOrders = Booking::where('user_id', $customer->id)->where('booking_status', '!=', 2)->lockForUpdate()->get(['id', 'cand_id', 'reference_no']);
@@ -147,7 +158,7 @@ class CustomerHireController extends Controller
                 'user_id4' => $customer->id,
                 'partner_id4' => $partnerId,
                 'worklocation4' => (int) $request->worklocation,
-                'embassy_for4' => (int) $request->embassy_id,
+                'embassy_for4' => $embassyId,
             ]);
             $inner->setLaravelSession($request->session());
             $inner->setUserResolver(fn () => $customer);
